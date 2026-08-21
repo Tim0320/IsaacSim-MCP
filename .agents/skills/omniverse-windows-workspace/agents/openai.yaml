@@ -1,0 +1,6 @@
+interface:
+  display_name: "Omniverse Windows Workspace"
+  short_description: "Operate Windows Isaac Sim and its live MCP safely"
+  default_prompt: "Use $omniverse-windows-workspace to inspect and operate this Windows Isaac Sim MCP workspace."
+policy:
+  allow_implicit_invocation: true
