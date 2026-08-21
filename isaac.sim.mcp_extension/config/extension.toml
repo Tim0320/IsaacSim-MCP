@@ -1,0 +1,41 @@
+[package]
+name = "isaacsim-mcp-server"
+version = "0.6.0"
+title = "Isaac Sim MCP Server"
+description = "MCP server extension for Isaac Sim to enable communication with Claude and other AI assistants"
+category = "Robotics"
+keywords = ["mcp", "server", "socket", "simulation", "robotics"]
+
+[dependencies]
+"isaacsim.storage.native" = {}
+"isaacsim.core.simulation_manager" = {}
+"isaacsim.core.experimental.utils" = {}
+"isaacsim.core.experimental.prims" = {}
+"isaacsim.core.experimental.objects" = {}
+# V6-only (6.0 PhysX + Newton) RTX sensor backend. Absent on Isaac Sim 5.1,
+# where a hard dependency makes Kit's solver exit before the extension can load.
+# Optional so 5.1 loads (V5 sensors use isaacsim.sensors.* loaded by the app);
+# on 6.0 PhysX/Newton it resolves and the V6 adapter imports it lazily.
+"isaacsim.sensors.experimental.rtx" = { optional = true }
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.uiapp" = {}
+"isaacsim.gui.components" = {}
+
+
+
+# Main python module this extension provides, it will be publicly available as "import isaac_sim_mcp_extension".
+[[python.module]]
+name = "isaac_sim_mcp_extension"
+
+
+
+[python.pipapi]
+
+
+[settings]
+server.port = 8766
+server.host = "localhost"
+# Load NVIDIA IRA before the first USD stage opens. Navigation Core can miss
+# NavMeshVolume discovery when it is enabled late against an already-open
+# stage, and NVIDIA notes that dependency changes may otherwise need a restart.
+server.enable_humans = true

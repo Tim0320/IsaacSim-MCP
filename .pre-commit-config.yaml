@@ -1,0 +1,10 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+        # The hook ships with types_or: [python, pyi, jupyter], so Markdown code
+        # blocks would only ever be checked by CI. Format them here too.
+        types_or: [python, pyi, jupyter, markdown]

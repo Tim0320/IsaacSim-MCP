@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+build/
+dist/
+
+# Virtual environments and secrets
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Test, coverage and generated outputs
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+test_outputs/
+logs/
+results/
+local_cache/
+mcp_cache/
+
+# Isaac Sim generated files
+*.usd
+*.usda
+*.usdc
+*.usdz
+!demo/*.usd
+!demo/*.usda
+!test_assets/*.usd
+!test_assets/*.usda
+*checkpoint.pth
+
+# Local MCP and editor configuration
+.mcp.json
+mcp-inspector*.json
+.mcpregistry_*
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.cursor/
+.claude/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini

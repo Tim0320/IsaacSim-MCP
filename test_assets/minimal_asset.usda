@@ -1,0 +1,9 @@
+#usda 1.0
+
+def Xform "Root"
+{
+    def Cube "TestCube"
+    {
+        double size = 0.25
+    }
+}
