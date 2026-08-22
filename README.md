@@ -257,6 +257,27 @@ uv run ruff format --check .
 - [`docs/ALL_TOOLS_TEST_REPORT.md`](docs/ALL_TOOLS_TEST_REPORT.md)
 - [`docs/NVIDIA_ASSET_CATALOG.md`](docs/NVIDIA_ASSET_CATALOG.md)
 
+## 專案備份與還原驗證
+
+修改程式碼前後執行：
+
+```powershell
+.\scripts\backup_project.ps1 -Label before-camera-rgb
+```
+
+預設備份到 `E:\碩士論文\backups\isaacsim-mcp`。也可用 `-BackupRoot` 指定 repo 外的其他目錄。
+每次執行會產生唯一、不覆寫的資料夾，內容包括：
+
+- 完整 Git history bundle 與 SHA-256
+- staged、unstaged binary patches
+- 通過安全篩選的 untracked files
+- Git LFS 狀態與目前 tracked LFS working files
+- `manifest.json`、`BACKUP_MANIFEST.md` 與逐檔 SHA-256
+
+腳本會在新的暫存目錄 clone bundle、套用 dirty snapshot，再逐檔比對 SHA-256。驗證失敗時會建立
+`BACKUP_FAILED.txt` 並回傳錯誤。credential-like files、Git ignored files、cache/build 目錄及超過
+`-MaxUntrackedFileBytes` 的檔案不會被複製；排除原因記錄在 `manifest.json`。腳本不會 commit 或 push。
+
 ## 專案結構
 
 ```text

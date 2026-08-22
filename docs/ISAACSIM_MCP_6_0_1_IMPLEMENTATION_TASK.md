@@ -43,12 +43,11 @@
   > 驗證：`git bundle verify` 成功；SHA-256 為 `04AD09555ADC105791A53E64256CAF68FF13B2DF7F2C9D2AC72F5B7EF04E5B33`。
   > 完成定義：保留 manifest、hash 與安全還原指令，不覆寫目前工作目錄。
 
-- [ ] 0.2 建立可重複使用的專案備份流程
-  > 現況：目前已有人工作業產生完整 bundle，尚無 repo 內的標準備份工具。
-  > 缺漏位置：`scripts/` 尚缺例如 `backup_project.ps1` 的入口與備份文件。
-  > 實作：記錄 remote、branch、HEAD、submodule、Git LFS、dirty diff、untracked 清單；提交歷史用 bundle，未提交內容另存 patch/檔案快照。
-  > 安全限制：排除 `.venv`、cache、build、log、大型生成檔與 credential；不自動 push、不覆寫舊備份。
-  > 驗收：在全新空目錄完成 bundle clone，套用 dirty snapshot 後比對 hash；失敗時中止後續修改。
+- [x] 0.2 建立可重複使用的專案備份流程
+  > 完成：新增 `scripts/backup_project.ps1`，記錄 remote、branch、HEAD、submodule、Git LFS、dirty status；提交歷史使用完整 bundle，staged/unstaged 使用 binary patch，安全的 untracked files 使用獨立快照。
+  > 安全限制：備份根目錄必須位於 repo 外；credential-like、Git ignored、cache/build 與超過限制的 untracked files 不複製；每次使用唯一目錄，不 commit、不 push、不覆寫舊備份。
+  > 還原驗證：在新的系統暫存目錄 clone bundle、依序套用 staged/unstaged patch、還原 untracked/LFS/line-ending overrides，再逐檔比對 SHA-256；失敗會保留 `BACKUP_FAILED.txt` 並回傳非零狀態。
+  > 測試證據：`tests/test_backup_project_script.py` 驗證 clean repo、同時含 staged/unstaged/untracked 的 dirty repo、credential/cache/oversized 排除，以及 repo 內備份路徑拒絕；專案離線測試為 `145 passed, 1 deselected`，Ruff 全部通過。
 
 - [ ] 0.3 新增 `get_capabilities` 與版本相容矩陣
   > 現況：tool 可被列出，但 client 無法可靠得知 Isaac 版本、active physics backend、必要 extension、支援參數與已知限制。
