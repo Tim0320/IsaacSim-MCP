@@ -25,7 +25,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+import asyncio
+import functools
+import inspect
+import json
+import time
+from typing import TYPE_CHECKING, Any, Callable
+
+from isaac_mcp.responses import normalize_response
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -42,6 +49,8 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
     """
     from . import assets, capabilities, graphs, humans, lighting, materials, objects, robots, scene, sensors, simulation
 
+    schema_mcp = _ResponseSchemaMCP(mcp)
+
     for module in [
         capabilities,
         scene,
@@ -55,4 +64,59 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
         simulation,
         graphs,
     ]:
-        module.register_tools(mcp, get_connection)
+        module.register_tools(schema_mcp, get_connection)
+
+
+def _serialize_tool_response(value: Any, elapsed_ms: float) -> str:
+    envelope = normalize_response(value, timing={"mcp_tool_ms": round(elapsed_ms, 3)})
+    return json.dumps(envelope, indent=2, sort_keys=True)
+
+
+def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
+    if inspect.iscoroutinefunction(function):
+
+        @functools.wraps(function)
+        async def async_wrapped(*args: Any, **kwargs: Any) -> str:
+            started = time.perf_counter()
+            try:
+                value = await function(*args, **kwargs)
+            except asyncio.CancelledError:
+                value = {"status": "cancelled", "code": "CANCELLED", "message": "Tool execution was cancelled"}
+            except TimeoutError as exc:
+                value = {"status": "timeout", "code": "TIMEOUT", "message": str(exc)}
+            except Exception as exc:
+                value = {"status": "error", "code": "MCP_TOOL_ERROR", "message": str(exc)}
+            return _serialize_tool_response(value, (time.perf_counter() - started) * 1000)
+
+        return async_wrapped
+
+    @functools.wraps(function)
+    def wrapped(*args: Any, **kwargs: Any) -> str:
+        started = time.perf_counter()
+        try:
+            value = function(*args, **kwargs)
+        except TimeoutError as exc:
+            value = {"status": "timeout", "code": "TIMEOUT", "message": str(exc)}
+        except Exception as exc:
+            value = {"status": "error", "code": "MCP_TOOL_ERROR", "message": str(exc)}
+        return _serialize_tool_response(value, (time.perf_counter() - started) * 1000)
+
+    return wrapped
+
+
+class _ResponseSchemaMCP:
+    """Proxy FastMCP so every registered tool receives the same envelope."""
+
+    def __init__(self, mcp: FastMCP) -> None:
+        self._mcp = mcp
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._mcp, name)
+
+    def tool(self, *args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        register = self._mcp.tool(*args, **kwargs)
+
+        def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
+            return register(_wrap_tool(function))
+
+        return decorator

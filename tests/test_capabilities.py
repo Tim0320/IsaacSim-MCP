@@ -122,7 +122,7 @@ def test_tool_adds_mcp_server_metadata_and_uses_system_command():
     result = json.loads(mcp.tools["get_capabilities"]())
 
     assert connection.commands == ["system.get_capabilities"]
-    assert result["mcp_server"] == {
+    assert result["data"]["mcp_server"] == {
         "name": "isaacsim-mcp-server",
         "version": server_version,
         "transport": "stdio_to_tcp",

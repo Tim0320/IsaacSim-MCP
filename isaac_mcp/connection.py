@@ -29,8 +29,11 @@ import json
 import logging
 import os
 import socket
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+
+from isaac_mcp.responses import normalize_response
 
 logger = logging.getLogger("IsaacMCPServer")
 
@@ -113,6 +116,7 @@ class IsaacConnection:
 
     def receive_full_response(self, sock: socket.socket, buffer_size: int = 16384) -> bytes:
         chunks = []
+        timed_out = False
         sock.settimeout(300.0)
         try:
             while True:
@@ -130,11 +134,12 @@ class IsaacConnection:
                     except json.JSONDecodeError:
                         continue
                 except socket.timeout:
+                    timed_out = True
                     break
                 except (ConnectionError, BrokenPipeError, ConnectionResetError):
                     raise
         except socket.timeout:
-            pass
+            timed_out = True
 
         if chunks:
             data = b"".join(chunks)
@@ -142,7 +147,11 @@ class IsaacConnection:
                 json.loads(data.decode("utf-8"))
                 return data
             except json.JSONDecodeError:
+                if timed_out:
+                    raise TimeoutError("Timeout waiting for complete Isaac response")
                 raise Exception("Incomplete JSON response received")
+        if timed_out:
+            raise TimeoutError("Timeout waiting for Isaac response")
         raise Exception("No data received")
 
     def send_command(self, command_type: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -150,19 +159,29 @@ class IsaacConnection:
         if not self.connect():
             raise ConnectionError("Not connected to Isaac")
 
-        command = {"type": command_type, "params": params or {}}
+        command_id = str(uuid.uuid4())
+        command = {"type": command_type, "params": params or {}, "command_id": command_id}
         try:
             self.sock.sendall(json.dumps(command).encode("utf-8"))
             self.sock.settimeout(300.0)
             response_data = self.receive_full_response(self.sock)
             response = json.loads(response_data.decode("utf-8"))
 
-            if response.get("status") == "error":
-                raise Exception(response.get("message", "Unknown error from Isaac"))
-            return response.get("result", {})
-        except socket.timeout:
+            # Schema 1.0 responses are passed through. Older extensions used
+            # {status, result}; normalize those during rolling upgrades.
+            if "result" in response:
+                legacy_result = response.get("result") or {
+                    "status": response.get("status", "error"),
+                    "message": response.get("message", "Unknown error from Isaac"),
+                }
+                return normalize_response(legacy_result, command_id=command_id)
+            return normalize_response(response, command_id=command_id)
+        except (socket.timeout, TimeoutError) as e:
             self.sock = None
-            raise Exception("Timeout waiting for Isaac response")
+            return normalize_response(
+                {"status": "timeout", "code": "TIMEOUT", "message": str(e) or "Timeout waiting for Isaac response"},
+                command_id=command_id,
+            )
         except (ConnectionError, BrokenPipeError, ConnectionResetError) as e:
             self.sock = None
             raise Exception(f"Connection to Isaac lost: {e}")

@@ -126,6 +126,8 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。完整 schema 請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md)。
 
+全部 46 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+
 ## MCP Tools
 
 目前共 46 個 tools：

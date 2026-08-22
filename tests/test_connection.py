@@ -129,7 +129,9 @@ def test_send_command_redials_when_isaac_restarted():
         time.sleep(0.2)
 
         result = conn.send_command("get_simulation_state")
-        assert result == {"ok": True}
+        assert result["status"] == "success"
+        assert result["data"] == {"ok": True}
+        assert result["command_id"]
         assert server.commands_served == ["get_simulation_state"]
     finally:
         server.shutdown()
@@ -181,3 +183,23 @@ def test_stale_check_is_instant_on_a_healthy_socket_with_a_timeout_set():
         assert conn.sock.gettimeout() == 300.0
     finally:
         server.shutdown()
+
+
+def test_send_command_returns_timeout_envelope():
+    conn = IsaacConnection(host="127.0.0.1", port=8766)
+    conn.connect = lambda: True
+    conn.sock = type(
+        "_Socket",
+        (),
+        {
+            "sendall": lambda self, _data: None,
+            "settimeout": lambda self, _timeout: None,
+        },
+    )()
+    conn.receive_full_response = lambda _sock: (_ for _ in ()).throw(TimeoutError("deadline exceeded"))
+
+    result = conn.send_command("scene.get_info")
+
+    assert result["status"] == "timeout"
+    assert result["code"] == "TIMEOUT"
+    assert result["message"] == "deadline exceeded"

@@ -96,7 +96,7 @@ def check(name: str, response: Dict[str, Any], assertion=None) -> bool:
         print(f"  [FAIL] {name}: {response.get('message')}", file=sys.stderr)
         return False
     if assertion is not None:
-        ok, why = assertion(response.get("result", {}))
+        ok, why = assertion(response.get("data", {}))
         if not ok:
             print(f"  [FAIL] {name}: {why}", file=sys.stderr)
             return False
@@ -119,7 +119,7 @@ def main() -> int:
     #    gets the assertion that is true *for it* — V5 must not grow the V6
     #    fields, and V6 must not lose them.
     resp = send(args.host, args.port, "simulation.get_state", {})
-    state = resp.get("result", {})
+    state = resp.get("data", {})
     is_v6 = "engine" in state or "isaacsim_version" in state
     engine = state.get("engine", "n/a")
 

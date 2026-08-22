@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import gc
 import inspect
+import time
 import traceback
 from typing import Any, Dict
 
@@ -41,6 +42,7 @@ import omni.usd
 
 from .adapters import get_adapter
 from .handlers import register_all_handlers
+from .responses import new_command_id, normalize_response
 from .socket_server import SocketServer
 
 
@@ -128,30 +130,43 @@ class MCPExtension(omni.ext.IExt):
             return False
 
     async def _execute_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
+        started = time.perf_counter()
+        command_id = str(command.get("command_id") or new_command_id())
         cmd_type = command.get("type", "")
         params = command.get("params", {})
         handler = self._registry.get(cmd_type)
         if handler and cmd_type not in self.STAGE_INDEPENDENT_COMMANDS and self._stage_pending():
-            return {
-                "status": "error",
-                "message": (
-                    "Isaac Sim is still starting up — no stage yet. This clears on its own a "
-                    "few seconds after the window appears; retry the same command."
-                ),
-            }
+            return normalize_response(
+                {
+                    "status": "error",
+                    "code": "STAGE_NOT_READY",
+                    "message": (
+                        "Isaac Sim is still starting up — no stage yet. This clears on its own a "
+                        "few seconds after the window appears; retry the same command."
+                    ),
+                },
+                command_id=command_id,
+                timing={"extension_ms": round((time.perf_counter() - started) * 1000, 3)},
+            )
         if handler:
             try:
                 result = handler(**params)
                 if inspect.isawaitable(result):
                     result = await result
-                if result and result.get("status") == "success":
-                    return {"status": "success", "result": result}
-                else:
-                    return {
-                        "status": "error",
-                        "message": result.get("message", "Unknown error") if result else "No result",
-                    }
+                return normalize_response(
+                    result,
+                    command_id=command_id,
+                    timing={"extension_ms": round((time.perf_counter() - started) * 1000, 3)},
+                )
             except Exception as e:
                 traceback.print_exc()
-                return {"status": "error", "message": str(e)}
-        return {"status": "error", "message": f"Unknown command: {cmd_type}"}
+                return normalize_response(
+                    {"status": "error", "code": "INTERNAL_ERROR", "message": str(e)},
+                    command_id=command_id,
+                    timing={"extension_ms": round((time.perf_counter() - started) * 1000, 3)},
+                )
+        return normalize_response(
+            {"status": "error", "code": "UNKNOWN_COMMAND", "message": f"Unknown command: {cmd_type}"},
+            command_id=command_id,
+            timing={"extension_ms": round((time.perf_counter() - started) * 1000, 3)},
+        )

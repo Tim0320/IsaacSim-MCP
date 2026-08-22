@@ -101,8 +101,7 @@ class TestSceneTools:
     def test_get_scene_info(self, conn: IsaacConnection) -> None:
         resp = send(conn, "scene.get_info")
         assert resp["status"] == "success", f"Failed: {resp}"
-        result = resp["result"]
-        assert result["status"] == "success"
+        result = resp["data"]
         assert "assets_root_path" in result
         assert "stage_path" in result
 
@@ -113,7 +112,7 @@ class TestSceneTools:
     def test_list_prims(self, conn: IsaacConnection) -> None:
         resp = send(conn, "scene.list_prims", {"root_path": "/"})
         assert resp["status"] == "success", f"Failed: {resp}"
-        result = resp["result"]
+        result = resp["data"]
         assert "prims" in result
 
     def test_get_prim_info(self, conn: IsaacConnection) -> None:
@@ -121,7 +120,7 @@ class TestSceneTools:
         send(conn, "objects.create", {"object_type": "Cube", "prim_path": "/World/TestInfoCube"})
         resp = send(conn, "scene.get_prim_info", {"prim_path": "/World/TestInfoCube"})
         assert resp["status"] == "success", f"Failed: {resp}"
-        result = resp["result"]
+        result = resp["data"]
         assert result["path"] == "/World/TestInfoCube"
 
     def test_clear_scene(self, conn: IsaacConnection) -> None:
@@ -145,7 +144,7 @@ class TestObjectTools:
             },
         )
         assert resp["status"] == "success", f"Failed: {resp}"
-        result = resp["result"]
+        result = resp["data"]
         assert result["prim_path"] == "/World/TestCube"
 
     def test_create_sphere(self, conn: IsaacConnection) -> None:
@@ -311,7 +310,7 @@ class TestRobotTools:
     def test_list_available_robots(self, conn: IsaacConnection) -> None:
         resp = send(conn, "robots.list")
         assert resp["status"] == "success", f"Failed: {resp}"
-        result = resp["result"]
+        result = resp["data"]
         robots = result["robots"]
         # Keys come from the asset directory names, which differ per Isaac Sim
         # version: 5.1 ships the Franka arms under FrankaRobotics/ as

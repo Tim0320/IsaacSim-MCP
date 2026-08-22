@@ -56,11 +56,15 @@
   > 測試證據：專案離線測試 `152 passed, 1 deselected`，Ruff 全部通過；FastMCP 實際註冊 46 tools。
   > live 證據：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；stage 建立前回 `stage_available=false`，建立後回 `true`，兩次查詢皆成功且沒有修改 stage。
 
-- [ ] 0.4 統一 MCP response 與 error schema
+- [x] 0.4 統一 MCP response 與 error schema
   > 現況：多數 tool 回傳 JSON 字串，各 handler 的 `status`、`message`、資料欄位與錯誤細節不完全一致。
   > 缺漏位置：`isaac_mcp/tools/*.py`、`isaac.sim.mcp_extension/.../handlers/*.py`、connection protocol。
   > 實作：定義 `status`、`code`、`message`、`data`、`warnings`、`command_id`、`timing`、`artifacts`、`readback`。
   > 驗收：所有 named tools 通過共同 schema test；partial/unsupported/timeout/cancelled 不得回報為普通 success。
+  > 完成：extension router、TCP connection 與 FastMCP tool registration 都會產生 schema `1.0` envelope；rolling upgrade 仍可接收舊 `{status,result}` response。
+  > 狀態契約：`success/error/partial/unsupported/timeout/cancelled` 分開，並提供 `STAGE_NOT_READY`、`UNKNOWN_COMMAND`、`INTERNAL_ERROR` 等穩定 code。
+  > 測試證據：全部 46 個 named tools 通過共同 schema wrapper test；專案離線測試 `158 passed, 1 deselected`，Ruff 與 format check 通過。
+  > live 證據：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、46 commands；capabilities 與 scene info 具有完整欄位，未知 command 回 `UNKNOWN_COMMAND`；read-only 查詢前後 `prim_count=14`。
 
 ## Phase 1：Camera、LiDAR 與感測資料
 

@@ -30,7 +30,7 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         try:
             conn = get_connection()
             result = conn.send_command("system.get_capabilities")
-            result["mcp_server"] = {
+            result.setdefault("data", {})["mcp_server"] = {
                 "name": "isaacsim-mcp-server",
                 "version": __version__,
                 "transport": "stdio_to_tcp",

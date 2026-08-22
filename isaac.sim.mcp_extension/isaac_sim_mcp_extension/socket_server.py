@@ -33,6 +33,8 @@ import time
 import traceback
 from typing import Any, Awaitable, Callable, Dict, Union
 
+from .responses import normalize_response
+
 
 class SocketServer:
     """Manages a TCP socket server that accepts JSON commands and returns responses.
@@ -150,7 +152,11 @@ class SocketServer:
             except Exception as e:
                 traceback.print_exc()
                 try:
-                    client.sendall(json.dumps({"status": "error", "message": str(e)}).encode("utf-8"))
+                    response = normalize_response(
+                        {"status": "error", "code": "SOCKET_DISPATCH_ERROR", "message": str(e)},
+                        command_id=command.get("command_id"),
+                    )
+                    client.sendall(json.dumps(response).encode("utf-8"))
                 except Exception:
                     pass
 

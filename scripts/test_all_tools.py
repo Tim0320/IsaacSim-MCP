@@ -53,12 +53,15 @@ async def main() -> int:
                     raw = await asyncio.wait_for(session.call_tool(name, args or {}), timeout=timeout)
                     payload = parse_payload(raw)
                     message = str(payload.get("message", ""))
+                    response_status = payload.get("status")
                     status = "pass"
-                    if raw.isError or payload.get("status") == "error":
+                    if raw.isError or response_status in {"error", "timeout", "cancelled"}:
                         if any(key in message for key in ("ARK_API_KEY", "BEAVER3D_MODEL", "NVIDIA_API_KEY")):
                             status = "blocked_external_config"
                         else:
                             status = "fail"
+                    elif response_status in {"partial", "unsupported"}:
+                        status = response_status
                     entry = {
                         "status": status,
                         "duration_seconds": round(time.perf_counter() - started, 3),
@@ -75,7 +78,7 @@ async def main() -> int:
                 return entry
 
             def payload_of(name: str) -> dict[str, Any]:
-                return results.get(name, {}).get("payload", {})
+                return results.get(name, {}).get("payload", {}).get("data", {})
 
             def dependency_block(name: str, dependency: str) -> None:
                 results[name] = {"status": "blocked_dependency", "dependency": dependency}
@@ -138,7 +141,7 @@ async def main() -> int:
                 "set_physics_params", {"time_step": 0.0166667, "gpu_enabled": True}
             )
             unsupported_physics_payload = parse_payload(unsupported_physics)
-            if unsupported_physics_payload.get("status") == "error":
+            if unsupported_physics_payload.get("status") in {"partial", "unsupported"}:
                 results["set_physics_params"]["status"] = "partial"
                 results["set_physics_params"]["unsupported_probe"] = unsupported_physics_payload
             await call("get_physics_state", {"prim_path": "/World/TestCube"})
@@ -183,7 +186,7 @@ async def main() -> int:
             )
             if robot["status"] == "pass":
                 info = await call("get_robot_info", {"prim_path": "/World/TestFranka"}, timeout=120)
-                info_payload = info.get("payload", {})
+                info_payload = info.get("payload", {}).get("data", {})
                 dof = int(info_payload.get("num_dof") or payload_of("create_robot").get("num_dof") or 9)
                 await call(
                     "set_joint_positions",
@@ -281,7 +284,7 @@ async def main() -> int:
                 },
             )
             inline_edit_payload = parse_payload(inline_edit_probe)
-            if inline_edit_payload.get("status") == "error":
+            if inline_edit_payload.get("status") in {"partial", "unsupported"}:
                 results["edit_action_graph"]["status"] = "partial"
                 results["edit_action_graph"]["inline_script_probe"] = inline_edit_payload
             await call("get_isaac_logs", {"clear": False, "count": 50, "since_last_play": False})
