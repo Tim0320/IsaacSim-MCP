@@ -120,6 +120,7 @@ def test_all_handler_modules_have_register():
     """Verify every handler module exposes a register(registry, adapter) function."""
     handlers_dir = os.path.join(EXTENSION_ROOT, "handlers")
     handler_files = [
+        "capabilities.py",
         "scene.py",
         "objects.py",
         "humans.py",

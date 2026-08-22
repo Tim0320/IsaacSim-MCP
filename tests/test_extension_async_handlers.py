@@ -42,3 +42,14 @@ def test_execute_command_awaits_async_handler():
     response = asyncio.run(extension._execute_command({"type": "async.test", "params": {"value": 7}}))
 
     assert response == {"status": "success", "result": {"status": "success", "value": 7}}
+
+
+def test_capabilities_are_available_before_the_stage_exists():
+    extension = MCPExtension()
+    extension._adapter = MagicMock()
+    extension._adapter.get_stage.return_value = None
+    extension._registry = {"system.get_capabilities": lambda **_params: {"status": "success", "schema_version": "1.0"}}
+
+    response = asyncio.run(extension._execute_command({"type": "system.get_capabilities", "params": {}}))
+
+    assert response == {"status": "success", "result": {"status": "success", "schema_version": "1.0"}}

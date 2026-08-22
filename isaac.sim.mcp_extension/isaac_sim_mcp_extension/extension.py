@@ -45,6 +45,8 @@ from .socket_server import SocketServer
 
 
 class MCPExtension(omni.ext.IExt):
+    STAGE_INDEPENDENT_COMMANDS = {"system.get_capabilities"}
+
     def __init__(self):
         super().__init__()
         self.ext_id = None
@@ -129,7 +131,7 @@ class MCPExtension(omni.ext.IExt):
         cmd_type = command.get("type", "")
         params = command.get("params", {})
         handler = self._registry.get(cmd_type)
-        if handler and self._stage_pending():
+        if handler and cmd_type not in self.STAGE_INDEPENDENT_COMMANDS and self._stage_pending():
             return {
                 "status": "error",
                 "message": (

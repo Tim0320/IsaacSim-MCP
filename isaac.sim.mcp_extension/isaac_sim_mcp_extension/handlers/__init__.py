@@ -37,7 +37,19 @@ def register_all_handlers(registry: Dict[str, Any], adapter: IsaacAdapterBase) -
         registry: Dict mapping command type strings to handler callables.
         adapter: IsaacAdapterBase instance for version-specific API calls.
     """
-    from . import assets, graphs, humans, lighting, materials, objects, robots, scene, sensors, simulation
+    from . import assets, capabilities, graphs, humans, lighting, materials, objects, robots, scene, sensors, simulation
 
-    for module in [scene, objects, humans, lighting, robots, sensors, materials, assets, simulation, graphs]:
+    for module in [
+        capabilities,
+        scene,
+        objects,
+        humans,
+        lighting,
+        robots,
+        sensors,
+        materials,
+        assets,
+        simulation,
+        graphs,
+    ]:
         module.register(registry, adapter)

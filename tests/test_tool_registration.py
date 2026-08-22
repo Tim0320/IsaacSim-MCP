@@ -29,6 +29,7 @@ import os
 TOOLS_DIR = os.path.join(os.path.dirname(__file__), "..", "isaac_mcp", "tools")
 
 EXPECTED_MODULES = [
+    "capabilities.py",
     "scene.py",
     "objects.py",
     "humans.py",
@@ -61,6 +62,7 @@ def test_init_imports_all_modules():
     with open(path) as f:
         content = f.read()
     for module_name in [
+        "capabilities",
         "scene",
         "objects",
         "humans",
@@ -72,3 +74,25 @@ def test_init_imports_all_modules():
         "simulation",
     ]:
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
+
+
+def test_named_tool_inventory_has_46_unique_names():
+    names = []
+    for filename in EXPECTED_MODULES + ["graphs.py"]:
+        path = os.path.join(TOOLS_DIR, filename)
+        with open(path) as f:
+            tree = ast.parse(f.read())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call) or not decorator.args:
+                    continue
+                if isinstance(decorator.func, ast.Attribute) and decorator.func.attr == "tool":
+                    name = decorator.args[0]
+                    if isinstance(name, ast.Constant) and isinstance(name.value, str):
+                        names.append(name.value)
+
+    assert len(names) == 46
+    assert len(names) == len(set(names))
+    assert "get_capabilities" in names

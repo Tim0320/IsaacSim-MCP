@@ -10,7 +10,7 @@
 - 固定執行環境：`C:\isaacsim`，Isaac Sim `6.0.1-rc.7+release.42383.32955d8d.gl`
 - Live 控制路由：Isaac Sim extension TCP `8766`
 - `isaac-sim-mcp` 的 `9904` 僅供文件查詢，不視為 live stage 控制驗證
-- 目前 MCP 共註冊 45 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
+- 目前 MCP 共註冊 46 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
 - 建立本文件時 `8766` 未啟動，因此本次只整理程式碼與既有測試證據，沒有修改 live stage
 - 備份根目錄：`E:\碩士論文\backups\isaacsim-mcp`
 
@@ -49,11 +49,12 @@
   > 還原驗證：在新的系統暫存目錄 clone bundle、依序套用 staged/unstaged patch、還原 untracked/LFS/line-ending overrides，再逐檔比對 SHA-256；失敗會保留 `BACKUP_FAILED.txt` 並回傳非零狀態。
   > 測試證據：`tests/test_backup_project_script.py` 驗證 clean repo、同時含 staged/unstaged/untracked 的 dirty repo、credential/cache/oversized 排除，以及 repo 內備份路徑拒絕；專案離線測試為 `145 passed, 1 deselected`，Ruff 全部通過。
 
-- [ ] 0.3 新增 `get_capabilities` 與版本相容矩陣
-  > 現況：tool 可被列出，但 client 無法可靠得知 Isaac 版本、active physics backend、必要 extension、支援參數與已知限制。
-  > 缺漏位置：`isaac_mcp/tools/`、extension command registry、`adapters/base.py`、`adapters/v6.py`。
-  > 實作：回傳 server/extension 版本、Isaac Sim 版本、adapter、PhysX/Newton、啟用 extension、tool feature flags、unsupported arguments 與 sensor warm-up 狀態。
-  > 驗收：schema contract 固定；缺 extension 或不支援功能時回傳 machine-readable reason，不以成功訊息掩蓋 ignored parameter。
+- [x] 0.3 新增 `get_capabilities` 與版本相容矩陣
+  > 完成：新增 read-only `get_capabilities` named tool 與 `system.get_capabilities` extension command，schema version 為 `1.0`；回傳 MCP/extension 版本、Isaac Sim 版本、adapter generation、active physics backend、stage state、extension states、feature flags、unsupported arguments 與 sensor warm-up 狀態。
+  > 限制呈現：`time_step`、`gpu_enabled`、RGB pixels、decoded LiDAR points 與 V6 LiDAR `config` 都回傳 machine-readable state/reason；Newton 未完成 live matrix 時保持 `unverified`。
+  > startup 契約：`system.get_capabilities` 不受 stage pending gate 阻擋，stage 建立前後都能查詢；其他 stage-dependent commands 維持原保護。
+  > 測試證據：專案離線測試 `152 passed, 1 deselected`，Ruff 全部通過；FastMCP 實際註冊 46 tools。
+  > live 證據：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；stage 建立前回 `stage_available=false`，建立後回 `true`，兩次查詢皆成功且沒有修改 stage。
 
 - [ ] 0.4 統一 MCP response 與 error schema
   > 現況：多數 tool 回傳 JSON 字串，各 handler 的 `status`、`message`、資料欄位與錯誤細節不完全一致。
@@ -219,11 +220,11 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
 
-- [ ] 25. 目前 45 個 tools 的統一 Isaac Sim 6.0.1 live 報告
-  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset/human 工具未納入同一輪 45-tool live matrix。
+- [ ] 25. 目前 46 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability 工具未納入同一輪 46-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
-  > 驗收：45 個現有 tools 加上本 task 新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 驗收：46 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
 
 - [ ] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。
