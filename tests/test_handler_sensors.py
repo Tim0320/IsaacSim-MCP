@@ -29,18 +29,27 @@ tests hold the contract instead.
 
 from __future__ import annotations
 
+import base64
+import hashlib
+
 from isaac_sim_mcp_extension.handlers.sensors import capture_image
 
 
 class _Frame:
     """Minimal stand-in for the ndarray the adapter returns (numpy is stubbed offline)."""
 
-    def __init__(self, shape):
+    def __init__(self, shape, payload=None):
         self.shape = shape
+        self.dtype = "uint8"
         size = 1
         for dim in shape:
             size *= dim
         self.size = size
+        self._payload = payload if payload is not None else bytes((index % 251 for index in range(size)))
+
+    def tobytes(self, order="C"):
+        assert order == "C"
+        return self._payload
 
 
 class _Adapter:
@@ -92,10 +101,19 @@ def test_capture_reports_an_error_when_the_adapter_returns_none():
 def test_capture_succeeds_with_a_real_frame():
     frame = _Frame((480, 640, 3))
 
-    result = capture_image(_Adapter(frame), prim_path="/World/Cam")
+    result = capture_image(_Adapter(frame), prim_path="/World/Cam", return_mode="metadata")
 
     assert result["status"] == "success"
-    assert result["shape"] == [480, 640, 3]
+    assert result["return_mode"] == "metadata"
+    assert result["image"]["shape"] == [480, 640, 3]
+    assert result["image"]["width"] == 640
+    assert result["image"]["height"] == 480
+    assert result["image"]["channels"] == 3
+    assert result["image"]["color_space"] == "RGB"
+    assert result["image"]["dtype"] == "uint8"
+    assert result["image"]["pixel_sha256"] == hashlib.sha256(frame.tobytes()).hexdigest()
+    assert result["image"]["timestamp_ns"] > 0
+    assert "frame" in result["image"]
 
 
 def test_empty_frame_is_never_written_to_disk(tmp_path):
@@ -117,6 +135,83 @@ def test_retry_advice_only_when_the_adapter_can_request_a_render():
     assert "render has been requested" not in v5["message"]
     assert "Play the simulation" in v5["message"]
     assert "render has been requested" in v6["message"]
+
+
+def test_artifact_is_default_and_writes_a_hash_verified_managed_png(tmp_path, monkeypatch):
+    from isaac_sim_mcp_extension.handlers import sensors
+
+    png = b"\x89PNG\r\n\x1a\nmanaged-test"
+    frame = _Frame((2, 3, 3), payload=b"pixels" * 3)
+    monkeypatch.setenv("ISAAC_MCP_ARTIFACT_ROOT", str(tmp_path))
+    monkeypatch.setattr(sensors, "_encode_png", lambda _image: png)
+
+    result = capture_image(_Adapter(frame), prim_path="/World/Cam")
+
+    assert result["status"] == "success"
+    assert result["return_mode"] == "artifact"
+    artifact = result["artifacts"][0]
+    assert artifact["handle"].startswith("artifact://camera/")
+    assert artifact["managed"] is True
+    assert artifact["format"] == "png"
+    assert artifact["mime_type"] == "image/png"
+    assert artifact["sha256"] == hashlib.sha256(png).hexdigest()
+    path = tmp_path / f"camera-{artifact['id']}.png"
+    assert artifact["path"] == str(path)
+    assert path.read_bytes() == png
+
+
+def test_inline_returns_decodable_png_and_enforces_size_limit(monkeypatch):
+    from isaac_sim_mcp_extension.handlers import sensors
+
+    png = b"inline-png"
+    monkeypatch.setattr(sensors, "_encode_png", lambda _image: png)
+    adapter = _Adapter(_Frame((2, 2, 3)))
+
+    result = capture_image(adapter, return_mode="inline", inline_max_bytes=len(png))
+    too_large = capture_image(adapter, return_mode="inline", inline_max_bytes=len(png) - 1)
+
+    assert base64.b64decode(result["inline"]["data"]) == png
+    assert result["inline"]["sha256"] == hashlib.sha256(png).hexdigest()
+    assert too_large["status"] == "error"
+    assert too_large["code"] == "INLINE_SIZE_LIMIT_EXCEEDED"
+    assert too_large["encoded_size_bytes"] == len(png)
+
+
+def test_capture_rejects_invalid_return_mode_and_ambiguous_output_path(tmp_path):
+    adapter = _Adapter(_Frame((2, 2, 3)))
+
+    invalid = capture_image(adapter, return_mode="bytes")
+    ambiguous = capture_image(adapter, return_mode="metadata", output_path=str(tmp_path / "frame.png"))
+
+    assert invalid["code"] == "INVALID_RETURN_MODE"
+    assert ambiguous["code"] == "OUTPUT_PATH_REQUIRES_ARTIFACT"
+
+
+def test_inline_limit_has_a_hard_upper_bound():
+    result = capture_image(_Adapter(_Frame((2, 2, 3))), return_mode="inline", inline_max_bytes=4194305)
+
+    assert result["status"] == "error"
+    assert result["code"] == "INVALID_INLINE_LIMIT"
+
+
+def test_camera_metadata_rejects_inconsistent_pixel_bytes():
+    frame = _Frame((2, 2, 3), payload=b"too-short")
+
+    result = capture_image(_Adapter(frame), return_mode="metadata")
+
+    assert result["status"] == "error"
+    assert "byte length mismatch" in result["message"]
+
+
+def test_builtin_png_encoder_round_trips_rgb_pixels():
+    from isaac_sim_mcp_extension.handlers.sensors import _encode_png
+
+    from scripts.verify_camera_rgb_live import _decode_png
+
+    pixels = bytes(range(18))
+    png = _encode_png(_Frame((2, 3, 3), payload=pixels))
+
+    assert _decode_png(png) == (3, 2, 3, pixels)
 
 
 # ── V5 camera wrapper reuse ──────────────────────────────────────────────────

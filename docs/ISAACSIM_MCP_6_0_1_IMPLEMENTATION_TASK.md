@@ -68,12 +68,16 @@
 
 ## Phase 1：Camera、LiDAR 與感測資料
 
-- [ ] 1. Camera RGB 資料回傳
+- [x] 1. Camera RGB 資料回傳
   > 現況（已確認）：`capture_image` 有 `output_path` 時存檔；未指定時只回傳 `shape`，沒有 RGB pixels 或可讀取的 artifact handle。
   > 缺漏位置：`isaac_mcp/tools/sensors.py:66`、`isaac.sim.mcp_extension/isaac_sim_mcp_extension/handlers/sensors.py:57`，目前資料在 handler 被縮減。
   > 實作：增加 `return_mode=metadata|artifact|inline`；預設回傳 artifact，包含格式、dtype、shape、width、height、channels、frame/timestamp、camera prim 與校驗 hash。
   > 傳輸限制：`inline` 設大小上限；完整 RGB/RGBA 優先存 PNG 或 `.npy`，由受控 resource handle 取回。
   > 驗收：在 Isaac Sim 6.0.1 建立 scratch camera，play/warm-up 後取得非空影像；解碼後 dimensions、dtype、hash 與本機檔案一致。
+  > 完成：`capture_image` 支援 `metadata|artifact|inline`，預設以原子寫入產生受控 PNG artifact；回傳 image metadata、pixel SHA-256、artifact handle/path、PNG SHA-256，explicit `output_path` 保留相容。
+  > 限制：inline 預設 1 MiB、hard cap 4 MiB；超限回 `INLINE_SIZE_LIMIT_EXCEEDED`。完整 TTL、分塊讀取與清理由 Phase 1 item 5 接續。
+  > 測試證據：全部離線測試 `165 passed, 1 deselected`，Ruff 與 format check 通過；包含 PNG round-trip、artifact 原子寫入、base64 decode、hash 與上限測試。
+  > live 證據：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；scratch camera `/World/MCP_Task_1_1_Camera` 讀回成功，RGB `[48,64,3]`、`uint8`、frame 91；artifact/inline PNG 解碼後 dimensions 與 pixel SHA-256 一致，PNG SHA-256 也一致。
 
 - [ ] 2. Camera depth、segmentation、normals 與 calibration
   > 現況：typed MCP 只涵蓋基本 camera 建立與 RGB capture，缺少常用 annotator 與完整相機模型。

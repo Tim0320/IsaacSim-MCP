@@ -31,7 +31,7 @@
 
 ## 目前 6.0.1 必須注意的限制
 
-- `capture_image` 支援存檔與 shape metadata，尚未回傳 RGB pixel payload。
+- `capture_image` 支援 `metadata|artifact|inline`；預設回受控 PNG artifact，inline 有 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。
 - `get_lidar_point_cloud` 目前只回 `point_count`，尚未傳回 decoded XYZ points。
 - V6 `create_lidar(config=...)` 接受參數，但尚未 author 對應 RTX LiDAR schema attributes。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
@@ -60,3 +60,12 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - disabled：ROS 2 bridge、Newton
 - sensor：Camera/LiDAR 尚未建立，因此 warm-up state 為 `not_created`
 - 場景影響：沒有建立、修改或刪除 prim，沒有播放或 step simulation
+
+2026-08-23 完成 Camera RGB live 驗證：
+
+- scratch camera：`/World/MCP_Task_1_1_Camera`，read-back 成功
+- runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX
+- frame：RGB `[48,64,3]`、`uint8`、timeline frame 91
+- artifact：managed PNG path/handle、PNG SHA-256 與解碼後 pixel SHA-256 驗證一致
+- inline：base64 PNG 可解碼，dimensions、dtype 與 hashes 一致
+- limit：1-byte 上限回 `INLINE_SIZE_LIMIT_EXCEEDED`

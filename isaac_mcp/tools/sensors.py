@@ -64,16 +64,27 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps({"status": "error", "message": str(e)})
 
     @mcp.tool("capture_image")
-    def capture_image(prim_path: str = "/World/Camera", output_path: Optional[str] = None) -> str:
+    def capture_image(
+        prim_path: str = "/World/Camera",
+        output_path: Optional[str] = None,
+        return_mode: str = "artifact",
+        inline_max_bytes: int = 1024 * 1024,
+    ) -> str:
         """Capture an RGB image from a camera sensor.
 
         Args:
             prim_path: Prim path of the camera.
-            output_path: File path to save the image. Returns metadata only if not set.
+            output_path: Optional explicit .png path for artifact mode. If omitted, uses the managed artifact root.
+            return_mode: metadata, artifact, or inline. Defaults to artifact.
+            inline_max_bytes: Maximum PNG bytes allowed in inline mode. Maximum configurable value is 4 MiB.
         """
         try:
             conn = get_connection()
-            params = {"prim_path": prim_path}
+            params = {
+                "prim_path": prim_path,
+                "return_mode": return_mode,
+                "inline_max_bytes": inline_max_bytes,
+            }
             if output_path:
                 params["output_path"] = output_path
             result = conn.send_command("sensors.capture_image", params)

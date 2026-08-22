@@ -56,3 +56,5 @@ IsaacSim-MCP 的 46 個 named tools 統一回傳 JSON text，解碼後固定包�
 - `SOCKET_DISPATCH_ERROR`：socket dispatch 層無法完成 response。
 
 rolling upgrade 期間，MCP Server 仍可接收舊 extension 的 `{status, result}` response，並在回給 client 前轉成 schema 1.0。
+
+Camera RGB artifact 已使用此欄位，包含 handle、resolved path、PNG SHA-256、dimensions、dtype、frame 與 timestamp。詳見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。

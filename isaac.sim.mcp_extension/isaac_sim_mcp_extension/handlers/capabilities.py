@@ -11,6 +11,7 @@ from typing import Any, Dict, Mapping, Optional
 from .. import __version__
 from ..adapters.base import IsaacAdapterBase
 from ..adapters.version import version_string
+from .sensors import DEFAULT_INLINE_MAX_BYTES, MAX_INLINE_MAX_BYTES
 
 CAPABILITIES_SCHEMA_VERSION = "1.0"
 EXTENSION_ID = "isaac.sim.mcp_extension"
@@ -127,8 +128,12 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
         "scene.basic_crud": {"state": "supported"},
         "camera.rgb_file": {"state": "supported", "warmup_required": True},
         "camera.rgb_pixels": {
-            "state": "unsupported",
-            "reason": "capture_image returns a file or shape metadata, not RGB pixel payloads",
+            "state": "supported",
+            "return_modes": ["metadata", "artifact", "inline"],
+            "default_return_mode": "artifact",
+            "inline_default_max_bytes": DEFAULT_INLINE_MAX_BYTES,
+            "inline_hard_max_bytes": MAX_INLINE_MAX_BYTES,
+            "warmup_required": True,
         },
         "camera.annotators": {"state": "unsupported"},
         "lidar.point_count": {"state": "supported", "warmup_required": True},

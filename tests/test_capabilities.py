@@ -56,7 +56,14 @@ def test_handler_returns_stable_runtime_capability_contract():
     assert result["extension"]["command_names"] == ["scene.get_info", "system.get_capabilities"]
     assert result["extensions"]["isaac.sim.mcp_extension"]["state"] == "enabled"
     assert result["extensions"]["isaacsim.ros2.bridge"]["state"] == "disabled"
-    assert result["feature_flags"]["camera.rgb_pixels"]["state"] == "unsupported"
+    assert result["feature_flags"]["camera.rgb_pixels"] == {
+        "state": "supported",
+        "return_modes": ["metadata", "artifact", "inline"],
+        "default_return_mode": "artifact",
+        "inline_default_max_bytes": 1048576,
+        "inline_hard_max_bytes": 4194304,
+        "warmup_required": True,
+    }
     assert result["feature_flags"]["lidar.config"]["state"] == "accepted_not_applied"
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
     assert result["sensor_warmup"]["camera"]["state"] == "per_sensor_unknown"
