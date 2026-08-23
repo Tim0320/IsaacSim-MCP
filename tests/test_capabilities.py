@@ -93,7 +93,24 @@ def test_handler_returns_stable_runtime_capability_contract():
         "artifact_format": "npz",
         "warmup_required": True,
     }
-    assert result["feature_flags"]["lidar.config"]["state"] == "accepted_not_applied"
+    assert result["feature_flags"]["lidar.config"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+        "preset_configs": True,
+        "generic_schema_config": True,
+        "readback": True,
+        "generic_fields": [
+            "horizontal_fov_deg",
+            "vertical_fov_deg",
+            "horizontal_resolution_deg",
+            "vertical_resolution_deg",
+            "rotation_rate_hz",
+            "min_range_m",
+            "max_range_m",
+        ],
+        "reason": None,
+    }
+    assert "create_lidar" not in result["unsupported_arguments"]
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
     assert result["sensor_warmup"]["camera"]["state"] == "per_sensor_unknown"
     assert result["sensor_warmup"]["lidar"]["state"] == "not_created"
@@ -125,8 +142,10 @@ def test_v5_reports_physx_and_supported_lidar_config():
 
     assert result["runtime"]["adapter_generation"] == 5
     assert result["runtime"]["physics_backend"] == "physx"
-    assert result["feature_flags"]["lidar.config"]["state"] == "supported"
-    assert "create_lidar" not in result["unsupported_arguments"]
+    assert result["feature_flags"]["lidar.config"]["state"] == "partial"
+    assert result["feature_flags"]["lidar.config"]["preset_configs"] is True
+    assert result["feature_flags"]["lidar.config"]["generic_schema_config"] is False
+    assert result["unsupported_arguments"]["create_lidar"]["horizontal_fov_deg"]["state"] == "unsupported"
 
 
 def test_tool_adds_mcp_server_metadata_and_uses_system_command():

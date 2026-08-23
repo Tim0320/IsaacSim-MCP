@@ -69,6 +69,7 @@ def test_adapter_base_has_all_abstract_methods():
         "create_camera",
         "capture_camera_image",
         "create_lidar",
+        "get_lidar_config",
         "get_lidar_point_cloud",
         "create_pbr_material",
         "create_physics_material",

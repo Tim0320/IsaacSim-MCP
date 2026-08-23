@@ -10,7 +10,7 @@
 - 固定執行環境：`C:\isaacsim`，Isaac Sim `6.0.1-rc.7+release.42383.32955d8d.gl`
 - Live 控制路由：Isaac Sim extension TCP `8766`
 - `isaac-sim-mcp` 的 `9904` 僅供文件查詢，不視為 live stage 控制驗證
-- 目前 MCP 共註冊 48 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
+- 目前 MCP 共註冊 49 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
 - 建立本文件時 `8766` 未啟動，因此本次只整理程式碼與既有測試證據，沒有修改 live stage
 - 備份根目錄：`E:\碩士論文\backups\isaacsim-mcp`
 
@@ -113,11 +113,15 @@
   > 離線驗收：Task 1.3 focused tests `72 passed, 1 deselected`；排除 live、固定 `C:\isaacsim` version-negative case 與缺少 `/bin/bash` 的 Unix launcher tests 後，專案 suite `201 passed, 1 deselected`；Ruff 與 `git diff --check` 通過。
   > 驗證腳本：`scripts/verify_lidar_point_cloud_live.py`。完整輸出契約：`docs/LIDAR_POINT_CLOUD.md`。
 
-- [ ] 4. LiDAR `config` 真正套用到 Isaac Sim 6.0.1
+- [x] 4. LiDAR `config` 真正套用到 Isaac Sim 6.0.1
   > 現況（已確認）：建立 LiDAR 時接受 `config`，V6 路徑目前主要以 `Lidar(path=prim_path)` 建立，輸入設定沒有完整映射與 read-back。
   > 缺漏位置：`adapters/v6.py` 約 `1016-1026`、LiDAR tool/handler schema。
   > 實作：把支援設定映射到 Isaac Sim 6.0.1 RTX LiDAR schema；不支援欄位明確拒絕，禁止靜默忽略。
   > 驗收：使用至少兩組不同 horizontal/vertical FOV、resolution/rate/range 設定建立感測器，read-back 值與輸入一致。
+  > 已實作：`create_lidar` 支援 named preset `config/variant`，或 generic `horizontal_fov_deg`、`vertical_fov_deg`、`horizontal_resolution_deg`、`vertical_resolution_deg`、`rotation_rate_hz`、`min_range_m`、`max_range_m`。模式衝突、未知欄位、無效範圍、無法整除與 sample budget 都以 stable error code 拒絕。
+  > schema/read-back：generic 設定會 author `OmniSensorGenericLidarCoreAPI` 的 azimuth window、scan/tick/firing rate、range、emitter elevation/channel arrays；`get_lidar_config` 回傳 effective values 與 raw USD attributes。Isaac Sim 6.0.1 的 emitter channel ID 使用 1-based；partial-FOV 使用 per-tick output，避免完整 360° accumulation 無法發布 frame。
+  > live 驗收（2026-08-23）：A=`120x20°`、`1x2°`、`10 Hz`、`0.5–40 m`，read-back 一致並取得 33 points；B=`180x30°`、`0.5x5°`、`20 Hz`、`1–80 m`，read-back 一致並取得 262 points。`100°/3°` 回 `LIDAR_HORIZONTAL_RESOLUTION_NOT_DIVISIBLE` 且未建立 prim；Play、Stop 與 scratch cleanup 通過。
+  > 驗證腳本：`scripts/verify_lidar_config_live.py`。完整契約：`docs/LIDAR_CONFIG.md`。
 
 - [ ] 5. 共用 artifact 資料傳輸層
   > 現況：影像與 point cloud 沒有統一的大型資料 transport、保存期限、清理與 hash 契約。
@@ -250,11 +254,11 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
 
-- [ ] 25. 目前 48 個 tools 的統一 Isaac Sim 6.0.1 live 報告
-  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability 工具未納入同一輪 46-tool live matrix。
+- [ ] 25. 目前 49 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability 與 LiDAR config 工具未納入同一輪 49-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
-  > 驗收：48 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 驗收：49 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
 
 - [ ] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。

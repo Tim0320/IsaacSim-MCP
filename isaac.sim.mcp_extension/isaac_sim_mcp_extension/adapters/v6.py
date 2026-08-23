@@ -109,6 +109,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
         # update tick populate the annotator between MCP calls.
         self._camera_sensors: Dict[str, Any] = {}
         self._lidar_sensors: Dict[str, Any] = {}
+        self._lidar_actual_paths: Dict[str, str] = {}
+        self._lidar_config_metadata: Dict[str, Dict[str, Any]] = {}
         # Pending Replicator render request, so repeated captures on an empty
         # sensor do not queue one task per call. See _request_render_frame.
         self._render_request = None
@@ -1129,19 +1131,151 @@ class IsaacAdapterV6(IsaacAdapterBase):
         }
 
     def create_lidar(self, prim_path: str, config: Optional[str] = None, **kwargs) -> Any:
-        # 6.0 Lidar takes a single `path: str`. Hardware preset (formerly the
-        # `config` arg) is now set through schema attributes after creation;
-        # the bare constructor produces a generic OmniLidar prim. As with
-        # create_camera, also cache a LidarSensor wrapper so its annotator
-        # starts producing data on kit's regular render tick.
+        """Create a preset or validated generic Isaac Sim 6 RTX LiDAR."""
         from isaacsim.sensors.experimental.rtx import Lidar, LidarSensor
 
-        lidar = Lidar(path=prim_path, aux_output_level="FULL")
+        from .lidar_config import build_generic_lidar_config
+
+        variant = kwargs.pop("variant", None)
+        custom_names = (
+            "horizontal_fov_deg",
+            "vertical_fov_deg",
+            "horizontal_resolution_deg",
+            "vertical_resolution_deg",
+            "rotation_rate_hz",
+            "min_range_m",
+            "max_range_m",
+        )
+        custom_values = {name: kwargs.pop(name, None) for name in custom_names}
+        if kwargs:
+            raise ValueError("Unsupported LiDAR settings: " + ", ".join(sorted(kwargs)))
+        if config is not None and any(value is not None for value in custom_values.values()):
+            from .lidar_config import LidarConfigError
+
+            raise LidarConfigError(
+                "LIDAR_PRESET_CUSTOM_CONFIG_CONFLICT",
+                "Named config presets cannot be combined with generic FOV, resolution, rate, or range settings",
+            )
+        if variant is not None and config is None:
+            from .lidar_config import LidarConfigError
+
+            raise LidarConfigError("LIDAR_VARIANT_REQUIRES_PRESET", "variant requires a named config preset")
+
+        if config is not None:
+            lidar = Lidar.create(
+                path=prim_path,
+                config=config,
+                variant=variant,
+                aux_output_level="FULL",
+            )
+            source_metadata = {"source": "preset", "config": config, "variant": variant}
+        else:
+            attributes, effective = build_generic_lidar_config(**custom_values)
+            # Replicator's functional authoring path expands a plain Python
+            # list into positional Vt array constructor arguments. Isaac Sim
+            # 6.0.1 then raises FloatArray.__init__(FloatArray, float, ...).
+            # Supply the exact USD value types at the adapter boundary.
+            try:
+                from pxr import Vt
+
+                float_arrays = (
+                    "omni:sensor:Core:emitterState:s001:azimuthDeg",
+                    "omni:sensor:Core:emitterState:s001:elevationDeg",
+                )
+                uint_arrays = (
+                    "omni:sensor:Core:numRaysPerLine",
+                    "omni:sensor:Core:emitterState:s001:channelId",
+                    "omni:sensor:Core:emitterState:s001:fireTimeNs",
+                )
+                for name in float_arrays:
+                    attributes[name] = Vt.FloatArray(attributes[name])
+                for name in uint_arrays:
+                    attributes[name] = Vt.UIntArray(attributes[name])
+            except (ImportError, AttributeError):
+                # Offline unit tests intentionally run without pxr. Production
+                # Kit always provides Vt, and the live harness covers this path.
+                pass
+            lidar = Lidar(
+                path=prim_path,
+                # A partial valid-azimuth window does not publish a completed
+                # frame reliably when the model accumulates a full rotary
+                # scan. Stream each sensor tick so callers can observe the
+                # configured partial FOV while the timeline is running.
+                accumulate_outputs=False,
+                aux_output_level="FULL",
+                attributes=attributes,
+            )
+            source_metadata = {"source": "generic", "requested": effective}
+
+        actual_path = str(getattr(lidar, "paths", [prim_path])[0])
+        self._lidar_actual_paths[prim_path] = actual_path
+        self._lidar_config_metadata[prim_path] = source_metadata
         self._lidar_sensors[prim_path] = LidarSensor(
             lidar,
             annotators=["generic-model-output", "stable-id-map"],
         )
         return lidar
+
+    def get_lidar_config(self, prim_path: str) -> Dict[str, Any]:
+        """Read back the effective Core schema values from the USD prim."""
+        actual_path = self._lidar_actual_paths.get(prim_path, prim_path)
+        stage = self.get_stage()
+        prim = stage.GetPrimAtPath(actual_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {actual_path}")
+
+        attribute_names = {
+            "valid_start_azimuth_deg": "omni:sensor:Core:validStartAzimuthDeg",
+            "valid_end_azimuth_deg": "omni:sensor:Core:validEndAzimuthDeg",
+            "start_azimuth_offset_deg": "omni:sensor:Core:startAzimuthOffsetDeg",
+            "scan_rate_base_hz": "omni:sensor:Core:scanRateBaseHz",
+            "tick_rate_hz": "omni:sensor:tickRate",
+            "pattern_firing_rate_hz": "omni:sensor:Core:patternFiringRateHz",
+            "near_range_m": "omni:sensor:Core:nearRangeM",
+            "far_range_m": "omni:sensor:Core:farRangeM",
+            "number_of_channels": "omni:sensor:Core:numberOfChannels",
+            "number_of_emitters": "omni:sensor:Core:numberOfEmitters",
+            "elevation_deg": "omni:sensor:Core:emitterState:s001:elevationDeg",
+        }
+        raw: Dict[str, Any] = {}
+        for name, usd_name in attribute_names.items():
+            attribute = prim.GetAttribute(usd_name)
+            if not attribute.IsValid():
+                raw[name] = None
+                continue
+            value = attribute.Get()
+            if hasattr(value, "__iter__") and not isinstance(value, (str, bytes)):
+                value = [float(item) for item in value]
+            raw[name] = value
+
+        start = float(raw["valid_start_azimuth_deg"])
+        end = float(raw["valid_end_azimuth_deg"])
+        scan_rate = float(raw["scan_rate_base_hz"])
+        firing_rate = float(raw["pattern_firing_rate_hz"])
+        horizontal_fov = end - start
+        horizontal_samples = int(round(firing_rate / scan_rate)) if scan_rate > 0 else 0
+        elevations = sorted(set(float(value) for value in (raw["elevation_deg"] or [])))
+        vertical_fov = elevations[-1] - elevations[0] if len(elevations) > 1 else 0.0
+        gaps = [b - a for a, b in zip(elevations, elevations[1:])]
+        vertical_resolution = gaps[0] if gaps and all(abs(value - gaps[0]) <= 1e-6 for value in gaps) else None
+        effective = {
+            "horizontal_fov_deg": horizontal_fov,
+            "vertical_fov_deg": vertical_fov,
+            "horizontal_resolution_deg": horizontal_fov / horizontal_samples if horizontal_samples else None,
+            "vertical_resolution_deg": vertical_resolution,
+            "rotation_rate_hz": scan_rate,
+            "min_range_m": float(raw["near_range_m"]),
+            "max_range_m": float(raw["far_range_m"]),
+            "horizontal_samples": horizontal_samples,
+            "vertical_channels": len(elevations),
+        }
+        return {
+            "requested_prim_path": prim_path,
+            "actual_prim_path": actual_path,
+            **self._lidar_config_metadata.get(prim_path, {"source": "existing"}),
+            "effective": effective,
+            "schema_attributes": raw,
+        }
 
     def get_lidar_point_cloud(self, prim_path: str) -> np.ndarray:
         frame = self.get_lidar_point_cloud_frame(prim_path)
@@ -1166,7 +1300,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
         if sensor is None:
             from isaacsim.sensors.experimental.rtx import Lidar
 
-            lidar = Lidar(path=prim_path, aux_output_level="FULL")
+            actual_path = self._lidar_actual_paths.get(prim_path, prim_path)
+            lidar = Lidar(path=actual_path, aux_output_level="FULL")
             sensor = LidarSensor(lidar, annotators=["generic-model-output", "stable-id-map"])
             self._lidar_sensors[prim_path] = sensor
         data, info = sensor.get_data("generic-model-output")
@@ -1283,7 +1418,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
         frame_value = getattr(gmo, "frameOfReference", "unknown")
         frame_name = str(getattr(frame_value, "name", frame_value)).lower()
         try:
-            sensor_pose = self.get_prim_transform(prim_path)
+            sensor_pose = self.get_prim_transform(self._lidar_actual_paths.get(prim_path, prim_path))
         except Exception:
             sensor_pose = None
 

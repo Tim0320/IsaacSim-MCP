@@ -1,6 +1,6 @@
 # MCP response schema
 
-IsaacSim-MCP 的 48 個 named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
+IsaacSim-MCP 的 49 個 named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
 
 ```json
 {

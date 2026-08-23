@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 from ..adapters.base import IsaacAdapterBase
+from ..adapters.lidar_config import LidarConfigError
 
 CAMERA_RETURN_MODES = {"metadata", "artifact", "inline"}
 DEFAULT_INLINE_MAX_BYTES = 1024 * 1024
@@ -110,6 +111,7 @@ def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["sensors.capture_camera_output"] = lambda **p: capture_camera_output(adapter, **p)
     registry["sensors.get_camera_calibration"] = lambda **p: get_camera_calibration(adapter, **p)
     registry["sensors.create_lidar"] = lambda **p: create_lidar(adapter, **p)
+    registry["sensors.get_lidar_config"] = lambda **p: get_lidar_config(adapter, **p)
     registry["sensors.get_point_cloud"] = lambda **p: get_point_cloud(adapter, **p)
 
 
@@ -617,14 +619,56 @@ def create_lidar(
     position: Optional[Sequence[float]] = None,
     rotation: Optional[Sequence[float]] = None,
     config: Optional[str] = None,
+    variant: Optional[Any] = None,
+    horizontal_fov_deg: Optional[float] = None,
+    vertical_fov_deg: Optional[float] = None,
+    horizontal_resolution_deg: Optional[float] = None,
+    vertical_resolution_deg: Optional[float] = None,
+    rotation_rate_hz: Optional[float] = None,
+    min_range_m: Optional[float] = None,
+    max_range_m: Optional[float] = None,
 ) -> Dict[str, Any]:
     try:
-        adapter.create_lidar(prim_path, config=config)
+        lidar = adapter.create_lidar(
+            prim_path,
+            config=config,
+            variant=variant,
+            horizontal_fov_deg=horizontal_fov_deg,
+            vertical_fov_deg=vertical_fov_deg,
+            horizontal_resolution_deg=horizontal_resolution_deg,
+            vertical_resolution_deg=vertical_resolution_deg,
+            rotation_rate_hz=rotation_rate_hz,
+            min_range_m=min_range_m,
+            max_range_m=max_range_m,
+        )
+        actual_path = str(getattr(lidar, "paths", [prim_path])[0])
         if position or rotation:
-            adapter.set_prim_transform(prim_path, position=position, rotation=rotation)
-        return {"status": "success", "message": f"Lidar created at {prim_path}", "prim_path": prim_path}
+            adapter.set_prim_transform(actual_path, position=position, rotation=rotation)
+        lidar_config = adapter.get_lidar_config(prim_path)
+        return {
+            "status": "success",
+            "message": f"Lidar created at {actual_path}",
+            "prim_path": actual_path,
+            "requested_prim_path": prim_path,
+            "lidar_config": lidar_config,
+            "readback": {"lidar_config": lidar_config},
+        }
+    except LidarConfigError as exc:
+        return {"status": "error", "code": exc.code, "message": str(exc)}
+    except NotImplementedError as exc:
+        return {"status": "unsupported", "code": "LIDAR_CONFIG_UNSUPPORTED", "message": str(exc)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+def get_lidar_config(adapter: IsaacAdapterBase, prim_path: str = "/World/Lidar") -> Dict[str, Any]:
+    try:
+        lidar_config = adapter.get_lidar_config(prim_path)
+        return {"status": "success", "message": "Lidar configuration read", "lidar_config": lidar_config}
+    except NotImplementedError as exc:
+        return {"status": "unsupported", "code": "LIDAR_CONFIG_UNSUPPORTED", "message": str(exc)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
 
 def _field_shape(data: Any) -> list[int]:

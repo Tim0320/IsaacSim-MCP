@@ -471,6 +471,54 @@ class _LidarAdapterWithRenderRequest(_LidarAdapter):
         return True
 
 
+class _ConfiguredLidarAdapter:
+    def __init__(self):
+        self.calls = []
+
+    def create_lidar(self, prim_path, config=None, **kwargs):
+        self.calls.append((prim_path, config, kwargs))
+        return type("Lidar", (), {"paths": [prim_path]})()
+
+    def set_prim_transform(self, prim_path, position=None, rotation=None):
+        self.calls.append(("transform", prim_path, position, rotation))
+
+    def get_lidar_config(self, prim_path):
+        return {
+            "requested_prim_path": prim_path,
+            "actual_prim_path": prim_path,
+            "source": "generic",
+            "effective": {"horizontal_fov_deg": 120.0},
+        }
+
+
+def test_create_lidar_returns_effective_config_readback():
+    from isaac_sim_mcp_extension.handlers.sensors import create_lidar
+
+    adapter = _ConfiguredLidarAdapter()
+    result = create_lidar(
+        adapter,
+        prim_path="/World/Lidar",
+        position=[0.0, 0.0, 1.0],
+        horizontal_fov_deg=120.0,
+    )
+
+    assert result["status"] == "success"
+    assert result["prim_path"] == "/World/Lidar"
+    assert result["lidar_config"]["effective"]["horizontal_fov_deg"] == 120.0
+    assert result["readback"] == {"lidar_config": result["lidar_config"]}
+    assert adapter.calls[0][2]["horizontal_fov_deg"] == 120.0
+    assert adapter.calls[1] == ("transform", "/World/Lidar", [0.0, 0.0, 1.0], None)
+
+
+def test_get_lidar_config_returns_adapter_readback():
+    from isaac_sim_mcp_extension.handlers.sensors import get_lidar_config
+
+    result = get_lidar_config(_ConfiguredLidarAdapter(), "/World/Lidar")
+
+    assert result["status"] == "success"
+    assert result["lidar_config"]["source"] == "generic"
+
+
 def test_lidar_reports_an_error_when_no_frame_is_available():
     """ "Got 0 points" with status success is indistinguishable from a lidar
     aimed at empty space. RTX sensor data only flows while Replicator captures,

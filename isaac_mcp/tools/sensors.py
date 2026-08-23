@@ -24,7 +24,7 @@
 """Sensor MCP tools."""
 
 import json
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
@@ -141,6 +141,14 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         position: Optional[List[float]] = None,
         rotation: Optional[List[float]] = None,
         config: Optional[str] = None,
+        variant: Optional[Union[str, Dict[str, str]]] = None,
+        horizontal_fov_deg: Optional[float] = None,
+        vertical_fov_deg: Optional[float] = None,
+        horizontal_resolution_deg: Optional[float] = None,
+        vertical_resolution_deg: Optional[float] = None,
+        rotation_rate_hz: Optional[float] = None,
+        min_range_m: Optional[float] = None,
+        max_range_m: Optional[float] = None,
     ) -> str:
         """Add a lidar sensor to the scene.
 
@@ -148,7 +156,15 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             prim_path: Prim path for the lidar.
             position: [x, y, z] world position.
             rotation: [rx, ry, rz] rotation in degrees.
-            config: Lidar configuration name (e.g. "Example_Rotary").
+            config: Isaac Sim 6 supported preset name, such as Example_Rotary or OS1.
+            variant: Optional preset variant string or variant-set mapping.
+            horizontal_fov_deg: Generic sensor horizontal field of view in degrees.
+            vertical_fov_deg: Generic sensor vertical field of view in degrees.
+            horizontal_resolution_deg: Generic sensor horizontal angular resolution.
+            vertical_resolution_deg: Generic sensor vertical angular resolution.
+            rotation_rate_hz: Integer generic rotary scan rate from 1 to 100 Hz.
+            min_range_m: Generic sensor minimum range in meters.
+            max_range_m: Generic sensor maximum range in meters.
         """
         try:
             conn = get_connection()
@@ -159,7 +175,29 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
                 params["rotation"] = rotation
             if config:
                 params["config"] = config
+            if variant is not None:
+                params["variant"] = variant
+            optional_settings = {
+                "horizontal_fov_deg": horizontal_fov_deg,
+                "vertical_fov_deg": vertical_fov_deg,
+                "horizontal_resolution_deg": horizontal_resolution_deg,
+                "vertical_resolution_deg": vertical_resolution_deg,
+                "rotation_rate_hz": rotation_rate_hz,
+                "min_range_m": min_range_m,
+                "max_range_m": max_range_m,
+            }
+            params.update({name: value for name, value in optional_settings.items() if value is not None})
             result = conn.send_command("sensors.create_lidar", params)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("get_lidar_config")
+    def get_lidar_config(prim_path: str = "/World/Lidar") -> str:
+        """Read effective LiDAR FOV, angular resolution, rate, range, and USD schema values."""
+        try:
+            conn = get_connection()
+            result = conn.send_command("sensors.get_lidar_config", {"prim_path": prim_path})
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})

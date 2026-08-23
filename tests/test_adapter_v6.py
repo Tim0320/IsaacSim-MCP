@@ -1171,9 +1171,11 @@ def test_v6_create_lidar_requests_full_auxiliary_output(monkeypatch):
     captured = {}
 
     class _Lidar:
-        def __init__(self, path, aux_output_level):
+        def __init__(self, path, aux_output_level, **kwargs):
             captured["path"] = path
             captured["aux_output_level"] = aux_output_level
+            captured.update(kwargs)
+            self.paths = [path]
 
     class _LidarSensor:
         def __init__(self, lidar, annotators):
@@ -1190,8 +1192,97 @@ def test_v6_create_lidar_requests_full_auxiliary_output(monkeypatch):
 
     assert captured["path"] == "/World/TestLidar"
     assert captured["aux_output_level"] == "FULL"
+    assert captured["accumulate_outputs"] is False
+    assert captured["attributes"]["omni:sensor:tickRate"] == 10.0
+    assert captured["attributes"]["omni:sensor:Core:validEndAzimuthDeg"] == 360.0
     assert captured["lidar"] is lidar
     assert captured["annotators"] == ["generic-model-output", "stable-id-map"]
+
+
+def test_v6_create_lidar_uses_supported_preset_api(monkeypatch):
+    captured = {}
+
+    class _Lidar:
+        @classmethod
+        def create(cls, **kwargs):
+            captured.update(kwargs)
+            return types.SimpleNamespace(paths=["/World/Preset/Lidar"])
+
+    class _LidarSensor:
+        def __init__(self, lidar, annotators):
+            captured["wrapped"] = lidar
+            captured["annotators"] = annotators
+
+    rtx_mod = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx_mod.Lidar = _Lidar
+    rtx_mod.LidarSensor = _LidarSensor
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx_mod)
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
+
+    lidar = adapter.create_lidar("/World/Preset", config="OS1", variant="OS1_REV6_32ch20hz512res")
+
+    assert captured["path"] == "/World/Preset"
+    assert captured["config"] == "OS1"
+    assert captured["variant"] == "OS1_REV6_32ch20hz512res"
+    assert captured["aux_output_level"] == "FULL"
+    assert captured["wrapped"] is lidar
+    assert adapter._lidar_actual_paths["/World/Preset"] == "/World/Preset/Lidar"
+
+
+def test_v6_get_lidar_config_derives_effective_values_from_usd(monkeypatch):
+    values = {
+        "omni:sensor:Core:validStartAzimuthDeg": 0.0,
+        "omni:sensor:Core:validEndAzimuthDeg": 120.0,
+        "omni:sensor:Core:startAzimuthOffsetDeg": -60.0,
+        "omni:sensor:Core:scanRateBaseHz": 10,
+        "omni:sensor:tickRate": 10.0,
+        "omni:sensor:Core:patternFiringRateHz": 2400,
+        "omni:sensor:Core:nearRangeM": 0.5,
+        "omni:sensor:Core:farRangeM": 80.0,
+        "omni:sensor:Core:numberOfChannels": 11,
+        "omni:sensor:Core:numberOfEmitters": 11,
+        "omni:sensor:Core:emitterState:s001:elevationDeg": [float(value) for value in range(-10, 11, 2)],
+    }
+
+    class _Attribute:
+        def __init__(self, name):
+            self.name = name
+
+        def IsValid(self):
+            return self.name in values
+
+        def Get(self):
+            return values[self.name]
+
+    class _Prim:
+        def IsValid(self):
+            return True
+
+        def GetAttribute(self, name):
+            return _Attribute(name)
+
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
+    adapter._lidar_config_metadata["/World/Lidar"] = {"source": "generic"}
+    monkeypatch.setattr(
+        adapter,
+        "get_stage",
+        lambda: types.SimpleNamespace(GetPrimAtPath=lambda _path: _Prim()),
+    )
+
+    result = adapter.get_lidar_config("/World/Lidar")
+
+    assert result["effective"] == {
+        "horizontal_fov_deg": 120.0,
+        "vertical_fov_deg": 20.0,
+        "horizontal_resolution_deg": 0.5,
+        "vertical_resolution_deg": 2.0,
+        "rotation_rate_hz": 10.0,
+        "min_range_m": 0.5,
+        "max_range_m": 80.0,
+        "horizontal_samples": 240,
+        "vertical_channels": 11,
+    }
+    assert result["schema_attributes"]["pattern_firing_rate_hz"] == 2400
 
 
 def test_v6_lidar_spherical_gmo_converts_to_cartesian(monkeypatch):

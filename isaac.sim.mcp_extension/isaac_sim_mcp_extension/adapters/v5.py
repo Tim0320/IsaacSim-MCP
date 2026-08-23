@@ -911,7 +911,16 @@ class IsaacAdapterV5(IsaacAdapterBase):
         return sensor
 
     def create_lidar(self, prim_path: str, config: Optional[str] = None, **kwargs) -> Any:
-        return self._lidar_sensor(prim_path, config=config, **kwargs)
+        unsupported = [name for name, value in kwargs.items() if value is not None]
+        if unsupported:
+            raise NotImplementedError(
+                "Isaac Sim 5.x supports named LiDAR presets only; unsupported settings: "
+                + ", ".join(sorted(unsupported))
+            )
+        return self._lidar_sensor(prim_path, config=config)
+
+    def get_lidar_config(self, prim_path: str) -> Dict[str, Any]:
+        raise NotImplementedError("LiDAR configuration read-back requires the Isaac Sim 6.x RTX adapter")
 
     def get_lidar_point_cloud(self, prim_path: str) -> np.ndarray:
         # LidarRtx has no get_point_cloud() on 5.1 — the old call raised

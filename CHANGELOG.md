@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — effective RTX LiDAR configuration
+
+- Added `get_lidar_config` and expanded `create_lidar` with validated generic
+  horizontal/vertical FOV, angular resolution, rotation rate, and range inputs.
+  Named Isaac Sim presets and variants remain available as a separate mode.
+- V6 maps generic settings to `OmniSensorGenericLidarCoreAPI`, uses the
+  one-based emitter channel IDs required by 6.0.1, and reads effective values
+  back from the authored USD attributes. Unsupported or conflicting settings
+  return stable errors instead of being silently ignored.
+- Partial-FOV sensors stream per-tick output so both tested configurations
+  produce live point clouds. Two distinct configurations, invalid-resolution
+  rejection, transform read-back, Play/Stop, and scratch cleanup passed the
+  Isaac Sim 6.0.1 live harness.
+
 ### Added — typed RTX LiDAR point clouds
 
 - Expanded `get_lidar_point_cloud` from a point count into a bounded transfer

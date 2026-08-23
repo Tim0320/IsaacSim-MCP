@@ -122,7 +122,7 @@ def _runtime_info(adapter: IsaacAdapterBase) -> Dict[str, Any]:
 
 
 def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> Dict[str, Dict[str, Any]]:
-    lidar_config_state = "supported" if adapter_generation == 5 else "accepted_not_applied"
+    lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     backend_verification = "verified" if physics_backend == "physx" else "unverified"
     camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
     return {
@@ -167,11 +167,20 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
         },
         "lidar.config": {
             "state": lidar_config_state,
-            "reason": (
-                "Isaac Sim 6.x requires schema attribute authoring after Lidar creation"
-                if adapter_generation == 6
-                else None
-            ),
+            "adapter_generation": adapter_generation,
+            "preset_configs": True,
+            "generic_schema_config": adapter_generation == 6,
+            "readback": adapter_generation == 6,
+            "generic_fields": [
+                "horizontal_fov_deg",
+                "vertical_fov_deg",
+                "horizontal_resolution_deg",
+                "vertical_resolution_deg",
+                "rotation_rate_hz",
+                "min_range_m",
+                "max_range_m",
+            ],
+            "reason": None if adapter_generation == 6 else "Isaac Sim 5.x supports named presets only",
         },
         "physics.gravity": {"state": "supported"},
         "physics.time_step": {"state": "unsupported"},
@@ -207,12 +216,19 @@ def _unsupported_arguments(adapter_generation: Optional[int]) -> Dict[str, Dict[
             },
         }
     }
-    if adapter_generation == 6:
+    if adapter_generation == 5:
         result["create_lidar"] = {
-            "config": {
-                "state": "accepted_not_applied",
-                "reason": "Isaac Sim 6.x Lidar presets require schema attribute authoring",
-            }
+            name: {"state": "unsupported", "reason": "Generic schema configuration requires Isaac Sim 6.x"}
+            for name in (
+                "variant",
+                "horizontal_fov_deg",
+                "vertical_fov_deg",
+                "horizontal_resolution_deg",
+                "vertical_resolution_deg",
+                "rotation_rate_hz",
+                "min_range_m",
+                "max_range_m",
+            )
         }
     return result
 

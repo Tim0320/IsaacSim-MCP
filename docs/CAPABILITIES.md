@@ -35,7 +35,7 @@
 - `capture_image` 支援 `metadata|artifact|inline`；預設回受控 PNG artifact，inline 有 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。
 - `capture_camera_output` 在 V6 支援七種 typed RTX output，預設回受控 `.npy` artifact；inline 傳 raw little-endian bytes，具有相同 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)。
 - `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回受控 `.npz` artifact。V6 必有 Cartesian `points`、range、azimuth、elevation，可用時另含 intensity 與 128-bit object ID；semantic ID 目前明確列為 unavailable。契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。
-- V6 `create_lidar(config=...)` 接受參數，但尚未 author 對應 RTX LiDAR schema attributes。
+- V6 `create_lidar` 支援 named preset，或以 FOV、角解析度、rotation rate 與 range 建立 generic RTX LiDAR；兩種模式不可混用。`get_lidar_config` 會從 USD Core schema 讀回有效值與 raw attributes。契約見 [`LIDAR_CONFIG.md`](LIDAR_CONFIG.md)。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
 - Robot named tools 支援 joint position；velocity、effort、IK 與 trajectory 尚未支援。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
@@ -91,6 +91,13 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - coordinates：原始 spherical GMO 正確轉 Cartesian meters；frame=`sensor`、sensor timestamp/frame 與 pose `[0,0,1]` 可讀回
 - object read-back：stable ID 成功解析至 `/World/MCP_Task_1_3_Target_YN`；semantic ID 目前明確 unavailable
 - lifecycle：Play 暖機、capture、Stop 後 Kit/8766 仍存活；沒有新增 native dump；scratch prim 全數清除
+
+2026-08-23 完成 LiDAR config live 驗證：
+
+- generic A：horizontal/vertical FOV `120/20` 度、resolution `1/2` 度、`10 Hz`、`0.5–40 m`；read-back 一致，取得 33 points
+- generic B：horizontal/vertical FOV `180/30` 度、resolution `0.5/5` 度、`20 Hz`、`1–80 m`；read-back 一致，取得 262 points
+- validation：`100° / 3°` 無法整除時回 `LIDAR_HORIZONTAL_RESOLUTION_NOT_DIVISIBLE`，且沒有建立 prim
+- runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；partial-FOV 使用 per-tick output，Play/Stop 與 scratch cleanup 通過
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

@@ -256,6 +256,11 @@ class IsaacAdapterBase(ABC):
         ...
 
     @abstractmethod
+    def get_lidar_config(self, prim_path: str) -> Dict[str, Any]:
+        """Read effective LiDAR configuration and authored schema attributes."""
+        ...
+
+    @abstractmethod
     def get_lidar_point_cloud(self, prim_path: str) -> np.ndarray:
         """Get point cloud data from a lidar sensor."""
         ...
