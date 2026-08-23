@@ -37,6 +37,7 @@
 - `capture_camera_output` 在 V6 支援七種 typed RTX output，預設回受控 `.npy` artifact；inline 傳 raw little-endian bytes，具有相同 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)。
 - `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回受控 `.npz` artifact。V6 必有 Cartesian `points`、range、azimuth、elevation，可用時另含 intensity 與 128-bit object ID；semantic ID 目前明確列為 unavailable。契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。
 - V6 `create_lidar` 支援 named preset，或以 FOV、角解析度、rotation rate 與 range 建立 generic RTX LiDAR；兩種模式不可混用。`get_lidar_config` 會從 USD Core schema 讀回有效值與 raw attributes。契約見 [`LIDAR_CONFIG.md`](LIDAR_CONFIG.md)。
+- `delete_sensor` 會完整 teardown Camera/LiDAR runtime，刪除 prim，等待 Kit updates，再驗證 prim、RenderProduct、cache 與 LiDAR metadata 均不存在。timeline 必須處於 Pause 或 Stop；`delete_object` 遇到 managed sensor 會走相同流程。契約見 [`SENSOR_LIFECYCLE.md`](SENSOR_LIFECYCLE.md)。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
 - Robot named tools 支援 joint position；velocity、effort、IK 與 trajectory 尚未支援。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
@@ -102,10 +103,19 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 
 2026-08-23 完成共用 artifact transport live 驗證：
 
-- registry：53 extension commands；`get_artifact_info`、`read_artifact`、`delete_artifact`、`cleanup_artifacts` 均已註冊
+- registry：當次 53 extension commands；`get_artifact_info`、`read_artifact`、`delete_artifact`、`cleanup_artifacts` 均已註冊
 - Camera：PNG 1,087 bytes；LiDAR：NPZ 1,248 bytes；兩者以 512-byte chunks 重組後，完整 SHA-256 與 producer metadata 一致
 - guard：traversal handle 回 `INVALID_ARTIFACT_HANDLE`；1,025-byte request 在 1,024-byte 上限下回 `ARTIFACT_CHUNK_LIMIT_EXCEEDED`
 - lifecycle：explicit delete、15 秒 TTL access expiry、expired cleanup、artifact root 與 scratch prim cleanup 全數通過
+
+2026-08-23 完成 Sensor lifecycle live 驗證：
+
+- registry：54 extension commands；`delete_sensor` 已註冊，`delete_object` 已具 sensor-aware routing
+- 兩輪流程：相同 Camera/LiDAR prim path 依序 create、typed read、delete、再 create；Camera RGB `[48,64,3]`，LiDAR point count `2`
+- teardown：每個 sensor 在刪除前各有一個 RenderProduct；runtime 使用 `_invalidate_sensor()`，annotator/writer/Hydra texture 全部釋放
+- read-back：每次刪除等待 32 Kit updates；prim、LiDAR actual prim、RenderProduct、Camera/LiDAR cache 與 LiDAR authoring metadata 全部 absent
+- recreate：第二輪建立成功，沒有重複 pipeline，`duplicate_pipeline_detected=false`
+- runtime：PID 與 TCP `8766` 持續存活；log 無 teardown failure、invalid-prim access、`EXCEPTION_ACCESS_VIOLATION` 或 `PhysXGpu_64.dll` crash signature；scratch cleanup 通過
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

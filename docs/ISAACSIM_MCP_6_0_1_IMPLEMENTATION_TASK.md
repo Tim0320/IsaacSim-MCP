@@ -10,7 +10,7 @@
 - 固定執行環境：`C:\isaacsim`，Isaac Sim `6.0.1-rc.7+release.42383.32955d8d.gl`
 - Live 控制路由：Isaac Sim extension TCP `8766`
 - `isaac-sim-mcp` 的 `9904` 僅供文件查詢，不視為 live stage 控制驗證
-- 目前 MCP 共註冊 53 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
+- 目前 MCP 共註冊 54 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
 - 建立本文件時 `8766` 未啟動，因此本次只整理程式碼與既有測試證據，沒有修改 live stage
 - 備份根目錄：`E:\碩士論文\backups\isaacsim-mcp`
 
@@ -133,11 +133,17 @@
   > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、53 commands。Camera PNG 1,087 bytes 與 LiDAR NPZ 1,248 bytes 均用 512-byte chunks 下載重組，完整 SHA-256 一致；traversal、1,025-byte chunk limit、delete、15 秒 TTL expiry、cleanup 與 scratch prim 清理全數通過。
   > 驗證腳本：`scripts/verify_artifact_transport_live.py`。完整契約：`docs/ARTIFACT_TRANSPORT.md`。
 
-- [ ] 6. Sensor lifecycle 與刪除一致性
+- [x] 6. Sensor lifecycle 與刪除一致性
   > 現況：Camera/LiDAR wrapper、render product、annotator 與 USD prim 的生命週期可能不同；刪除 prim 後仍可能被持有的 wrapper 在後續 tick 重建或殘留資源。
   > 缺漏位置：`handlers/objects.py` 的 delete flow、V6 adapter camera/LiDAR cache、Replicator detach/destroy。
   > 實作：新增 typed `delete_sensor` 或在 `delete_object` 偵測 sensor，先 detach annotator、destroy render product、移除 cache，再刪 prim。
   > 驗收：刪除後連續 step 多次，prim、render product、annotator、adapter cache 均不存在；重建同一路徑成功且不重複 callback。
+  > 6.0.1 source 證據：`isaacsim.sensors.experimental.rtx.impl._sensor_base._SensorRuntime._invalidate_sensor()` 依序 detach writers、以 annotator key list 呼叫 `detach_annotators(...)`、destroy Hydra texture，再清空 runtime dict。舊實作以缺少必要參數的 `detach_annotators()` 呼叫並吞掉 exception，無法證明 RenderProduct 已釋放。
+  > 已實作：新增 `delete_sensor` named tool；`delete_object` 遇到 Camera/LiDAR 會路由至同一 async lifecycle。V6 先呼叫完整 `_invalidate_sensor()`，失敗回 `SENSOR_RELEASE_FAILED` 並保留 cache reference 供重試；成功後才移除 runtime cache、LiDAR actual/config metadata 與 USD prim。刪除只允許 non-playing timeline，並等待 `1..240` 次 Kit updates 後逐項 read-back；任何 survivor 回 `SENSOR_DELETE_INCOMPLETE`。
+  > Stop/recreate：Timeline Stop 會釋放 Camera/LiDAR runtime，但保留 LiDAR authoring metadata；同路徑重建前也先 teardown 舊 runtime，避免重複 annotator、writer、RenderProduct 或 callback。extension shutdown 同樣執行集中釋放。
+  > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、54 commands。Camera 與 LiDAR 以相同 prim path 完成兩輪 create/read/delete/recreate；Camera RGB `[48,64,3]`，LiDAR point count `2`。每次刪除等待 32 Kit updates，prim、LiDAR actual prim、RenderProduct、兩種 runtime cache 及 LiDAR metadata read-back 全為 absent；重建前後各 sensor 僅有一個 RenderProduct，`duplicate_pipeline_detected=false`。PID/port 保持存活，log 無 teardown error、invalid-prim access、native crash signature，scratch cleanup 通過。
+  > scratch safeguard：驗證腳本在任何寫入前先確認 timeline 非 Playing，並拒絕含預設 Isaac Sim baseline 與 `MCP_Task_1_6` namespace 以外 prim 的 stage；不會為了測試清除既有使用者場景。
+  > 驗證腳本：`scripts/verify_sensor_lifecycle_live.py`。完整契約：`docs/SENSOR_LIFECYCLE.md`。
 
 ## Phase 2：Robot 控制
 
@@ -258,11 +264,11 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
 
-- [ ] 25. 目前 53 個 tools 的統一 Isaac Sim 6.0.1 live 報告
-  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config 與 artifact transport 工具未納入同一輪 53-tool live matrix。
+- [ ] 25. 目前 54 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config、artifact transport 與 sensor lifecycle 工具未納入同一輪 54-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
-  > 驗收：53 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 驗收：54 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
 
 - [ ] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。

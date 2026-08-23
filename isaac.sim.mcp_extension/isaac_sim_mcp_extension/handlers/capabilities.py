@@ -133,6 +133,20 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
     camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
     return {
         "scene.basic_crud": {"state": "supported"},
+        "sensor.lifecycle": {
+            "state": "supported",
+            "delete_tool": "delete_sensor",
+            "requires_non_playing_timeline": True,
+            "post_delete_updates_default": 8,
+            "post_delete_updates_max": 240,
+            "verifies": [
+                "prim_absent",
+                "actual_prim_absent",
+                "render_product_absent",
+                "adapter_cache_absent",
+                "lidar_metadata_absent",
+            ],
+        },
         "artifact.transport": {
             "state": "supported",
             "handle_scheme": "artifact://managed/<opaque-id>",

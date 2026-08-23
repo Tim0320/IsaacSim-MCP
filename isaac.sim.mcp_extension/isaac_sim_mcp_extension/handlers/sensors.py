@@ -36,7 +36,7 @@ import zlib
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Sequence
 
-from ..adapters.base import IsaacAdapterBase
+from ..adapters.base import IsaacAdapterBase, SensorLifecycleError
 from ..adapters.lidar_config import LidarConfigError
 from ..artifact_store import ArtifactError, get_artifact_store, write_unmanaged_artifact
 
@@ -109,6 +109,141 @@ def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["sensors.create_lidar"] = lambda **p: create_lidar(adapter, **p)
     registry["sensors.get_lidar_config"] = lambda **p: get_lidar_config(adapter, **p)
     registry["sensors.get_point_cloud"] = lambda **p: get_point_cloud(adapter, **p)
+    registry["sensors.delete"] = lambda **p: delete_sensor(adapter, **p)
+
+
+async def delete_sensor(
+    adapter: IsaacAdapterBase,
+    prim_path: str,
+    post_delete_updates: int = 8,
+) -> Dict[str, Any]:
+    """Release an RTX runtime, delete its prim, and verify after Kit updates."""
+    if not prim_path:
+        return {"status": "error", "code": "SENSOR_PATH_REQUIRED", "message": "prim_path is required"}
+    if (
+        isinstance(post_delete_updates, bool)
+        or not isinstance(post_delete_updates, int)
+        or not 1 <= post_delete_updates <= 240
+    ):
+        return {
+            "status": "error",
+            "code": "INVALID_POST_DELETE_UPDATES",
+            "message": "post_delete_updates must be an integer from 1 to 240",
+        }
+
+    try:
+        state = adapter.get_simulation_state()
+        if str((state or {}).get("timeline_state", "")).lower() == "playing":
+            return {
+                "status": "error",
+                "code": "SENSOR_DELETE_REQUIRES_NON_PLAYING",
+                "message": "Pause or stop the timeline before deleting an RTX sensor",
+            }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "code": "SENSOR_DELETE_STATE_UNAVAILABLE",
+            "message": f"Could not verify a non-playing timeline: {exc}",
+        }
+
+    stage = adapter.get_stage()
+    if stage is None:
+        return {"status": "error", "code": "STAGE_NOT_READY", "message": "USD stage is not available"}
+    prim = stage.GetPrimAtPath(prim_path)
+    camera_cache = getattr(adapter, "_camera_sensors", None) or {}
+    lidar_cache = getattr(adapter, "_lidar_sensors", None) or {}
+    lidar_paths = getattr(adapter, "_lidar_actual_paths", None) or {}
+    cached = prim_path in camera_cache or prim_path in lidar_cache
+    type_name = prim.GetTypeName() if prim and prim.IsValid() else None
+    if not cached and prim_path not in lidar_paths and type_name not in {"Camera", "OmniLidar"}:
+        return {
+            "status": "error",
+            "code": "SENSOR_NOT_FOUND",
+            "message": f"No managed Camera or LiDAR sensor found at {prim_path}",
+        }
+
+    try:
+        lifecycle = adapter.release_sensor(prim_path)
+    except SensorLifecycleError as exc:
+        return {
+            "status": "error",
+            "code": exc.code,
+            "message": str(exc),
+            "lifecycle": exc.report,
+        }
+    actual_prim_path = lifecycle.get("actual_prim_path") or prim_path
+    try:
+        deleted = adapter.delete_prim(prim_path)
+        if deleted is False:
+            raise RuntimeError("adapter reported that the prim was not deleted")
+    except SensorLifecycleError as exc:
+        return {
+            "status": "error",
+            "code": exc.code,
+            "message": str(exc),
+            "lifecycle": exc.report,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "code": "SENSOR_PRIM_DELETE_FAILED",
+            "message": str(exc),
+            "lifecycle": lifecycle,
+        }
+
+    import omni.kit.app
+
+    app = omni.kit.app.get_app()
+    for _ in range(post_delete_updates):
+        await app.next_update_async()
+
+    stage = adapter.get_stage()
+
+    if stage is None:
+        return {
+            "status": "error",
+            "code": "SENSOR_DELETE_INCOMPLETE",
+            "message": "USD stage became unavailable during sensor deletion verification",
+            "prim_path": prim_path,
+            "lifecycle": lifecycle,
+            "post_delete_updates": post_delete_updates,
+            "readback": {"stage_available": False},
+        }
+
+    def absent(path: Optional[str]) -> bool:
+        if not path:
+            return True
+        candidate = stage.GetPrimAtPath(path)
+        return not candidate or not candidate.IsValid()
+
+    readback = {
+        "prim_absent": absent(prim_path),
+        "actual_prim_absent": absent(actual_prim_path),
+        "render_product_absent": absent(lifecycle.get("render_product_path")),
+        "camera_cache_absent": prim_path not in (getattr(adapter, "_camera_sensors", None) or {}),
+        "lidar_cache_absent": prim_path not in (getattr(adapter, "_lidar_sensors", None) or {}),
+        "lidar_path_metadata_absent": prim_path not in (getattr(adapter, "_lidar_actual_paths", None) or {}),
+        "lidar_config_metadata_absent": prim_path not in (getattr(adapter, "_lidar_config_metadata", None) or {}),
+    }
+    if not all(readback.values()):
+        return {
+            "status": "error",
+            "code": "SENSOR_DELETE_INCOMPLETE",
+            "message": f"Sensor resources survived deletion at {prim_path}",
+            "prim_path": prim_path,
+            "lifecycle": lifecycle,
+            "post_delete_updates": post_delete_updates,
+            "readback": readback,
+        }
+    return {
+        "status": "success",
+        "message": f"Sensor deleted and verified absent after {post_delete_updates} Kit updates",
+        "prim_path": prim_path,
+        "sensor_type": lifecycle.get("sensor_type") or type_name,
+        "lifecycle": lifecycle,
+        "post_delete_updates": post_delete_updates,
+        "readback": readback,
+    }
 
 
 def create_camera(

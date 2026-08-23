@@ -105,6 +105,11 @@ class MCPExtension(omni.ext.IExt):
         print("trigger  on_shutdown for: ", self.ext_id)
         if self._server:
             self._server.stop()
+        if self._adapter:
+            try:
+                self._adapter.release_all_sensors()
+            except Exception as exc:
+                print("sensor teardown during extension shutdown failed:", exc)
         self._play_sub = None
         self._registry.clear()
         gc.collect()

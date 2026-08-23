@@ -127,7 +127,15 @@ class IsaacAdapterV6(IsaacAdapterBase):
                 # the subscriptions keep the wrapper, and the wrapper keeps its
                 # prim, so the camera then could not be deleted and its render
                 # product kept rendering. See base.release_sensor.
-                self.release_all_sensors()
+                try:
+                    # Timeline Stop destroys runtime render products, while
+                    # authoring metadata must survive so preset LiDAR paths can
+                    # be wrapped again on the next Play cycle.
+                    self.release_all_sensors(evict_metadata=False)
+                except Exception as exc:
+                    import carb
+
+                    carb.log_error(f"IsaacSim-MCP sensor teardown on Timeline Stop failed: {exc}")
 
             self._timeline_stop_subscription = carb.eventdispatcher.get_eventdispatcher().observe_event(
                 event_name=omni.timeline.GLOBAL_EVENT_STOP,
@@ -1007,6 +1015,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
         # Apply the schema first so an existing camera prim reaches RtxCamera in
         # the same shape a newly created one would. A prim that does not exist
         # yet needs nothing: RtxCamera creates it correctly.
+        if prim_path in self._camera_sensors:
+            self.release_sensor(prim_path, evict_metadata=False)
         self._apply_sensor_schema(prim_path)
         camera = RtxCamera(path=prim_path)
         # CameraSensor expects (height, width). Adapter callers historically
@@ -1136,6 +1146,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
 
         from .lidar_config import build_generic_lidar_config
 
+        if prim_path in self._lidar_sensors:
+            self.release_sensor(prim_path, evict_metadata=False)
         variant = kwargs.pop("variant", None)
         custom_names = (
             "horizontal_fov_deg",

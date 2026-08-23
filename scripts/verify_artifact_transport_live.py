@@ -103,7 +103,7 @@ async def main() -> int:
                 data = capabilities["data"]
                 assert data["runtime"]["isaac_sim_version"].startswith("6.0.1")
                 assert data["feature_flags"]["artifact.transport"]["state"] == "supported"
-                assert data["extension"]["command_count"] == 53
+                assert data["extension"]["command_count"] == 54
 
                 target = _payload(
                     await session.call_tool(

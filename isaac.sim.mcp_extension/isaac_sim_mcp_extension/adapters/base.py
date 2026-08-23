@@ -35,6 +35,16 @@ if TYPE_CHECKING:
     from pxr import Usd
 
 
+class SensorLifecycleError(RuntimeError):
+    """A sensor runtime could not be deterministically released."""
+
+    code = "SENSOR_RELEASE_FAILED"
+
+    def __init__(self, message: str, report: Optional[Dict[str, Any]] = None) -> None:
+        super().__init__(message)
+        self.report = report or {}
+
+
 class IsaacAdapterBase(ABC):
     """Abstract interface that isolates all Isaac Sim version-specific API calls.
 
@@ -185,50 +195,124 @@ class IsaacAdapterBase(ABC):
 
     # ── Sensor lifecycle ───────────────────────────────────
 
-    def release_sensor(self, prim_path: str) -> None:
-        """Destroy and forget any cached RTX sensor bound to this prim.
+    def release_sensor(self, prim_path: str, *, evict_metadata: bool = True) -> Dict[str, Any]:
+        """Destroy and forget one cached RTX sensor with auditable teardown.
 
-        An initialized Camera/Lidar wrapper owns a render product, annotators
-        and event subscriptions, and those keep the prim alive: deleting a
-        camera reported success and the prim was still there a tick later,
-        surviving clear_scene too. Dropping the cache entry is not enough --
-        the subscriptions hold the object -- so the wrapper must be destroyed.
-        Verified on 5.1.0: destroy() then DeletePrims removes it for good.
-
-        Releasing also frees the render product, which otherwise keeps
-        rendering for the life of the Kit process.
+        Isaac Sim 6.0.1 ``_SensorRuntime`` owns the annotators, writers and
+        Hydra texture. Its ``_invalidate_sensor`` method is the implementation
+        used by ``__del__`` and is the only complete teardown path. Calling
+        ``detach_annotators`` without the required annotator list raises and
+        leaves the render product alive, so lifecycle errors must remain
+        explicit and the cache reference must remain available for a retry.
         """
-        for cache_name in ("_camera_sensors", "_lidar_sensors"):
-            cache = getattr(self, cache_name, None)
-            if not cache:
-                continue
-            sensor = cache.pop(prim_path, None)
-            if sensor is None:
-                continue
-            # 5.1's Camera exposes destroy(); 6.0's CameraSensor/LidarSensor
-            # do not — they expose detach_annotators()/detach_writer() instead.
-            # Try whichever the wrapper actually has, since a release that
-            # silently does nothing leaves the prim undeletable.
-            for method_name in ("destroy", "detach_annotators", "detach_writer"):
-                method = getattr(sensor, method_name, None)
-                if not callable(method):
-                    continue
-                try:
-                    method()
-                except Exception:
-                    # Best effort: a wrapper that cannot tear itself down must
-                    # not block the delete the caller actually asked for.
-                    pass
+        actual_paths = getattr(self, "_lidar_actual_paths", None)
+        actual_prim_path = actual_paths.get(prim_path, prim_path) if actual_paths is not None else prim_path
+        sensor = None
+        sensor_type = None
+        cache = None
+        for cache_name, candidate_type in (("_camera_sensors", "camera"), ("_lidar_sensors", "lidar")):
+            candidate_cache = getattr(self, cache_name, None)
+            if candidate_cache is not None and prim_path in candidate_cache:
+                sensor = candidate_cache[prim_path]
+                sensor_type = candidate_type
+                cache = candidate_cache
+                break
+
+        annotators_before = sorted((getattr(sensor, "_annotators", None) or {}).keys()) if sensor is not None else []
+        writers_before = sorted((getattr(sensor, "_writers", None) or {}).keys()) if sensor is not None else []
+        hydra_texture = getattr(sensor, "_hydra_texture", None) if sensor is not None else None
+        render_product_path = str(getattr(hydra_texture, "path", "")) or None
+        if render_product_path is None and sensor is not None:
+            candidate_path = getattr(sensor, "_render_product_path", None)
+            render_product_path = str(candidate_path) if candidate_path else None
+
+        report: Dict[str, Any] = {
+            "prim_path": prim_path,
+            "actual_prim_path": actual_prim_path,
+            "sensor_type": sensor_type,
+            "found": sensor is not None,
+            "teardown_method": None,
+            "annotators_before": annotators_before,
+            "writers_before": writers_before,
+            "render_product_path": render_product_path,
+        }
+
+        if sensor is not None:
+            try:
+                invalidate = getattr(sensor, "_invalidate_sensor", None)
+                destroy = getattr(sensor, "destroy", None)
+                if callable(invalidate):
+                    report["teardown_method"] = "_invalidate_sensor"
+                    invalidate()
+                elif callable(destroy):
+                    report["teardown_method"] = "destroy"
+                    destroy()
+                else:
+                    report["teardown_method"] = "explicit_detach"
+                    detach_writer = getattr(sensor, "detach_writer", None)
+                    if callable(detach_writer):
+                        for writer_name in writers_before:
+                            detach_writer(writer_name)
+                    detach_annotators = getattr(sensor, "detach_annotators", None)
+                    if callable(detach_annotators) and annotators_before:
+                        detach_annotators(annotators_before)
+                    hydra_texture = getattr(sensor, "_hydra_texture", None)
+                    texture_destroy = getattr(hydra_texture, "destroy", None)
+                    if callable(texture_destroy):
+                        texture_destroy()
+                        sensor._hydra_texture = None
+                annotators_after = sorted((getattr(sensor, "_annotators", None) or {}).keys())
+                writers_after = sorted((getattr(sensor, "_writers", None) or {}).keys())
+                texture_after = getattr(sensor, "_hydra_texture", None)
+                if report["teardown_method"] in {"_invalidate_sensor", "explicit_detach"} and (
+                    annotators_after or writers_after or texture_after is not None
+                ):
+                    raise RuntimeError("sensor runtime still owns annotators, writers, or a Hydra texture")
+            except Exception as exc:
+                report["error"] = str(exc)
+                raise SensorLifecycleError(f"Failed to release sensor at {prim_path}: {exc}", report) from exc
+            cache.pop(prim_path, None)
+        else:
+            annotators_after = []
+            writers_after = []
+            texture_after = None
+
         initialized = getattr(self, "_initialized_cameras", None)
         if initialized is not None:
             initialized.discard(prim_path)
 
-    def release_all_sensors(self) -> None:
+        if evict_metadata and actual_paths is not None:
+            actual_paths.pop(prim_path, None)
+        config_metadata = getattr(self, "_lidar_config_metadata", None)
+        if evict_metadata and config_metadata is not None:
+            config_metadata.pop(prim_path, None)
+
+        report.update(
+            {
+                "annotators_after": annotators_after,
+                "writers_after": writers_after,
+                "render_product_released": texture_after is None,
+                "cache_evicted": all(
+                    prim_path not in (getattr(self, cache_name, None) or {})
+                    for cache_name in ("_camera_sensors", "_lidar_sensors")
+                ),
+                "metadata_evicted": evict_metadata
+                and (
+                    prim_path not in (getattr(self, "_lidar_actual_paths", None) or {})
+                    and prim_path not in (getattr(self, "_lidar_config_metadata", None) or {})
+                ),
+            }
+        )
+        return report
+
+    def release_all_sensors(self, *, evict_metadata: bool = True) -> List[Dict[str, Any]]:
         """Release every cached sensor — used when clearing the whole scene."""
+        reports = []
         for cache_name in ("_camera_sensors", "_lidar_sensors"):
             cache = getattr(self, cache_name, None) or {}
             for prim_path in list(cache):
-                self.release_sensor(prim_path)
+                reports.append(self.release_sensor(prim_path, evict_metadata=evict_metadata))
+        return reports
 
     # ── Sensors ────────────────────────────────────────────
 

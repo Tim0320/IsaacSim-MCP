@@ -95,15 +95,19 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps({"status": "error", "message": str(e)})
 
     @mcp.tool("delete_object")
-    def delete_object(prim_path: str) -> str:
-        """Delete an object from the scene.
+    def delete_object(prim_path: str, post_delete_updates: int = 8) -> str:
+        """Delete an object; Camera/LiDAR use verified lifecycle teardown.
 
         Args:
             prim_path: The prim path of the object to delete.
+            post_delete_updates: Camera/LiDAR verification updates, from 1 to 240. Ignored for ordinary prims.
         """
         try:
             conn = get_connection()
-            result = conn.send_command("objects.delete", {"prim_path": prim_path})
+            result = conn.send_command(
+                "objects.delete",
+                {"prim_path": prim_path, "post_delete_updates": post_delete_updates},
+            )
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})

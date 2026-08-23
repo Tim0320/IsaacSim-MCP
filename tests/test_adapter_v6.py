@@ -912,6 +912,34 @@ def test_v6_create_camera_registers_all_task_1_2_annotators_before_play(monkeypa
     ]
 
 
+def test_v6_recreating_camera_releases_the_previous_runtime(monkeypatch):
+    calls = []
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
+    monkeypatch.setattr(adapter, "_apply_sensor_schema", lambda _path: None)
+
+    class _OldSensor:
+        def __init__(self):
+            self._annotators = {}
+            self._writers = {}
+            self._hydra_texture = None
+            self.invalidated = 0
+
+        def _invalidate_sensor(self):
+            self.invalidated += 1
+
+    old_sensor = _OldSensor()
+    adapter._camera_sensors["/World/Cam"] = old_sensor
+    rtx = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx.RtxCamera = MagicMock(return_value=object())
+    rtx.CameraSensor = MagicMock(return_value=object())
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx)
+
+    adapter.create_camera("/World/Cam", resolution=(64, 48))
+
+    assert old_sensor.invalidated == 1
+    assert adapter._camera_sensors["/World/Cam"] is rtx.CameraSensor.return_value
+
+
 def test_v6_camera_calibration_reads_intrinsics_extrinsics_and_units(monkeypatch):
     calls = []
     adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)

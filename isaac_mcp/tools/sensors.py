@@ -34,6 +34,23 @@ if TYPE_CHECKING:
 
 def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]") -> None:
 
+    @mcp.tool("delete_sensor")
+    def delete_sensor(prim_path: str, post_delete_updates: int = 8) -> str:
+        """Release and delete one Camera or LiDAR, then verify it stays absent.
+
+        Args:
+            prim_path: Managed Camera or LiDAR prim path.
+            post_delete_updates: Kit updates used to detect delayed prim or render-product reappearance. Range 1 to 240.
+        """
+        try:
+            result = get_connection().send_command(
+                "sensors.delete",
+                {"prim_path": prim_path, "post_delete_updates": post_delete_updates},
+            )
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
     @mcp.tool("create_camera")
     def create_camera(
         prim_path: str = "/World/Camera",

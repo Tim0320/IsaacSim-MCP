@@ -28,6 +28,17 @@ class _Connection:
         return {"status": "success", "data": {}}
 
 
+def test_delete_sensor_forwards_lifecycle_verification_window():
+    mcp = _MCP()
+    connection = _Connection()
+    register_tools(mcp, lambda: connection)
+
+    response = json.loads(mcp.tools["delete_sensor"](prim_path="/World/TestCamera", post_delete_updates=32))
+
+    assert response["status"] == "success"
+    assert connection.calls == [("sensors.delete", {"prim_path": "/World/TestCamera", "post_delete_updates": 32})]
+
+
 def test_create_lidar_forwards_preset_variant_and_generic_settings():
     mcp = _MCP()
     connection = _Connection()

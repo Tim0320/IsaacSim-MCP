@@ -56,6 +56,20 @@ def test_handler_returns_stable_runtime_capability_contract():
     assert result["extension"]["command_names"] == ["scene.get_info", "system.get_capabilities"]
     assert result["extensions"]["isaac.sim.mcp_extension"]["state"] == "enabled"
     assert result["extensions"]["isaacsim.ros2.bridge"]["state"] == "disabled"
+    assert result["feature_flags"]["sensor.lifecycle"] == {
+        "state": "supported",
+        "delete_tool": "delete_sensor",
+        "requires_non_playing_timeline": True,
+        "post_delete_updates_default": 8,
+        "post_delete_updates_max": 240,
+        "verifies": [
+            "prim_absent",
+            "actual_prim_absent",
+            "render_product_absent",
+            "adapter_cache_absent",
+            "lidar_metadata_absent",
+        ],
+    }
     assert result["feature_flags"]["artifact.transport"] == {
         "state": "supported",
         "handle_scheme": "artifact://managed/<opaque-id>",

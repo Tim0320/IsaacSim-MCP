@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — deterministic Camera and LiDAR lifecycle
+
+- Added `delete_sensor`, with sensor-aware `delete_object` routing, to release
+  RTX runtime resources before deleting the USD prim. Isaac Sim 6 uses its
+  complete `_invalidate_sensor()` path; older wrappers can use `destroy()` or
+  the explicit detach fallback.
+- Lifecycle failures now return stable errors and preserve the runtime cache
+  reference for retry. Successful deletion waits for bounded Kit updates and
+  reads back prim, RenderProduct, cache, and LiDAR metadata absence before it
+  reports success.
+- Timeline Stop and same-path recreation release cached sensor runtimes to
+  prevent duplicate annotators, writers, RenderProducts, or callbacks while
+  preserving LiDAR authoring metadata across Stop. Two live Camera/LiDAR
+  create-read-delete-recreate cycles passed on Isaac Sim 6.0.1 with no pipeline
+  duplicates, resource survivors, server loss, or native crash signature.
+
 ### Added — shared managed artifact transport
 
 - Added `get_artifact_info`, `read_artifact`, `delete_artifact`, and

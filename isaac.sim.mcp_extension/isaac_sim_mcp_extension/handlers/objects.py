@@ -114,35 +114,40 @@ def create(
         return {"status": "error", "message": str(e)}
 
 
-def delete(adapter: IsaacAdapterBase, prim_path: Optional[str] = None) -> Dict[str, Any]:
+async def delete(
+    adapter: IsaacAdapterBase,
+    prim_path: Optional[str] = None,
+    post_delete_updates: int = 8,
+) -> Dict[str, Any]:
     try:
         if not prim_path:
             return {"status": "error", "message": "prim_path is required"}
+        stage = adapter.get_stage()
+        prim = stage.GetPrimAtPath(prim_path) if stage is not None else None
+        type_name = prim.GetTypeName() if prim and prim.IsValid() else None
+        is_sensor = (
+            prim_path in (getattr(adapter, "_camera_sensors", None) or {})
+            or prim_path in (getattr(adapter, "_lidar_sensors", None) or {})
+            or prim_path in (getattr(adapter, "_lidar_actual_paths", None) or {})
+            or type_name in {"Camera", "OmniLidar"}
+        )
+        if is_sensor:
+            from .sensors import delete_sensor
+
+            return await delete_sensor(adapter, prim_path, post_delete_updates=post_delete_updates)
+
         adapter.delete_prim(prim_path)
 
-        # Confirm it actually went, so an immediate failure is not reported as
-        # success. This cannot catch every case: an RTX camera on 6.0 is gone in
-        # this tick and back in the next, because its RtxCamera wrapper has no
-        # teardown method (only reset_to_default_state /
-        # reset_xform_op_properties / valid), Isaac holds it internally, and it
-        # re-creates the prim -- which reappears at the end of the parent's
-        # children with its render product still targeting it. A handler cannot
-        # wait a tick to check, so that case is documented in the changelog
-        # rather than detected here.
+        # Ordinary prims have no RTX runtime that can recreate them on a later
+        # update, so immediate USD read-back remains sufficient here. Sensors
+        # are routed through delete_sensor above and verified across updates.
         stage = adapter.get_stage()
         if stage is not None:
             survivor = stage.GetPrimAtPath(prim_path)
             if survivor and survivor.IsValid():
-                is_camera = survivor.GetTypeName() == "Camera"
-                detail = (
-                    " On Isaac Sim 6.0 an RTX camera may also reappear a tick later; "
-                    "reuse the camera instead of deleting it."
-                    if is_camera
-                    else " Something still holds it; check for a live sensor or reference."
-                )
                 return {
                     "status": "error",
-                    "message": f"{prim_path} still exists after delete.{detail}",
+                    "message": f"{prim_path} still exists after delete",
                     "prim_path": prim_path,
                 }
         return {"status": "success", "message": f"Deleted {prim_path}"}
