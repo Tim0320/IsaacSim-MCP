@@ -89,6 +89,18 @@ $env:ISAACSIM_ROOT = "D:\你的\IsaacSim\路徑"
 
 腳本會驗證 Isaac Sim 6.0.1、載入 `isaac.sim.mcp_extension`，並在 `127.0.0.1:8766` 啟動 TCP Server。
 
+> [!WARNING]
+> **Isaac Sim 6.0.1 多 GPU / PhysX 防護**：`/physics/cudaDevice=-1` 可能在 Timeline `Stop` 時造成 `PhysXGpu_64.dll` native crash。Windows launcher 會從 `nvidia-smi` 找出當下唯一的 `display_active=Enabled` GPU，並傳入明確 ordinal；它不是永久固定 GPU 0。若無法唯一判定才會警告並 fallback 到 GPU 0。可用 `-PhysicsGpu 1` 或 `$env:ISAAC_PHYSICS_GPU="1"` 覆寫。不要用 renderer multi-GPU 設定代替這項 PhysX 防護；顯式選擇 `-1` 仍會保留，但會顯示高風險警告。
+
+```powershell
+# 本次啟動手動選擇 physics GPU 1
+.\scripts\run_isaac_sim.ps1 -PhysicsGpu 1
+
+# 跨多次啟動覆寫；移除變數後恢復自動偵測主要顯示 GPU
+$env:ISAAC_PHYSICS_GPU = "1"
+.\scripts\run_isaac_sim.ps1
+```
+
 ### 2. 設定 MCP Client
 
 把以下設定加入 MCP Client，並將 `command` 改成這個 repository 的實際絕對路徑：
@@ -235,6 +247,7 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 - `set_physics_params` 目前直接支援 `gravity`；`time_step` 與 `gpu_enabled` 需使用 `execute_script`。
 - `edit_action_graph` 可修改一般 attribute 與新增連線；修改 inline `ScriptNode.inputs:script` 在 6.0.1 仍有限制。
 - 載入含 non-manifold collision 的資產可能使 PhysX native plugin 崩潰。先在乾淨 Stage 驗證資產與碰撞設定。
+- Isaac Sim 6.0.1 多 GPU 環境必須讓 PhysX 使用明確 GPU ordinal；launcher 會依當下主要顯示 GPU 決定，不可移除這項防護或改回未警告的 `-1`。
 - `execute_script` 權限很高，只執行可信任程式碼，並避免在 Action Graph 同時控制相同 articulation 時修改它。
 
 ## 測試

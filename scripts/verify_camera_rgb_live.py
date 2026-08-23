@@ -10,6 +10,8 @@ import json
 import os
 import struct
 import sys
+import tempfile
+import uuid
 import zlib
 from pathlib import Path
 from typing import Any
@@ -108,6 +110,7 @@ async def _capture(session: ClientSession, mode: str, **kwargs: Any) -> dict[str
 
 
 async def main() -> int:
+    post_stop_marker = Path(tempfile.gettempdir()) / f"isaacsim-mcp-post-stop-{uuid.uuid4().hex}.json"
     server = StdioServerParameters(
         command=sys.executable,
         args=["-m", "isaac_mcp.server"],
@@ -152,6 +155,31 @@ async def main() -> int:
             stopped = _payload(await session.call_tool("stop_simulation", {}))
             assert stopped["status"] == "success", stopped
 
+            # Exercise the exact event-loop path where the Isaac Sim 6.0.1
+            # multi-GPU auto-CUDA crash was reproduced. The coroutine runs in
+            # Kit and proves that 240 updates complete after Timeline Stop.
+            post_stop_code = f"""
+import asyncio
+import json
+from pathlib import Path
+
+async def _verify_post_stop_updates():
+    for _ in range(240):
+        await omni.kit.app.get_app().next_update_async()
+    Path({str(post_stop_marker)!r}).write_text(json.dumps({{"updates": 240}}), encoding="utf-8")
+
+asyncio.ensure_future(_verify_post_stop_updates())
+"""
+            scheduled = _payload(await session.call_tool("execute_script", {"code": post_stop_code}))
+            assert scheduled["status"] == "success", scheduled
+            for _attempt in range(300):
+                if post_stop_marker.exists():
+                    break
+                await asyncio.sleep(0.1)
+            assert post_stop_marker.exists(), "Kit did not complete 240 post-Stop updates"
+            post_stop_updates = json.loads(post_stop_marker.read_text(encoding="utf-8"))["updates"]
+            post_stop_marker.unlink()
+
     image = artifact["data"]["image"]
     artifact_meta = artifact["artifacts"][0]
     artifact_path = Path(artifact_meta["path"])
@@ -191,6 +219,7 @@ async def main() -> int:
         "inline_sha256_verified": True,
         "inline_limit_code": tiny_limit["code"],
         "camera_readback_verified": True,
+        "post_stop_updates": post_stop_updates,
     }
     print(json.dumps(summary, indent=2))
     return 0

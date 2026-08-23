@@ -79,6 +79,18 @@
   > 測試證據：全部離線測試 `165 passed, 1 deselected`，Ruff 與 format check 通過；包含 PNG round-trip、artifact 原子寫入、base64 decode、hash 與上限測試。
   > live 證據：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；scratch camera `/World/MCP_Task_1_1_Camera` 讀回成功，RGB `[48,64,3]`、`uint8`、frame 91；artifact/inline PNG 解碼後 dimensions 與 pixel SHA-256 一致，PNG SHA-256 也一致。
 
+- [x] 1.1a. Timeline Stop 的雙 GPU auto CUDA 防護
+  > 隔離結論（2026-08-23）：Camera、sensor teardown、V6 STOP observer、socket server、MCP client、專案 module import、multi-GPU renderer 與 viewport 都不是必要觸發條件。完全不載入 IsaacSim-MCP 的 `kit.exe isaacsim.exp.full.kit --exec ...` 仍可重現。
+  > native 證據：兩份獨立 minidump 都是 `EXCEPTION_ACCESS_VIOLATION`，讀取位址 `0x8`，fault 位址固定為 `PhysXGpu_64.dll+0xD5307`；該指令為 `jmp qword ptr [rax+8]` 且 exception context 的 `RAX=0`。backtrace 路徑為 `omni.timeline -> carb.eventdispatcher -> omni.stageupdate -> physicsumbrella -> omni.physx -> PhysXGpu_64.dll`。
+  > 根因範圍：本機有兩張 CUDA GPU，未覆寫時 `/physics/cudaDevice=-1`。log 顯示 PhysX 先使用 active context 的 device 1，啟動期間又保留 device 0，Play 前再切回 device 1 並重建 CUDA context；Stop teardown 隨後落入空 callback/vtable。這是 Isaac Sim 6.0.1 / Omni Physics 110.1.13 的 auto-selection context migration 問題，不是 `capture_image` response 實作造成。
+  > 已驗證 workaround：只加入 `--/physics/cudaDevice=0` 即可完成 Play、Stop 與 240 個後續 update；顯式 `--/physics/cudaDevice=1` 也通過，表示關鍵是固定 ordinal，並非特定 GPU 0。`--/renderer/multiGpu/enabled=False` 單獨無效。
+  > standalone 對照：`SimulationApp` 成功的直接差異已確認為官方 `DEFAULT_LAUNCHER_CONFIG` 會把 `physics_gpu` 預設成 `0`，並轉成 `--/physics/cudaDevice=0`；一般 `isaac-sim.bat`/`kit.exe` 路徑沒有這個保護。
+  > 官方依據：Omni Physics 110.1 說明 `/physics/cudaDevice` 預設 `-1` 並交由 NVIDIA Control Panel/active context 自動選擇；多 GPU 應明確指定 simulation GPU ordinal。Isaac Sim 6.0.0 `SimulationApp` 文件則明列 `physics_gpu=0`。參考 `https://docs.omniverse.nvidia.com/kit/docs/omni_physics/110.1/dev_guide/simulation_control/simulation_control.html`、`https://docs.isaacsim.omniverse.nvidia.com/6.0.0/py/source/extensions/isaacsim.simulation_app/docs/index.html`。
+  > 已實作：Windows launcher 依優先序採用 raw Kit argument、`-PhysicsGpu`、`ISAAC_PHYSICS_GPU`，否則以 `nvidia-smi` 找出當下唯一的 `display_active=Enabled` GPU 並解析成明確 ordinal；無法唯一判定時才警告並 fallback 到 GPU 0。這不是永久固定 GPU 0。
+  > 再發防護：launcher 原始碼保留醒目維護註解；`-1` 仍可顯式使用，但會直接警告 Isaac Sim 6.0.1、Timeline Stop 與 `PhysXGpu_64.dll` crash signature。renderer multi-GPU 不得視為替代修復。
+  > 離線測試：`tests/test_run_isaac_sim_windows.py` 覆蓋 precedence、主要 GPU 偵測、probe failure fallback、query contract、raw 去重、`-1` 警告、無效值拒絕與 exit code，共 `16 passed`。
+  > live 證據（2026-08-23）：launcher 依本機 `display_active=Enabled` 偵測為 `Physics CUDA device: 0 (active display GPU)`；原始 MCP Camera 1.1 scratch 流程完成 Play、RGB capture、Stop，frame 120、shape `[48,64,3]`、pixel/artifact/inline SHA-256 與 camera read-back 全數通過。Kit 內部再完成 240 次 `next_update_async()`；程序仍存活，新增 dump `0`，`EXCEPTION_ACCESS_VIOLATION` / `PhysXGpu_64.dll+0xD5307` signature `0`。
+
 - [ ] 2. Camera depth、segmentation、normals 與 calibration
   > 現況：typed MCP 只涵蓋基本 camera 建立與 RGB capture，缺少常用 annotator 與完整相機模型。
   > 缺漏位置：`tools/sensors.py`、`handlers/sensors.py`、V6 camera/Replicator annotator lifecycle。

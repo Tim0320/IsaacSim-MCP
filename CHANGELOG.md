@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Isaac Sim 6.0.1 multi-GPU PhysX launch guard
+
+- The Windows launcher now resolves the current unique
+  `display_active=Enabled` NVIDIA GPU to an explicit `/physics/cudaDevice`
+  ordinal. Selection precedence is raw Kit setting, `-PhysicsGpu`,
+  `ISAAC_PHYSICS_GPU`, then automatic detection. Ambiguous detection warns and
+  falls back to GPU 0. Explicit `-1` is preserved but warns about the reproduced
+  Timeline Stop crash in `PhysXGpu_64.dll`.
+
 ### Fixed / Changed — tool hardening for agent use
 - step_simulation now fails loud on a running timeline and the debug loop is
   documented as step-only (never play while debugging). (#1)
@@ -118,6 +127,11 @@ up at all.
   of `/Environment` — read it from the response rather than assuming it.
 
 ### Known issues
+- **Recurrence guard:** on Isaac Sim 6.0.1 multi-GPU systems, do not remove the
+  launcher's explicit PhysX GPU selection or silently restore
+  `/physics/cudaDevice=-1`. Both GPU 0 and GPU 1 passed when fixed explicitly;
+  the failure is auto-selection/context migration, not a requirement to always
+  use GPU 0. Renderer multi-GPU settings do not fix this PhysX failure.
 - `get_lidar_point_cloud` returns `point_count` without the points themselves on
   6.0; the decoded cloud is discarded by the handler.
 - Camera deletion is fixed on 5.1 but **not on 6.0**, and cannot be fixed at

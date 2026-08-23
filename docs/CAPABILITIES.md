@@ -31,6 +31,7 @@
 
 ## 目前 6.0.1 必須注意的限制
 
+- **多 GPU / PhysX 重點限制**：`/physics/cudaDevice=-1` 已在 Timeline `Stop` 重現 `PhysXGpu_64.dll` native crash。Windows launcher 會偵測當下唯一的 `display_active=Enabled` GPU 並解析成明確 ordinal；判定失敗才警告並 fallback 到 GPU 0。可由 `-PhysicsGpu` 或 `ISAAC_PHYSICS_GPU` 覆寫。此防護只針對 PhysX，renderer multi-GPU 設定不能替代它；Newton 尚未宣稱適用。
 - `capture_image` 支援 `metadata|artifact|inline`；預設回受控 PNG artifact，inline 有 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。
 - `get_lidar_point_cloud` 目前只回 `point_count`，尚未傳回 decoded XYZ points。
 - V6 `create_lidar(config=...)` 接受參數，但尚未 author 對應 RTX LiDAR schema attributes。
@@ -69,3 +70,10 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - artifact：managed PNG path/handle、PNG SHA-256 與解碼後 pixel SHA-256 驗證一致
 - inline：base64 PNG 可解碼，dimensions、dtype 與 hashes 一致
 - limit：1-byte 上限回 `INLINE_SIZE_LIMIT_EXCEEDED`
+
+2026-08-23 完成多 GPU Timeline Stop 防護驗證：
+
+- launcher 依當下主要顯示 GPU 選為 `/physics/cudaDevice=0`，來源明確回報為 `active display GPU`
+- MCP Camera scratch 流程完成 Play、RGB capture 與 Stop
+- Stop 後 Kit 內部完成 240 次 update，程序仍存活
+- 新增 native dump：0；既有 crash signature：0
