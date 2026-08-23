@@ -1,6 +1,6 @@
 # LiDAR point cloud 傳輸契約
 
-`get_lidar_point_cloud` 將 Isaac Sim RTX LiDAR frame 回傳為 metadata、受控 `.npz` artifact，或有大小上限的 inline `.npz`。預設為 `artifact`，避免把大型點雲直接塞入 JSON。
+`get_lidar_point_cloud` 將 Isaac Sim RTX LiDAR frame 回傳為 metadata、共用 managed store 的 `.npz` artifact，或有大小上限的 inline `.npz`。預設為 `artifact`，避免把大型點雲直接塞入 JSON。TTL、分塊下載、hash 與清理見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)。
 
 ## 輸入
 

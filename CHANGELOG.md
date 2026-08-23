@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — shared managed artifact transport
+
+- Added `get_artifact_info`, `read_artifact`, `delete_artifact`, and
+  `cleanup_artifacts` for bounded chunk downloads, metadata read-back,
+  explicit deletion, and TTL cleanup of Camera and LiDAR payloads.
+- Managed artifacts use unpredictable opaque handles, a controlled root,
+  atomic data/sidecar writes, SHA-256, expiry metadata, traversal protection,
+  and configurable per-file, total-capacity, and chunk limits.
+- Camera PNG/NPY and LiDAR NPZ outputs now share the same transport contract.
+  Chunk reconstruction, hashes, limit errors, deletion, expiry, cleanup, and
+  scratch-stage cleanup passed the Isaac Sim 6.0.1 live harness.
+
 ### Added — effective RTX LiDAR configuration
 
 - Added `get_lidar_config` and expanded `create_lidar` with validated generic

@@ -56,6 +56,15 @@ def test_handler_returns_stable_runtime_capability_contract():
     assert result["extension"]["command_names"] == ["scene.get_info", "system.get_capabilities"]
     assert result["extensions"]["isaac.sim.mcp_extension"]["state"] == "enabled"
     assert result["extensions"]["isaacsim.ros2.bridge"]["state"] == "disabled"
+    assert result["feature_flags"]["artifact.transport"] == {
+        "state": "supported",
+        "handle_scheme": "artifact://managed/<opaque-id>",
+        "tools": ["get_artifact_info", "read_artifact", "delete_artifact", "cleanup_artifacts"],
+        "ttl_default_seconds": 3600,
+        "max_chunk_default_bytes": 1048576,
+        "max_artifact_default_bytes": 268435456,
+        "max_total_default_bytes": 536870912,
+    }
     assert result["feature_flags"]["camera.rgb_pixels"] == {
         "state": "supported",
         "return_modes": ["metadata", "artifact", "inline"],

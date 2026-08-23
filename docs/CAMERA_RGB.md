@@ -11,7 +11,7 @@
 | `output_path` | `null` | 只允許搭配 `artifact`，且必須以 `.png` 結尾。未指定時寫入受控 artifact root。 |
 | `inline_max_bytes` | `1048576` | inline PNG 上限。可設定範圍 1 byte 到 4 MiB。 |
 
-預設 artifact root 是 `%TEMP%\isaacsim-mcp\artifacts`。可在啟動 Isaac Sim 前設定 `ISAAC_MCP_ARTIFACT_ROOT`，指定另一個專用目錄。
+預設 artifact root 是 `%TEMP%\isaacsim-mcp\artifacts`。可在啟動 Isaac Sim 前設定 `ISAAC_MCP_ARTIFACT_ROOT`，指定另一個專用目錄；TTL、容量與分塊讀取設定見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)。
 
 ## 共用影像 metadata
 
@@ -41,12 +41,13 @@ capture_image(prim_path="/World/Camera", return_mode="metadata")
 
 response envelope 的 `artifacts[0]` 包含：
 
-- 不可預測的 `id` 與 `artifact://camera/<id>` handle
+- 不可預測的 `id` 與 `artifact://managed/<opaque-id>` handle
 - resolved local `path`
 - `format=png`、`mime_type=image/png`
 - `size_bytes`、PNG `sha256`
 - dimensions、dtype、color space、camera prim、frame 與 timestamp
-- `managed=true` 表示 MCP 選擇受控路徑；明確傳入 `output_path` 時為 `false`
+- `created_at`、`expires_at` 與 `ttl_seconds`
+- `managed=true` 表示 MCP 選擇受控路徑；明確傳入 `output_path` 時為 `false` 且 `handle=null`
 
 ## `inline`
 
@@ -62,4 +63,4 @@ capture_image(
 
 先 base64 decode，再以 `data.inline.sha256` 驗證 PNG bytes。若 PNG 超過限制，回 `status=error` 與 `code=INLINE_SIZE_LIMIT_EXCEEDED`，不會傳回截斷資料。
 
-完整的大型 artifact resource provider、TTL、分塊讀取與清理屬於 Phase 1 item 5；目前 1.1 提供受控本機檔案、handle、path 與 hash。
+managed artifact 可用 `get_artifact_info`、`read_artifact`、`delete_artifact` 與 `cleanup_artifacts` 管理；完整契約見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)。

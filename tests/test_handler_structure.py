@@ -122,6 +122,7 @@ def test_all_handler_modules_have_register():
     handlers_dir = os.path.join(EXTENSION_ROOT, "handlers")
     handler_files = [
         "capabilities.py",
+        "artifacts.py",
         "scene.py",
         "objects.py",
         "humans.py",

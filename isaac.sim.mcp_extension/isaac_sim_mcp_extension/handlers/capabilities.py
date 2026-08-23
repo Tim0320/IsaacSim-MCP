@@ -11,6 +11,12 @@ from typing import Any, Dict, Mapping, Optional
 from .. import __version__
 from ..adapters.base import IsaacAdapterBase
 from ..adapters.version import version_string
+from ..artifact_store import (
+    DEFAULT_MAX_ARTIFACT_BYTES,
+    DEFAULT_MAX_CHUNK_BYTES,
+    DEFAULT_MAX_TOTAL_BYTES,
+    DEFAULT_TTL_SECONDS,
+)
 from .sensors import DEFAULT_INLINE_MAX_BYTES, MAX_INLINE_MAX_BYTES
 
 CAPABILITIES_SCHEMA_VERSION = "1.0"
@@ -127,6 +133,15 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
     camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
     return {
         "scene.basic_crud": {"state": "supported"},
+        "artifact.transport": {
+            "state": "supported",
+            "handle_scheme": "artifact://managed/<opaque-id>",
+            "tools": ["get_artifact_info", "read_artifact", "delete_artifact", "cleanup_artifacts"],
+            "ttl_default_seconds": DEFAULT_TTL_SECONDS,
+            "max_chunk_default_bytes": DEFAULT_MAX_CHUNK_BYTES,
+            "max_artifact_default_bytes": DEFAULT_MAX_ARTIFACT_BYTES,
+            "max_total_default_bytes": DEFAULT_MAX_TOTAL_BYTES,
+        },
         "camera.rgb_file": {"state": "supported", "warmup_required": True},
         "camera.rgb_pixels": {
             "state": "supported",

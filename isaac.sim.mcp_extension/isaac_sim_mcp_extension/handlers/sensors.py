@@ -29,24 +29,20 @@ import ast
 import base64
 import hashlib
 import io
-import os
 import struct
-import tempfile
 import time
-import uuid
 import zipfile
 import zlib
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 from ..adapters.base import IsaacAdapterBase
 from ..adapters.lidar_config import LidarConfigError
+from ..artifact_store import ArtifactError, get_artifact_store, write_unmanaged_artifact
 
 CAMERA_RETURN_MODES = {"metadata", "artifact", "inline"}
 DEFAULT_INLINE_MAX_BYTES = 1024 * 1024
 MAX_INLINE_MAX_BYTES = 4 * 1024 * 1024
-ARTIFACT_ROOT_ENV = "ISAAC_MCP_ARTIFACT_ROOT"
 
 CAMERA_OUTPUT_SPECS = {
     "depth": {
@@ -213,51 +209,54 @@ def _encode_png(image_data: Any) -> bytes:
     )
 
 
-def _artifact_root() -> Path:
-    configured = os.environ.get(ARTIFACT_ROOT_ENV)
-    root = Path(configured) if configured else Path(tempfile.gettempdir()) / "isaacsim-mcp" / "artifacts"
-    root = root.expanduser().resolve()
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def _write_artifact(
+    encoded: bytes,
+    output_path: Optional[str],
+    *,
+    expected_suffix: str,
+    kind: str,
+    format: str,
+    mime_type: str,
+    filename_prefix: str,
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    if output_path is None:
+        return get_artifact_store().write_bytes(
+            encoded,
+            kind=kind,
+            format=format,
+            mime_type=mime_type,
+            filename_prefix=filename_prefix,
+            metadata=metadata,
+        )
+    core = write_unmanaged_artifact(encoded, output_path, expected_suffix=expected_suffix)
+    return {
+        **metadata,
+        **core,
+        "kind": kind,
+        "format": format,
+        "mime_type": mime_type,
+    }
 
 
 def _write_png_artifact(png_bytes: bytes, output_path: Optional[str], metadata: Dict[str, Any]) -> Dict[str, Any]:
-    artifact_id = uuid.uuid4().hex
-    managed = output_path is None
-    if managed:
-        root = _artifact_root()
-        path = root / f"camera-{artifact_id}.png"
-    else:
-        path = Path(output_path).expanduser().resolve()
-        if path.suffix.lower() != ".png":
-            raise ValueError("output_path must end in .png")
-        if not path.parent.is_dir():
-            raise ValueError(f"output_path parent does not exist: {path.parent}")
-
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_bytes(png_bytes)
-        os.replace(temporary, path)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
-
-    return {
-        "id": artifact_id,
-        "handle": f"artifact://camera/{artifact_id}",
-        "kind": "camera.rgb",
-        "managed": managed,
-        "path": str(path),
-        "format": "png",
-        "mime_type": "image/png",
-        "size_bytes": len(png_bytes),
-        "sha256": hashlib.sha256(png_bytes).hexdigest(),
+    public_metadata = {
         **{key: metadata[key] for key in ("dtype", "shape", "width", "height", "channels", "color_space")},
         "camera_prim": metadata["camera_prim"],
         "captured_at": metadata["captured_at"],
         "timestamp_ns": metadata["timestamp_ns"],
         "frame": metadata["frame"],
     }
+    return _write_artifact(
+        png_bytes,
+        output_path,
+        expected_suffix=".png",
+        kind="camera.rgb",
+        format="png",
+        mime_type="image/png",
+        filename_prefix="camera",
+        metadata=public_metadata,
+    )
 
 
 def _json_safe(value: Any) -> Any:
@@ -347,35 +346,7 @@ def _write_npy_artifact(
     output_path: Optional[str],
     metadata: Dict[str, Any],
 ) -> Dict[str, Any]:
-    artifact_id = uuid.uuid4().hex
-    managed = output_path is None
-    if managed:
-        path = _artifact_root() / f"camera-{metadata['output_type']}-{artifact_id}.npy"
-    else:
-        path = Path(output_path).expanduser().resolve()
-        if path.suffix.lower() != ".npy":
-            raise ValueError("output_path must end in .npy")
-        if not path.parent.is_dir():
-            raise ValueError(f"output_path parent does not exist: {path.parent}")
-
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_bytes(encoded)
-        os.replace(temporary, path)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
-
-    return {
-        "id": artifact_id,
-        "handle": f"artifact://camera/{artifact_id}",
-        "kind": f"camera.{metadata['output_type']}",
-        "managed": managed,
-        "path": str(path),
-        "format": "npy",
-        "mime_type": "application/x-npy",
-        "size_bytes": len(encoded),
-        "sha256": hashlib.sha256(encoded).hexdigest(),
+    public_metadata = {
         **{
             key: metadata[key] for key in ("dtype", "shape", "width", "height", "channels", "units", "coordinate_space")
         },
@@ -386,6 +357,16 @@ def _write_npy_artifact(
         "timestamp_ns": metadata["timestamp_ns"],
         "frame": metadata["frame"],
     }
+    return _write_artifact(
+        encoded,
+        output_path,
+        expected_suffix=".npy",
+        kind=f"camera.{metadata['output_type']}",
+        format="npy",
+        mime_type="application/x-npy",
+        filename_prefix=f"camera-{metadata['output_type']}",
+        metadata=public_metadata,
+    )
 
 
 def capture_image(
@@ -491,6 +472,8 @@ def capture_image(
         response["artifact_handle"] = artifact["handle"]
         response["artifacts"] = [artifact]
         return response
+    except ArtifactError as exc:
+        return {"status": "error", "code": exc.code, "message": str(exc)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -592,6 +575,8 @@ def capture_camera_output(
             "code": "CAMERA_OUTPUT_UNSUPPORTED",
             "message": str(exc),
         }
+    except ArtifactError as exc:
+        return {"status": "error", "code": exc.code, "message": str(exc)}
     except Exception as exc:
         return {"status": "error", "message": str(exc)}
 
@@ -657,6 +642,8 @@ def create_lidar(
         return {"status": "error", "code": exc.code, "message": str(exc)}
     except NotImplementedError as exc:
         return {"status": "unsupported", "code": "LIDAR_CONFIG_UNSUPPORTED", "message": str(exc)}
+    except ArtifactError as exc:
+        return {"status": "error", "code": exc.code, "message": str(exc)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -775,35 +762,7 @@ def _encode_npz(fields: Dict[str, tuple[bytes, list[int], str]]) -> bytes:
 
 
 def _write_npz_artifact(encoded: bytes, output_path: Optional[str], metadata: Dict[str, Any]) -> Dict[str, Any]:
-    artifact_id = uuid.uuid4().hex
-    managed = output_path is None
-    if managed:
-        path = _artifact_root() / f"lidar-point-cloud-{artifact_id}.npz"
-    else:
-        path = Path(output_path).expanduser().resolve()
-        if path.suffix.lower() != ".npz":
-            raise ValueError("output_path must end in .npz")
-        if not path.parent.is_dir():
-            raise ValueError(f"output_path parent does not exist: {path.parent}")
-
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        temporary.write_bytes(encoded)
-        os.replace(temporary, path)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
-
-    return {
-        "id": artifact_id,
-        "handle": f"artifact://lidar/{artifact_id}",
-        "kind": "lidar.point_cloud",
-        "managed": managed,
-        "path": str(path),
-        "format": "npz",
-        "mime_type": "application/zip",
-        "size_bytes": len(encoded),
-        "sha256": hashlib.sha256(encoded).hexdigest(),
+    public_metadata = {
         "lidar_prim": metadata["lidar_prim"],
         "point_count": metadata["point_count"],
         "fields": metadata["fields"],
@@ -811,6 +770,16 @@ def _write_npz_artifact(encoded: bytes, output_path: Optional[str], metadata: Di
         "sensor_timestamp_ns": metadata["sensor_timestamp_ns"],
         "sensor_frame_id": metadata["sensor_frame_id"],
     }
+    return _write_artifact(
+        encoded,
+        output_path,
+        expected_suffix=".npz",
+        kind="lidar.point_cloud",
+        format="npz",
+        mime_type="application/zip",
+        filename_prefix="lidar-point-cloud",
+        metadata=public_metadata,
+    )
 
 
 def get_point_cloud(

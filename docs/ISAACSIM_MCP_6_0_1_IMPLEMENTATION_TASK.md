@@ -10,7 +10,7 @@
 - 固定執行環境：`C:\isaacsim`，Isaac Sim `6.0.1-rc.7+release.42383.32955d8d.gl`
 - Live 控制路由：Isaac Sim extension TCP `8766`
 - `isaac-sim-mcp` 的 `9904` 僅供文件查詢，不視為 live stage 控制驗證
-- 目前 MCP 共註冊 49 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
+- 目前 MCP 共註冊 53 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
 - 建立本文件時 `8766` 未啟動，因此本次只整理程式碼與既有測試證據，沒有修改 live stage
 - 備份根目錄：`E:\碩士論文\backups\isaacsim-mcp`
 
@@ -75,7 +75,7 @@
   > 傳輸限制：`inline` 設大小上限；完整 RGB/RGBA 優先存 PNG 或 `.npy`，由受控 resource handle 取回。
   > 驗收：在 Isaac Sim 6.0.1 建立 scratch camera，play/warm-up 後取得非空影像；解碼後 dimensions、dtype、hash 與本機檔案一致。
   > 完成：`capture_image` 支援 `metadata|artifact|inline`，預設以原子寫入產生受控 PNG artifact；回傳 image metadata、pixel SHA-256、artifact handle/path、PNG SHA-256，explicit `output_path` 保留相容。
-  > 限制：inline 預設 1 MiB、hard cap 4 MiB；超限回 `INLINE_SIZE_LIMIT_EXCEEDED`。完整 TTL、分塊讀取與清理由 Phase 1 item 5 接續。
+  > 限制：inline 預設 1 MiB、hard cap 4 MiB；超限回 `INLINE_SIZE_LIMIT_EXCEEDED`。managed artifact 的 TTL、分塊讀取與清理已由 Phase 1 item 5 完成。
   > 測試證據：全部離線測試 `165 passed, 1 deselected`，Ruff 與 format check 通過；包含 PNG round-trip、artifact 原子寫入、base64 decode、hash 與上限測試。
   > live 證據：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；scratch camera `/World/MCP_Task_1_1_Camera` 讀回成功，RGB `[48,64,3]`、`uint8`、frame 91；artifact/inline PNG 解碼後 dimensions 與 pixel SHA-256 一致，PNG SHA-256 也一致。
 
@@ -123,11 +123,15 @@
   > live 驗收（2026-08-23）：A=`120x20°`、`1x2°`、`10 Hz`、`0.5–40 m`，read-back 一致並取得 33 points；B=`180x30°`、`0.5x5°`、`20 Hz`、`1–80 m`，read-back 一致並取得 262 points。`100°/3°` 回 `LIDAR_HORIZONTAL_RESOLUTION_NOT_DIVISIBLE` 且未建立 prim；Play、Stop 與 scratch cleanup 通過。
   > 驗證腳本：`scripts/verify_lidar_config_live.py`。完整契約：`docs/LIDAR_CONFIG.md`。
 
-- [ ] 5. 共用 artifact 資料傳輸層
+- [x] 5. 共用 artifact 資料傳輸層
   > 現況：影像與 point cloud 沒有統一的大型資料 transport、保存期限、清理與 hash 契約。
   > 缺漏位置：MCP server resource/provider、extension 暫存區、tools response schema。
   > 實作：受控 artifact 根目錄、不可猜測 ID、MIME/dtype/shape/size/hash、TTL、分塊讀取、刪除與容量上限；路徑必須防止 traversal。
   > 驗收：影像與 LiDAR 共用同一契約；超過限制會回明確錯誤；artifact 可下載、驗 hash、過期並安全清理。
+  > 已實作：新增共用 managed store 與 `get_artifact_info`、`read_artifact`、`delete_artifact`、`cleanup_artifacts` 四個 named tools。handle 為 192-bit random `artifact://managed/<opaque-id>`；metadata 包含 MIME、format、dtype/shape、size、SHA-256、建立/到期時間與 producer 欄位。Camera PNG/NPY 與 LiDAR NPZ 已改用同一 writer；explicit `output_path` 保留為 `managed=false`、`handle=null`。
+  > 安全與限制：root、TTL、單檔/總容量、chunk 上限可由環境變數設定；輸入必須為正整數。handle 使用完整格式驗證，sidecar path 必須留在 root；寫入採 atomic replace，並提供 `ARTIFACT_TOO_LARGE`、`ARTIFACT_CAPACITY_EXCEEDED`、`ARTIFACT_CHUNK_LIMIT_EXCEEDED` 等 stable codes。
+  > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、53 commands。Camera PNG 1,087 bytes 與 LiDAR NPZ 1,248 bytes 均用 512-byte chunks 下載重組，完整 SHA-256 一致；traversal、1,025-byte chunk limit、delete、15 秒 TTL expiry、cleanup 與 scratch prim 清理全數通過。
+  > 驗證腳本：`scripts/verify_artifact_transport_live.py`。完整契約：`docs/ARTIFACT_TRANSPORT.md`。
 
 - [ ] 6. Sensor lifecycle 與刪除一致性
   > 現況：Camera/LiDAR wrapper、render product、annotator 與 USD prim 的生命週期可能不同；刪除 prim 後仍可能被持有的 wrapper 在後續 tick 重建或殘留資源。
@@ -254,11 +258,11 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
 
-- [ ] 25. 目前 49 個 tools 的統一 Isaac Sim 6.0.1 live 報告
-  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability 與 LiDAR config 工具未納入同一輪 49-tool live matrix。
+- [ ] 25. 目前 53 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config 與 artifact transport 工具未納入同一輪 53-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
-  > 驗收：49 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 驗收：53 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
 
 - [ ] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。

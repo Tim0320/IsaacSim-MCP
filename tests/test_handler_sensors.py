@@ -158,7 +158,7 @@ def test_artifact_is_default_and_writes_a_hash_verified_managed_png(tmp_path, mo
     assert result["status"] == "success"
     assert result["return_mode"] == "artifact"
     artifact = result["artifacts"][0]
-    assert artifact["handle"].startswith("artifact://camera/")
+    assert artifact["handle"].startswith("artifact://managed/")
     assert artifact["managed"] is True
     assert artifact["format"] == "png"
     assert artifact["mime_type"] == "image/png"
@@ -166,6 +166,20 @@ def test_artifact_is_default_and_writes_a_hash_verified_managed_png(tmp_path, mo
     path = tmp_path / f"camera-{artifact['id']}.png"
     assert artifact["path"] == str(path)
     assert path.read_bytes() == png
+
+
+def test_camera_reports_managed_artifact_size_limit_without_leaving_files(tmp_path, monkeypatch):
+    from isaac_sim_mcp_extension.handlers import sensors
+
+    monkeypatch.setenv("ISAAC_MCP_ARTIFACT_ROOT", str(tmp_path))
+    monkeypatch.setenv("ISAAC_MCP_ARTIFACT_MAX_FILE_BYTES", "8")
+    monkeypatch.setattr(sensors, "_encode_png", lambda _image: b"more-than-eight")
+
+    result = capture_image(_Adapter(_Frame((2, 3, 3))), prim_path="/World/Cam")
+
+    assert result["status"] == "error"
+    assert result["code"] == "ARTIFACT_TOO_LARGE"
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_inline_returns_decodable_png_and_enforces_size_limit(monkeypatch):
@@ -299,7 +313,7 @@ def test_camera_output_artifact_is_hash_verified_npy(tmp_path, monkeypatch):
 
     assert result["status"] == "success"
     artifact = result["artifacts"][0]
-    assert artifact["handle"].startswith("artifact://camera/")
+    assert artifact["handle"].startswith("artifact://managed/")
     assert artifact["kind"] == "camera.normals"
     assert artifact["format"] == "npy"
     assert artifact["mime_type"] == "application/x-npy"
@@ -583,6 +597,10 @@ def test_lidar_artifact_contains_typed_npz_fields(tmp_path, monkeypatch):
     assert metadata["sensor_pose"] == {"position": [1.0, 2.0, 3.0]}
     assert metadata["sensor_timestamp_ns"] == 123456789
     artifact = result["artifacts"][0]
+    assert artifact["handle"].startswith("artifact://managed/")
+    assert artifact["managed"] is True
+    assert artifact["expires_at"]
+    assert artifact["ttl_seconds"] == 3600
     assert artifact["format"] == "npz"
     assert artifact["point_count"] == 2
     with zipfile.ZipFile(artifact["path"]) as archive:
