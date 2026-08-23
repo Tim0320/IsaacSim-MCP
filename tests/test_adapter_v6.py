@@ -846,6 +846,157 @@ def test_v6_sensor_schema_noop_when_the_prim_does_not_exist(monkeypatch):
     assert prim.applied == []
 
 
+def test_v6_camera_output_attaches_annotator_once_and_reuses_sensor(monkeypatch):
+    calls = []
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
+
+    class _Data:
+        def numpy(self):
+            return "typed-array"
+
+    class _Sensor:
+        def __init__(self):
+            self._annotators = {"rgb": object()}
+            self.attached = []
+
+        def attach_annotators(self, annotator):
+            self.attached.append(annotator)
+            self._annotators[annotator] = object()
+
+        def get_data(self, annotator):
+            return _Data(), {"source": annotator}
+
+    rtx = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx.CameraSensor = MagicMock()
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx)
+    sensor = _Sensor()
+    adapter._camera_sensors["/World/Cam"] = sensor
+
+    first = adapter.capture_camera_output("/World/Cam", "normals")
+    second = adapter.capture_camera_output("/World/Cam", "normals")
+
+    assert first == ("typed-array", {"source": "normals"})
+    assert second == first
+    assert sensor.attached == ["normals"]
+    rtx.CameraSensor.assert_not_called()
+
+
+def test_v6_create_camera_registers_all_task_1_2_annotators_before_play(monkeypatch):
+    calls = []
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
+    monkeypatch.setattr(adapter, "_apply_sensor_schema", lambda _path: None)
+    sensor_factory = MagicMock(return_value=object())
+    rtx = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx.RtxCamera = MagicMock(return_value=object())
+    rtx.CameraSensor = sensor_factory
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx)
+
+    adapter.create_camera("/World/Cam", resolution=(64, 48))
+
+    from isaac_sim_mcp_extension.adapters.v6 import CAMERA_ANNOTATORS
+
+    sensor_factory.assert_called_once_with(
+        path="/World/Cam",
+        resolution=(48, 64),
+        annotators=CAMERA_ANNOTATORS,
+    )
+    assert CAMERA_ANNOTATORS == [
+        "rgb",
+        "distance_to_camera",
+        "distance_to_image_plane",
+        "semantic_segmentation",
+        "instance_segmentation",
+        "instance_id_segmentation",
+        "normals",
+        "motion_vectors",
+    ]
+
+
+def test_v6_camera_calibration_reads_intrinsics_extrinsics_and_units(monkeypatch):
+    calls = []
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
+
+    class _Attr:
+        def __init__(self, value):
+            self.value = value
+
+        def Get(self):
+            return self.value
+
+    class _Prim:
+        def IsValid(self):
+            return True
+
+        def IsA(self, _type):
+            return True
+
+    class _Camera:
+        def __init__(self, _prim):
+            pass
+
+        def GetFocalLengthAttr(self):
+            return _Attr(50.0)
+
+        def GetHorizontalApertureAttr(self):
+            return _Attr(100.0)
+
+        def GetVerticalApertureAttr(self):
+            return _Attr(50.0)
+
+        def GetHorizontalApertureOffsetAttr(self):
+            return _Attr(0.0)
+
+        def GetVerticalApertureOffsetAttr(self):
+            return _Attr(0.0)
+
+        def GetProjectionAttr(self):
+            return _Attr("perspective")
+
+        def GetClippingRangeAttr(self):
+            return _Attr((0.1, 1000.0))
+
+    class _Matrix:
+        def __init__(self, diagonal):
+            self.rows = [[float(diagonal if row == column else 0) for column in range(4)] for row in range(4)]
+
+        def __getitem__(self, index):
+            return self.rows[index]
+
+        def GetInverse(self):
+            return _Matrix(0.5)
+
+    class _Xformable:
+        def __init__(self, _prim):
+            pass
+
+        def ComputeLocalToWorldTransform(self, _time):
+            return _Matrix(2.0)
+
+    prim = _Prim()
+    stage = types.SimpleNamespace(GetPrimAtPath=lambda _path: prim)
+    adapter.get_stage = lambda: stage
+    adapter._camera_sensors["/World/Cam"] = types.SimpleNamespace(resolution=(480, 640))
+
+    fake_usd = types.SimpleNamespace(TimeCode=types.SimpleNamespace(Default=lambda: object()))
+    fake_usd_geom = types.SimpleNamespace(
+        Camera=_Camera,
+        Xformable=_Xformable,
+        GetStageMetersPerUnit=lambda _stage: 0.01,
+    )
+    pxr = sys.modules["pxr"]
+    monkeypatch.setattr(pxr, "Usd", fake_usd, raising=False)
+    monkeypatch.setattr(pxr, "UsdGeom", fake_usd_geom, raising=False)
+
+    result = adapter.get_camera_calibration("/World/Cam")
+
+    assert result["resolution"] == {"width": 640, "height": 480}
+    assert result["intrinsic_matrix"] == [[320.0, 0.0, 320.0], [0.0, 480.0, 240.0], [0.0, 0.0, 1.0]]
+    assert result["camera_to_world"][0][0] == 2.0
+    assert result["world_to_camera"][0][0] == 0.5
+    assert result["meters_per_unit"] == 0.01
+    assert result["depth_units"] == "meters"
+
+
 def _install_fake_replicator(monkeypatch, scheduled, pending_done):
     """Publish omni.replicator.core and capture what gets scheduled.
 
@@ -895,6 +1046,45 @@ def test_v6_requests_a_render_frame_without_starting_the_timeline(monkeypatch):
 
     assert adapter._request_render_frame() is True
     assert len(scheduled) == 1, "must schedule exactly one render request"
+
+
+def test_v6_uses_running_timeline_instead_of_requesting_a_pause_render(monkeypatch):
+    """A fallback render must not stop Play and release the camera sensor."""
+    scheduled = []
+    calls = []
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
+    _install_fake_replicator(monkeypatch, scheduled, pending_done=False)
+    timeline = types.SimpleNamespace(is_playing=lambda: True)
+    fake_timeline = types.ModuleType("omni.timeline")
+    fake_timeline.get_timeline_interface = lambda: timeline
+    fake_omni = sys.modules.get("omni", types.ModuleType("omni"))
+    monkeypatch.setattr(fake_omni, "timeline", fake_timeline, raising=False)
+    monkeypatch.setitem(sys.modules, "omni", fake_omni)
+    monkeypatch.setitem(sys.modules, "omni.timeline", fake_timeline)
+
+    assert adapter._request_render_frame() is True
+    assert scheduled == []
+
+
+def test_v6_play_commits_timeline_transition(monkeypatch):
+    """Replicator capture-on-play callbacks require the transition to commit."""
+    calls = []
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
+    monkeypatch.setattr(adapter, "_ensure_physics_world", lambda: calls.append("physics"))
+    timeline = types.SimpleNamespace(
+        play=lambda: calls.append("play"),
+        commit=lambda: calls.append("commit"),
+    )
+    fake_timeline = types.ModuleType("omni.timeline")
+    fake_timeline.get_timeline_interface = lambda: timeline
+    fake_omni = types.ModuleType("omni")
+    fake_omni.timeline = fake_timeline
+    monkeypatch.setitem(sys.modules, "omni", fake_omni)
+    monkeypatch.setitem(sys.modules, "omni.timeline", fake_timeline)
+
+    adapter.play()
+
+    assert calls == ["physics", "play", "commit"]
 
 
 def test_v6_does_not_queue_a_second_render_request_while_one_is_pending(monkeypatch):

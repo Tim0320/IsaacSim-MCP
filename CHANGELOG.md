@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — typed RTX camera outputs and calibration
+
+- Added `capture_camera_output` for depth, distance-to-image-plane,
+  semantic/instance/instance-ID segmentation, normals, and motion vectors. Responses expose
+  dtype, shape, units, coordinate space, frame/timestamp, annotator info, and
+  hashes through metadata, controlled `.npy` artifacts, or bounded raw inline
+  bytes.
+- Added `get_camera_calibration` for pinhole intrinsics, USD camera-to-world and
+  world-to-camera matrices, projection, resolution, clipping, and explicit unit
+  conventions.
+- Fixed the V6 CameraSensor lifecycle by committing Play before Replicator
+  capture-on-play and avoiding pause-render fallback while the timeline runs.
+  All six outputs, known-geometry/prim read-back, and calibration passed the
+  Isaac Sim 6.0.1 live scratch harness.
+
 ### Fixed — Isaac Sim 6.0.1 multi-GPU PhysX launch guard
 
 - The Windows launcher now resolves the current unique

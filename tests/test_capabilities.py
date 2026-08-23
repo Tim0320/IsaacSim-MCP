@@ -64,6 +64,26 @@ def test_handler_returns_stable_runtime_capability_contract():
         "inline_hard_max_bytes": 4194304,
         "warmup_required": True,
     }
+    assert result["feature_flags"]["camera.annotators"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+        "outputs": [
+            "depth",
+            "distance_to_image_plane",
+            "semantic_segmentation",
+            "instance_segmentation",
+            "instance_id_segmentation",
+            "normals",
+            "motion_vectors",
+        ],
+        "return_modes": ["metadata", "artifact", "inline"],
+        "artifact_format": "npy",
+        "warmup_required": True,
+    }
+    assert result["feature_flags"]["camera.calibration"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+    }
     assert result["feature_flags"]["lidar.config"]["state"] == "accepted_not_applied"
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
     assert result["sensor_warmup"]["camera"]["state"] == "per_sensor_unknown"

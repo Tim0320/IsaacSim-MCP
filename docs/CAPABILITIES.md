@@ -33,6 +33,7 @@
 
 - **多 GPU / PhysX 重點限制**：`/physics/cudaDevice=-1` 已在 Timeline `Stop` 重現 `PhysXGpu_64.dll` native crash。Windows launcher 會偵測當下唯一的 `display_active=Enabled` GPU 並解析成明確 ordinal；判定失敗才警告並 fallback 到 GPU 0。可由 `-PhysicsGpu` 或 `ISAAC_PHYSICS_GPU` 覆寫。此防護只針對 PhysX，renderer multi-GPU 設定不能替代它；Newton 尚未宣稱適用。
 - `capture_image` 支援 `metadata|artifact|inline`；預設回受控 PNG artifact，inline 有 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。
+- `capture_camera_output` 在 V6 支援七種 typed RTX output，預設回受控 `.npy` artifact；inline 傳 raw little-endian bytes，具有相同 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)。
 - `get_lidar_point_cloud` 目前只回 `point_count`，尚未傳回 decoded XYZ points。
 - V6 `create_lidar(config=...)` 接受參數，但尚未 author 對應 RTX LiDAR schema attributes。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
@@ -70,6 +71,16 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - artifact：managed PNG path/handle、PNG SHA-256 與解碼後 pixel SHA-256 驗證一致
 - inline：base64 PNG 可解碼，dimensions、dtype 與 hashes 一致
 - limit：1-byte 上限回 `INLINE_SIZE_LIMIT_EXCEEDED`
+
+2026-08-23 完成 Camera annotator 與 calibration live 驗證：
+
+- scratch camera/target：`/World/MCP_Task_1_2_Camera`、`/World/MCP_Task_1_2_Target`
+- runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX
+- outputs：depth、distance-to-image-plane、semantic/instance/instance-ID segmentation、normals、motion vectors 全數取得 frame
+- contract：七種輸出的 `dtype`、`shape`、`units`、raw SHA-256 與 `.npy` artifact SHA-256 驗證通過
+- read-back：已知 cube 的非零 depth/normals、semantic label 與 instance prim path 可在 annotator data/info 讀回
+- calibration：`64x48` resolution、pinhole intrinsic、camera-to-world/world-to-camera、projection 與 units 驗證通過
+- lifecycle：Play transition 明確 commit；Play 中不排程會觸發 Stop 的 fallback render；scratch prim 已清除
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

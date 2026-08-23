@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import hashlib
 import os
@@ -44,10 +45,67 @@ DEFAULT_INLINE_MAX_BYTES = 1024 * 1024
 MAX_INLINE_MAX_BYTES = 4 * 1024 * 1024
 ARTIFACT_ROOT_ENV = "ISAAC_MCP_ARTIFACT_ROOT"
 
+CAMERA_OUTPUT_SPECS = {
+    "depth": {
+        "annotator": "distance_to_camera",
+        "dtype": "float32",
+        "channels": 1,
+        "units": "meters",
+        "coordinate_space": "radial_distance_from_camera",
+    },
+    "distance_to_image_plane": {
+        "annotator": "distance_to_image_plane",
+        "dtype": "float32",
+        "channels": 1,
+        "units": "meters",
+        "coordinate_space": "camera_image_plane",
+    },
+    "semantic_segmentation": {
+        "annotator": "semantic_segmentation",
+        "dtype": "uint32",
+        "channels": 1,
+        "units": "semantic_id",
+        "coordinate_space": "image",
+    },
+    "instance_segmentation": {
+        "annotator": "instance_segmentation",
+        "dtype": "uint32",
+        "channels": 1,
+        "units": "instance_id",
+        "coordinate_space": "image",
+    },
+    "instance_id_segmentation": {
+        "annotator": "instance_id_segmentation",
+        "dtype": "uint32",
+        "channels": 1,
+        "units": "instance_prim_id",
+        "coordinate_space": "image",
+    },
+    "normals": {
+        "annotator": "normals",
+        "dtype": "float32",
+        "channels": 3,
+        "units": "unitless",
+        "coordinate_space": "renderer",
+    },
+    "motion_vectors": {
+        "annotator": "motion_vectors",
+        "dtype": "float32",
+        "channels": 2,
+        "units": "pixels_per_frame",
+        "coordinate_space": "image",
+    },
+}
+
+_DTYPE_SIZE = {"float32": 4, "uint32": 4}
+_NPY_DESCR = {"float32": "<f4", "uint32": "<u4"}
+
 
 def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["sensors.create_camera"] = lambda **p: create_camera(adapter, **p)
     registry["sensors.capture_image"] = lambda **p: capture_image(adapter, **p)
+    registry["sensors.capture_camera_output"] = lambda **p: capture_camera_output(adapter, **p)
+    registry["sensors.get_camera_calibration"] = lambda **p: get_camera_calibration(adapter, **p)
     registry["sensors.create_lidar"] = lambda **p: create_lidar(adapter, **p)
     registry["sensors.get_point_cloud"] = lambda **p: get_point_cloud(adapter, **p)
 
@@ -197,6 +255,134 @@ def _write_png_artifact(png_bytes: bytes, output_path: Optional[str], metadata: 
     }
 
 
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "tolist"):
+        return _json_safe(value.tolist())
+    if hasattr(value, "item"):
+        return _json_safe(value.item())
+    return str(value)
+
+
+def _camera_output_metadata(
+    adapter: IsaacAdapterBase,
+    data: Any,
+    info: Dict[str, Any],
+    prim_path: str,
+    output_type: str,
+) -> tuple[Dict[str, Any], bytes]:
+    spec = CAMERA_OUTPUT_SPECS[output_type]
+    shape = list(getattr(data, "shape", ()))
+    channels = spec["channels"]
+    valid_shape = len(shape) == 2 and channels == 1
+    valid_shape = valid_shape or (len(shape) == 3 and shape[2] == channels)
+    if not valid_shape or any(not isinstance(value, int) or value <= 0 for value in shape):
+        raise ValueError(f"Camera {output_type} output has an invalid shape: {shape}; expected HxW or HxWx{channels}")
+
+    dtype = str(getattr(data, "dtype", "unknown"))
+    if dtype != spec["dtype"]:
+        raise ValueError(f"Camera {output_type} output must use {spec['dtype']}, got {dtype}")
+
+    raw = _pixel_bytes(data)
+    elements = 1
+    for dimension in shape:
+        elements *= dimension
+    expected_size = elements * _DTYPE_SIZE[dtype]
+    if len(raw) != expected_size:
+        raise ValueError(f"Camera {output_type} byte length mismatch: expected {expected_size}, got {len(raw)}")
+
+    timestamp_ns = time.time_ns()
+    metadata = {
+        "camera_prim": prim_path,
+        "output_type": output_type,
+        "annotator": spec["annotator"],
+        "dtype": dtype,
+        "shape": shape,
+        "width": shape[1],
+        "height": shape[0],
+        "channels": channels,
+        "units": spec["units"],
+        "coordinate_space": spec["coordinate_space"],
+        "raw_size_bytes": len(raw),
+        "raw_sha256": hashlib.sha256(raw).hexdigest(),
+        "annotator_info": _json_safe(info),
+        "captured_at": datetime.fromtimestamp(timestamp_ns / 1_000_000_000, tz=timezone.utc).isoformat(),
+        "timestamp_ns": timestamp_ns,
+    }
+    metadata.update(_timeline_metadata(adapter))
+    return metadata, raw
+
+
+def _encode_npy(raw: bytes, shape: Sequence[int], dtype: str) -> bytes:
+    shape_repr = repr(tuple(shape))
+    header = f"{{'descr': '{_NPY_DESCR[dtype]}', 'fortran_order': False, 'shape': {shape_repr}, }}"
+    prefix_size = len(b"\x93NUMPY") + 2 + 2
+    padding = 16 - ((prefix_size + len(header) + 1) % 16)
+    header_bytes = (header + (" " * padding) + "\n").encode("latin1")
+    if len(header_bytes) > 65535:
+        raise ValueError("NumPy header is too large")
+    return b"\x93NUMPY\x01\x00" + struct.pack("<H", len(header_bytes)) + header_bytes + raw
+
+
+def _decode_npy_header(encoded: bytes) -> Dict[str, Any]:
+    """Decode the v1 header emitted by _encode_npy (used by contract tests)."""
+    if not encoded.startswith(b"\x93NUMPY\x01\x00"):
+        raise ValueError("Not a NumPy v1 artifact")
+    header_length = struct.unpack("<H", encoded[8:10])[0]
+    return ast.literal_eval(encoded[10 : 10 + header_length].decode("latin1").strip())
+
+
+def _write_npy_artifact(
+    encoded: bytes,
+    output_path: Optional[str],
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    artifact_id = uuid.uuid4().hex
+    managed = output_path is None
+    if managed:
+        path = _artifact_root() / f"camera-{metadata['output_type']}-{artifact_id}.npy"
+    else:
+        path = Path(output_path).expanduser().resolve()
+        if path.suffix.lower() != ".npy":
+            raise ValueError("output_path must end in .npy")
+        if not path.parent.is_dir():
+            raise ValueError(f"output_path parent does not exist: {path.parent}")
+
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(encoded)
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+    return {
+        "id": artifact_id,
+        "handle": f"artifact://camera/{artifact_id}",
+        "kind": f"camera.{metadata['output_type']}",
+        "managed": managed,
+        "path": str(path),
+        "format": "npy",
+        "mime_type": "application/x-npy",
+        "size_bytes": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        **{
+            key: metadata[key] for key in ("dtype", "shape", "width", "height", "channels", "units", "coordinate_space")
+        },
+        "camera_prim": metadata["camera_prim"],
+        "output_type": metadata["output_type"],
+        "annotator": metadata["annotator"],
+        "captured_at": metadata["captured_at"],
+        "timestamp_ns": metadata["timestamp_ns"],
+        "frame": metadata["frame"],
+    }
+
+
 def capture_image(
     adapter: IsaacAdapterBase,
     prim_path: str = "/World/Camera",
@@ -302,6 +488,124 @@ def capture_image(
         return response
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+def capture_camera_output(
+    adapter: IsaacAdapterBase,
+    prim_path: str = "/World/Camera",
+    output_type: str = "depth",
+    output_path: Optional[str] = None,
+    return_mode: str = "artifact",
+    inline_max_bytes: int = DEFAULT_INLINE_MAX_BYTES,
+) -> Dict[str, Any]:
+    if output_type not in CAMERA_OUTPUT_SPECS:
+        return {
+            "status": "error",
+            "code": "INVALID_CAMERA_OUTPUT_TYPE",
+            "message": f"output_type must be one of {sorted(CAMERA_OUTPUT_SPECS)}, got {output_type!r}",
+        }
+    if return_mode not in CAMERA_RETURN_MODES:
+        return {
+            "status": "error",
+            "code": "INVALID_RETURN_MODE",
+            "message": f"return_mode must be one of {sorted(CAMERA_RETURN_MODES)}, got {return_mode!r}",
+        }
+    if output_path and return_mode != "artifact":
+        return {
+            "status": "error",
+            "code": "OUTPUT_PATH_REQUIRES_ARTIFACT",
+            "message": "output_path can only be used with return_mode='artifact'",
+        }
+    if return_mode == "inline" and (isinstance(inline_max_bytes, bool) or not isinstance(inline_max_bytes, int)):
+        return {"status": "error", "code": "INVALID_INLINE_LIMIT", "message": "inline_max_bytes must be an integer"}
+    if return_mode == "inline" and not 1 <= inline_max_bytes <= MAX_INLINE_MAX_BYTES:
+        return {
+            "status": "error",
+            "code": "INVALID_INLINE_LIMIT",
+            "message": f"inline_max_bytes must be between 1 and {MAX_INLINE_MAX_BYTES}",
+        }
+
+    try:
+        spec = CAMERA_OUTPUT_SPECS[output_type]
+        data, info = adapter.capture_camera_output(prim_path, spec["annotator"])
+        if data is None or getattr(data, "size", 0) == 0:
+            requested = callable(getattr(adapter, "_request_render_frame", None))
+            remedy = (
+                "A render has been requested; call capture_camera_output again to collect it."
+                if requested
+                else "Play the simulation, then capture again once a frame has rendered."
+            )
+            return {
+                "status": "error",
+                "code": "CAMERA_FRAME_NOT_READY",
+                "message": f"No {output_type} frame available from {prim_path}. {remedy}",
+            }
+
+        metadata, raw = _camera_output_metadata(adapter, data, info or {}, prim_path, output_type)
+        response: Dict[str, Any] = {
+            "status": "success",
+            "message": f"Camera {output_type} captured",
+            "return_mode": return_mode,
+            "camera_output": metadata,
+        }
+        if return_mode == "metadata":
+            return response
+        if return_mode == "inline":
+            if len(raw) > inline_max_bytes:
+                return {
+                    "status": "error",
+                    "code": "INLINE_SIZE_LIMIT_EXCEEDED",
+                    "message": f"Raw camera output is {len(raw)} bytes; inline limit is {inline_max_bytes} bytes",
+                    "return_mode": return_mode,
+                    "camera_output": metadata,
+                    "encoded_size_bytes": len(raw),
+                    "inline_max_bytes": inline_max_bytes,
+                }
+            response["inline"] = {
+                "encoding": "base64",
+                "format": "raw",
+                "mime_type": "application/octet-stream",
+                "dtype": metadata["dtype"],
+                "shape": metadata["shape"],
+                "byte_order": "little",
+                "size_bytes": len(raw),
+                "sha256": metadata["raw_sha256"],
+                "data": base64.b64encode(raw).decode("ascii"),
+            }
+            return response
+
+        encoded = _encode_npy(raw, metadata["shape"], metadata["dtype"])
+        artifact = _write_npy_artifact(encoded, output_path, metadata)
+        response["message"] = f"Camera {output_type} saved to {artifact['path']}"
+        response["output_path"] = artifact["path"]
+        response["artifact_handle"] = artifact["handle"]
+        response["artifacts"] = [artifact]
+        return response
+    except NotImplementedError as exc:
+        return {
+            "status": "unsupported",
+            "code": "CAMERA_OUTPUT_UNSUPPORTED",
+            "message": str(exc),
+        }
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+def get_camera_calibration(
+    adapter: IsaacAdapterBase,
+    prim_path: str = "/World/Camera",
+) -> Dict[str, Any]:
+    try:
+        calibration = adapter.get_camera_calibration(prim_path)
+        return {"status": "success", "message": "Camera calibration read", "calibration": calibration}
+    except NotImplementedError as exc:
+        return {
+            "status": "unsupported",
+            "code": "CAMERA_CALIBRATION_UNSUPPORTED",
+            "message": str(exc),
+        }
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
 
 def create_lidar(

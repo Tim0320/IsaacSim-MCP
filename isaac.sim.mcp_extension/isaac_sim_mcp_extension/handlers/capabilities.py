@@ -124,6 +124,7 @@ def _runtime_info(adapter: IsaacAdapterBase) -> Dict[str, Any]:
 def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 5 else "accepted_not_applied"
     backend_verification = "verified" if physics_backend == "physx" else "unverified"
+    camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
     return {
         "scene.basic_crud": {"state": "supported"},
         "camera.rgb_file": {"state": "supported", "warmup_required": True},
@@ -135,7 +136,26 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
             "inline_hard_max_bytes": MAX_INLINE_MAX_BYTES,
             "warmup_required": True,
         },
-        "camera.annotators": {"state": "unsupported"},
+        "camera.annotators": {
+            "state": camera_v6_state,
+            "adapter_generation": adapter_generation,
+            "outputs": [
+                "depth",
+                "distance_to_image_plane",
+                "semantic_segmentation",
+                "instance_segmentation",
+                "instance_id_segmentation",
+                "normals",
+                "motion_vectors",
+            ],
+            "return_modes": ["metadata", "artifact", "inline"],
+            "artifact_format": "npy",
+            "warmup_required": True,
+        },
+        "camera.calibration": {
+            "state": camera_v6_state,
+            "adapter_generation": adapter_generation,
+        },
         "lidar.point_count": {"state": "supported", "warmup_required": True},
         "lidar.point_cloud_data": {
             "state": "unsupported",

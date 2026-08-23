@@ -92,6 +92,49 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
 
+    @mcp.tool("capture_camera_output")
+    def capture_camera_output(
+        prim_path: str = "/World/Camera",
+        output_type: str = "depth",
+        output_path: Optional[str] = None,
+        return_mode: str = "artifact",
+        inline_max_bytes: int = 1024 * 1024,
+    ) -> str:
+        """Capture a typed RTX camera annotator output.
+
+        Args:
+            prim_path: Prim path of the camera.
+            output_type: depth, distance_to_image_plane, semantic_segmentation,
+                instance_segmentation, instance_id_segmentation, normals, or motion_vectors.
+            output_path: Optional explicit .npy path for artifact mode.
+            return_mode: metadata, artifact, or inline. Defaults to artifact.
+            inline_max_bytes: Maximum raw bytes allowed in inline mode. Maximum is 4 MiB.
+        """
+        try:
+            conn = get_connection()
+            params = {
+                "prim_path": prim_path,
+                "output_type": output_type,
+                "return_mode": return_mode,
+                "inline_max_bytes": inline_max_bytes,
+            }
+            if output_path:
+                params["output_path"] = output_path
+            result = conn.send_command("sensors.capture_camera_output", params)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("get_camera_calibration")
+    def get_camera_calibration(prim_path: str = "/World/Camera") -> str:
+        """Read camera intrinsics, extrinsics, projection, resolution, and units."""
+        try:
+            conn = get_connection()
+            result = conn.send_command("sensors.get_camera_calibration", {"prim_path": prim_path})
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
     @mcp.tool("create_lidar")
     def create_lidar(
         prim_path: str = "/World/Lidar",

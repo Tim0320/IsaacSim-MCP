@@ -10,7 +10,7 @@
 - 固定執行環境：`C:\isaacsim`，Isaac Sim `6.0.1-rc.7+release.42383.32955d8d.gl`
 - Live 控制路由：Isaac Sim extension TCP `8766`
 - `isaac-sim-mcp` 的 `9904` 僅供文件查詢，不視為 live stage 控制驗證
-- 目前 MCP 共註冊 46 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
+- 目前 MCP 共註冊 48 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
 - 建立本文件時 `8766` 未啟動，因此本次只整理程式碼與既有測試證據，沒有修改 live stage
 - 備份根目錄：`E:\碩士論文\backups\isaacsim-mcp`
 
@@ -91,11 +91,16 @@
   > 離線測試：`tests/test_run_isaac_sim_windows.py` 覆蓋 precedence、主要 GPU 偵測、probe failure fallback、query contract、raw 去重、`-1` 警告、無效值拒絕與 exit code，共 `16 passed`。
   > live 證據（2026-08-23）：launcher 依本機 `display_active=Enabled` 偵測為 `Physics CUDA device: 0 (active display GPU)`；原始 MCP Camera 1.1 scratch 流程完成 Play、RGB capture、Stop，frame 120、shape `[48,64,3]`、pixel/artifact/inline SHA-256 與 camera read-back 全數通過。Kit 內部再完成 240 次 `next_update_async()`；程序仍存活，新增 dump `0`，`EXCEPTION_ACCESS_VIOLATION` / `PhysXGpu_64.dll+0xD5307` signature `0`。
 
-- [ ] 2. Camera depth、segmentation、normals 與 calibration
-  > 現況：typed MCP 只涵蓋基本 camera 建立與 RGB capture，缺少常用 annotator 與完整相機模型。
-  > 缺漏位置：`tools/sensors.py`、`handlers/sensors.py`、V6 camera/Replicator annotator lifecycle。
-  > 實作：新增 depth、distance-to-image-plane、semantic/instance segmentation、normals、motion vectors；提供 intrinsic/extrinsic、projection、resolution 與 units。
-  > 驗收：每種輸出都有明確 dtype/shape/units，並以已知幾何與 prim ID 做 read-back；缺 annotator 時回傳 capability error。
+- [x] 2. Camera depth、segmentation、normals 與 calibration
+  > 原始現況：typed MCP 只涵蓋基本 camera 建立與 RGB capture，缺少常用 annotator 與完整相機模型。
+  > 原始缺漏位置：`tools/sensors.py`、`handlers/sensors.py`、V6 camera/Replicator annotator lifecycle。
+  > 已實作：新增 `capture_camera_output` 與 `get_camera_calibration` named tools。V6 共用長生命週期 CameraSensor/render product，支援 depth、distance-to-image-plane、semantic/instance/instance-ID segmentation、normals、motion vectors，以及 intrinsic/extrinsic、projection、resolution 與 units。
+  > 傳輸契約：`metadata|artifact|inline`；artifact 是受控 `.npy`，inline 是 raw little-endian bytes。每次回傳明確 annotator、dtype、shape、units、coordinate space、frame/timestamp、raw size/SHA-256 與 JSON-safe annotator info。
+  > 錯誤契約：無效 output/return mode、尚未產生 frame、inline 超限與 V5/annotator unavailable 均回傳穩定 code；不以空陣列宣稱成功。
+  > lifecycle 修復：Play transition 依 Isaac Sim 6.0.1 CameraSensor reference flow 呼叫 `timeline.commit()`；Play 中 frame 尚未就緒時等待正常 render tick，不再排程會 pause timeline 並觸發 sensor release 的 fallback render。
+  > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；`64x48` 七種輸出皆取得 frame，dtype/shape/units、raw 與 `.npy` hashes 全數通過。已知 cube 的 depth/normals 非零，semantic label `mcp_task_1_2_target` 與 instance-ID prim `/World/MCP_Task_1_2_Target` 可讀回；intrinsic、camera-to-world/world-to-camera、projection、meters-per-unit 可讀回；scratch prim 全數清除。
+  > 離線驗收：Task 1.2 focused tests `74 passed, 1 deselected`；排除 live/destructive 與本 sandbox Git-for-Windows shell 問題的 suite `193 passed, 1 deselected`；Ruff、format check、`git diff --check` 通過。完整 suite 另有既有 backup-script tests `2` 項因 sandbox 的 `git-submodule` 找不到 `git-sh-setup` 失敗，與 Camera 變更無關。
+  > 驗證腳本：`scripts/verify_camera_outputs_live.py`。完整輸出契約：`docs/CAMERA_OUTPUTS.md`。
 
 - [ ] 3. LiDAR point cloud 資料回傳
   > 現況（已確認）：V6 adapter 已能取得 point cloud，但 handler 最後只回傳 `point_count`，XYZ points 被丟棄。
@@ -240,11 +245,11 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
 
-- [ ] 25. 目前 46 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+- [ ] 25. 目前 48 個 tools 的統一 Isaac Sim 6.0.1 live 報告
   > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability 工具未納入同一輪 46-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
-  > 驗收：46 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 驗收：48 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
 
 - [ ] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。

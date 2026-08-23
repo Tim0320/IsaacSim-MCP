@@ -242,6 +242,14 @@ class IsaacAdapterBase(ABC):
         """Capture an RGB image from a camera. Returns image data."""
         ...
 
+    def capture_camera_output(self, prim_path: str, annotator: str) -> tuple[np.ndarray, Dict[str, Any]]:
+        """Capture a typed camera annotator output and its auxiliary info."""
+        raise NotImplementedError("Typed camera annotators require the Isaac Sim 6.x RTX CameraSensor adapter")
+
+    def get_camera_calibration(self, prim_path: str) -> Dict[str, Any]:
+        """Read intrinsic/extrinsic camera calibration and unit metadata."""
+        raise NotImplementedError("Camera calibration requires the Isaac Sim 6.x RTX CameraSensor adapter")
+
     @abstractmethod
     def create_lidar(self, prim_path: str, config: Optional[str] = None, **kwargs) -> Any:
         """Create a lidar sensor at prim_path."""

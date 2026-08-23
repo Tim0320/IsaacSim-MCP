@@ -37,6 +37,17 @@ from .version import version_string
 if TYPE_CHECKING:
     from pxr import Usd
 
+CAMERA_ANNOTATORS = [
+    "rgb",
+    "distance_to_camera",
+    "distance_to_image_plane",
+    "semantic_segmentation",
+    "instance_segmentation",
+    "instance_id_segmentation",
+    "normals",
+    "motion_vectors",
+]
+
 
 def _recompile_scriptnodes_for_file(abs_path: str) -> list:
     """Recompile every Action-Graph ScriptNode whose scriptPath matches abs_path.
@@ -941,6 +952,18 @@ class IsaacAdapterV6(IsaacAdapterBase):
 
             import omni.replicator.core as rep
 
+            # While Play is active, Kit's normal update loop is already
+            # producing render frames. Calling step_async(pause_timeline=True)
+            # here would stop that run and fire GLOBAL_EVENT_STOP, which releases
+            # the long-lived CameraSensor before its first non-RGB frame arrives.
+            try:
+                import omni.timeline
+
+                if omni.timeline.get_timeline_interface().is_playing():
+                    return True
+            except Exception:
+                pass
+
             pending = self._render_request
             if pending is not None and not pending.done():
                 return True
@@ -987,7 +1010,11 @@ class IsaacAdapterV6(IsaacAdapterBase):
         # CameraSensor expects (height, width). Adapter callers historically
         # pass (width, height) — translate so the cached resolution is sane.
         h, w = (resolution[1], resolution[0]) if len(resolution) == 2 else (720, 1280)
-        self._camera_sensors[prim_path] = CameraSensor(path=prim_path, resolution=(h, w), annotators=["rgb"])
+        self._camera_sensors[prim_path] = CameraSensor(
+            path=prim_path,
+            resolution=(h, w),
+            annotators=CAMERA_ANNOTATORS,
+        )
         return camera
 
     def capture_camera_image(self, prim_path: str) -> np.ndarray:
@@ -1002,7 +1029,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
 
         sensor = self._camera_sensors.get(prim_path)
         if sensor is None:
-            sensor = CameraSensor(path=prim_path, resolution=(720, 1280), annotators=["rgb"])
+            sensor = CameraSensor(path=prim_path, resolution=(720, 1280), annotators=CAMERA_ANNOTATORS)
             self._camera_sensors[prim_path] = sensor
         data, _info = sensor.get_data("rgb")
         if data is None:
@@ -1012,6 +1039,94 @@ class IsaacAdapterV6(IsaacAdapterBase):
             self._request_render_frame()
             return np.zeros((0,), dtype=np.uint8)
         return data.numpy() if hasattr(data, "numpy") else np.asarray(data)
+
+    def capture_camera_output(self, prim_path: str, annotator: str) -> tuple[np.ndarray, Dict[str, Any]]:
+        """Return one Isaac Sim 6.x CameraSensor annotator frame.
+
+        Annotators are attached lazily to the long-lived CameraSensor. Reusing
+        the same render product is required: replacing the wrapper here would
+        discard every frame accumulated between MCP calls.
+        """
+        from isaacsim.sensors.experimental.rtx import CameraSensor
+
+        sensor = self._camera_sensors.get(prim_path)
+        if sensor is None:
+            sensor = CameraSensor(path=prim_path, resolution=(720, 1280), annotators=CAMERA_ANNOTATORS)
+            self._camera_sensors[prim_path] = sensor
+        elif annotator not in getattr(sensor, "_annotators", {}):
+            sensor.attach_annotators(annotator)
+
+        data, info = sensor.get_data(annotator)
+        if data is None:
+            self._request_render_frame()
+            return np.zeros((0,), dtype=np.uint8), {}
+        array = data.numpy() if hasattr(data, "numpy") else np.asarray(data)
+        return array, info or {}
+
+    def get_camera_calibration(self, prim_path: str) -> Dict[str, Any]:
+        """Read a pinhole calibration contract from the USD camera and sensor."""
+        from pxr import Usd, UsdGeom
+
+        stage = self.get_stage()
+        if stage is None:
+            raise RuntimeError("USD stage is not available")
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim or not prim.IsValid() or not prim.IsA(UsdGeom.Camera):
+            raise ValueError(f"Camera prim not found at {prim_path}")
+
+        sensor = self._camera_sensors.get(prim_path)
+        if sensor is None:
+            raise RuntimeError(
+                f"Camera resolution is unavailable for {prim_path}; create_camera must initialize it in this session"
+            )
+        height, width = (int(value) for value in sensor.resolution)
+
+        camera = UsdGeom.Camera(prim)
+        focal_length = float(camera.GetFocalLengthAttr().Get())
+        horizontal_aperture = float(camera.GetHorizontalApertureAttr().Get())
+        vertical_aperture = float(camera.GetVerticalApertureAttr().Get())
+        horizontal_offset = float(camera.GetHorizontalApertureOffsetAttr().Get() or 0.0)
+        vertical_offset = float(camera.GetVerticalApertureOffsetAttr().Get() or 0.0)
+        projection = str(camera.GetProjectionAttr().Get())
+        clipping = camera.GetClippingRangeAttr().Get()
+        if horizontal_aperture <= 0 or vertical_aperture <= 0:
+            raise ValueError("Camera aperture must be positive to calculate intrinsics")
+
+        intrinsic_matrix = None
+        if projection == "perspective":
+            fx = width * focal_length / horizontal_aperture
+            fy = height * focal_length / vertical_aperture
+            cx = width * (0.5 + horizontal_offset / horizontal_aperture)
+            cy = height * (0.5 + vertical_offset / vertical_aperture)
+            intrinsic_matrix = [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]]
+
+        camera_to_world_matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        world_to_camera_matrix = camera_to_world_matrix.GetInverse()
+
+        def matrix_rows(matrix):
+            return [[float(matrix[row][column]) for column in range(4)] for row in range(4)]
+
+        meters_per_unit = float(UsdGeom.GetStageMetersPerUnit(stage))
+        return {
+            "camera_prim": prim_path,
+            "resolution": {"width": width, "height": height},
+            "projection": projection,
+            "intrinsic_matrix": intrinsic_matrix,
+            "intrinsic_convention": "pixels; origin top-left; x right; y down",
+            "camera_to_world": matrix_rows(camera_to_world_matrix),
+            "world_to_camera": matrix_rows(world_to_camera_matrix),
+            "extrinsic_convention": "USD row-vector matrix; camera looks along local -Z with +Y up",
+            "focal_length": focal_length,
+            "horizontal_aperture": horizontal_aperture,
+            "vertical_aperture": vertical_aperture,
+            "horizontal_aperture_offset": horizontal_offset,
+            "vertical_aperture_offset": vertical_offset,
+            "optical_attribute_units": "tenths_of_stage_unit",
+            "clipping_range": {"near": float(clipping[0]), "far": float(clipping[1]), "units": "stage_units"},
+            "depth_units": "meters",
+            "stage_units": "meters_per_unit",
+            "meters_per_unit": meters_per_unit,
+        }
 
     def create_lidar(self, prim_path: str, config: Optional[str] = None, **kwargs) -> Any:
         # 6.0 Lidar takes a single `path: str`. Hardware preset (formerly the
@@ -1203,7 +1318,12 @@ class IsaacAdapterV6(IsaacAdapterBase):
         import omni.timeline
 
         self._ensure_physics_world()
-        omni.timeline.get_timeline_interface().play()
+        timeline = omni.timeline.get_timeline_interface()
+        timeline.play()
+        # CameraSensor's 6.0.1 reference flow commits the transition before the
+        # next app update. This makes Play visible immediately to Replicator and
+        # triggers its capture-on-play callbacks deterministically.
+        timeline.commit()
 
     def pause(self) -> None:
         import omni.timeline

@@ -32,7 +32,7 @@ from __future__ import annotations
 import base64
 import hashlib
 
-from isaac_sim_mcp_extension.handlers.sensors import capture_image
+from isaac_sim_mcp_extension.handlers.sensors import capture_camera_output, capture_image, get_camera_calibration
 
 
 class _Frame:
@@ -50,6 +50,12 @@ class _Frame:
     def tobytes(self, order="C"):
         assert order == "C"
         return self._payload
+
+
+class _TypedFrame(_Frame):
+    def __init__(self, shape, dtype, payload=None):
+        super().__init__(shape, payload=payload)
+        self.dtype = dtype
 
 
 class _Adapter:
@@ -212,6 +218,163 @@ def test_builtin_png_encoder_round_trips_rgb_pixels():
     png = _encode_png(_Frame((2, 3, 3), payload=pixels))
 
     assert _decode_png(png) == (3, 2, 3, pixels)
+
+
+class _CameraOutputAdapter:
+    def __init__(self, frame, info=None):
+        self.frame = frame
+        self.info = info or {}
+        self.calls = []
+
+    def capture_camera_output(self, prim_path, annotator):
+        self.calls.append((prim_path, annotator))
+        return self.frame, self.info
+
+
+def test_depth_metadata_has_explicit_dtype_shape_units_and_hash():
+    pixels = b"\x00\x00\x80?" * 6
+    adapter = _CameraOutputAdapter(_TypedFrame((2, 3, 1), "float32", pixels))
+
+    result = capture_camera_output(
+        adapter,
+        prim_path="/World/Cam",
+        output_type="depth",
+        return_mode="metadata",
+    )
+
+    assert result["status"] == "success"
+    assert adapter.calls == [("/World/Cam", "distance_to_camera")]
+    data = result["camera_output"]
+    assert data["output_type"] == "depth"
+    assert data["annotator"] == "distance_to_camera"
+    assert data["dtype"] == "float32"
+    assert data["shape"] == [2, 3, 1]
+    assert data["width"] == 3
+    assert data["height"] == 2
+    assert data["channels"] == 1
+    assert data["units"] == "meters"
+    assert data["raw_sha256"] == hashlib.sha256(pixels).hexdigest()
+
+
+def test_segmentation_preserves_json_safe_annotator_info():
+    frame = _TypedFrame((1, 2, 1), "uint32", b"\x01\x00\x00\x00\x02\x00\x00\x00")
+    adapter = _CameraOutputAdapter(frame, {"idToLabels": {1: {"class": "box"}}})
+
+    result = capture_camera_output(
+        adapter,
+        output_type="semantic_segmentation",
+        return_mode="metadata",
+    )
+
+    assert result["status"] == "success"
+    assert result["camera_output"]["units"] == "semantic_id"
+    assert result["camera_output"]["annotator_info"] == {"idToLabels": {"1": {"class": "box"}}}
+
+
+def test_instance_id_segmentation_uses_prim_path_annotator():
+    frame = _TypedFrame((1, 1, 1), "uint32", b"\x02\x00\x00\x00")
+    adapter = _CameraOutputAdapter(frame, {"idToLabels": {2: "/World/Box"}})
+
+    result = capture_camera_output(
+        adapter,
+        output_type="instance_id_segmentation",
+        return_mode="metadata",
+    )
+
+    assert adapter.calls == [("/World/Camera", "instance_id_segmentation")]
+    assert result["camera_output"]["units"] == "instance_prim_id"
+    assert result["camera_output"]["annotator_info"] == {"idToLabels": {"2": "/World/Box"}}
+
+
+def test_camera_output_artifact_is_hash_verified_npy(tmp_path, monkeypatch):
+    from isaac_sim_mcp_extension.handlers import sensors
+
+    payload = b"\x00" * (2 * 2 * 3 * 4)
+    frame = _TypedFrame((2, 2, 3), "float32", payload)
+    monkeypatch.setenv("ISAAC_MCP_ARTIFACT_ROOT", str(tmp_path))
+
+    result = capture_camera_output(_CameraOutputAdapter(frame), output_type="normals")
+
+    assert result["status"] == "success"
+    artifact = result["artifacts"][0]
+    assert artifact["handle"].startswith("artifact://camera/")
+    assert artifact["kind"] == "camera.normals"
+    assert artifact["format"] == "npy"
+    assert artifact["mime_type"] == "application/x-npy"
+    encoded = (tmp_path / f"camera-normals-{artifact['id']}.npy").read_bytes()
+    assert encoded.startswith(b"\x93NUMPY\x01\x00")
+    assert encoded.endswith(payload)
+    assert artifact["sha256"] == hashlib.sha256(encoded).hexdigest()
+    assert sensors._decode_npy_header(encoded)["shape"] == (2, 2, 3)
+    assert sensors._decode_npy_header(encoded)["descr"] == "<f4"
+
+
+def test_camera_output_inline_returns_raw_bytes_and_enforces_limit():
+    payload = b"\x01\x00\x00\x00" * 4
+    adapter = _CameraOutputAdapter(_TypedFrame((2, 2, 1), "uint32", payload))
+
+    result = capture_camera_output(
+        adapter,
+        output_type="instance_segmentation",
+        return_mode="inline",
+        inline_max_bytes=len(payload),
+    )
+    too_large = capture_camera_output(
+        adapter,
+        output_type="instance_segmentation",
+        return_mode="inline",
+        inline_max_bytes=len(payload) - 1,
+    )
+
+    assert base64.b64decode(result["inline"]["data"]) == payload
+    assert result["inline"]["dtype"] == "uint32"
+    assert result["inline"]["shape"] == [2, 2, 1]
+    assert too_large["code"] == "INLINE_SIZE_LIMIT_EXCEEDED"
+
+
+def test_camera_output_rejects_invalid_type_and_shape():
+    adapter = _CameraOutputAdapter(_TypedFrame((2, 2, 3), "float32"))
+
+    invalid = capture_camera_output(adapter, output_type="optical_flow")
+    wrong_shape = capture_camera_output(adapter, output_type="depth", return_mode="metadata")
+
+    assert invalid["code"] == "INVALID_CAMERA_OUTPUT_TYPE"
+    assert wrong_shape["status"] == "error"
+    assert "shape" in wrong_shape["message"]
+
+
+def test_camera_output_reports_capability_error_when_adapter_lacks_annotators():
+    class _Unsupported:
+        def capture_camera_output(self, _prim_path, _annotator):
+            raise NotImplementedError("Camera annotators require Isaac Sim 6.x")
+
+    result = capture_camera_output(_Unsupported(), output_type="normals")
+
+    assert result["status"] == "unsupported"
+    assert result["code"] == "CAMERA_OUTPUT_UNSUPPORTED"
+
+
+def test_camera_calibration_returns_intrinsic_extrinsic_and_units():
+    calibration = {
+        "camera_prim": "/World/Cam",
+        "resolution": {"width": 640, "height": 480},
+        "projection": "perspective",
+        "intrinsic_matrix": [[500.0, 0.0, 320.0], [0.0, 500.0, 240.0], [0.0, 0.0, 1.0]],
+        "camera_to_world": [[1.0, 0.0, 0.0, 0.0]] * 4,
+        "world_to_camera": [[1.0, 0.0, 0.0, 0.0]] * 4,
+        "depth_units": "meters",
+        "stage_units": "meters_per_unit",
+        "meters_per_unit": 1.0,
+    }
+
+    class _CalibrationAdapter:
+        def get_camera_calibration(self, prim_path):
+            assert prim_path == "/World/Cam"
+            return calibration
+
+    result = get_camera_calibration(_CalibrationAdapter(), prim_path="/World/Cam")
+
+    assert result == {"status": "success", "message": "Camera calibration read", "calibration": calibration}
 
 
 # ── V5 camera wrapper reuse ──────────────────────────────────────────────────

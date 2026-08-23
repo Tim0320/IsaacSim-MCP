@@ -54,3 +54,44 @@ def test_capture_image_forwards_return_mode_limit_and_output_path():
             },
         )
     ]
+
+
+def test_capture_camera_output_forwards_typed_annotator_arguments():
+    mcp = _MCP()
+    connection = _Connection()
+    register_tools(mcp, lambda: connection)
+
+    response = json.loads(
+        mcp.tools["capture_camera_output"](
+            prim_path="/World/TestCamera",
+            output_type="normals",
+            output_path="D:/captures/normals.npy",
+            return_mode="artifact",
+            inline_max_bytes=54321,
+        )
+    )
+
+    assert response["status"] == "success"
+    assert connection.calls == [
+        (
+            "sensors.capture_camera_output",
+            {
+                "prim_path": "/World/TestCamera",
+                "output_type": "normals",
+                "return_mode": "artifact",
+                "inline_max_bytes": 54321,
+                "output_path": "D:/captures/normals.npy",
+            },
+        )
+    ]
+
+
+def test_get_camera_calibration_forwards_camera_path():
+    mcp = _MCP()
+    connection = _Connection()
+    register_tools(mcp, lambda: connection)
+
+    response = json.loads(mcp.tools["get_camera_calibration"](prim_path="/World/TestCamera"))
+
+    assert response["status"] == "success"
+    assert connection.calls == [("sensors.get_camera_calibration", {"prim_path": "/World/TestCamera"})]
