@@ -123,6 +123,7 @@ def _install_isaac_stubs() -> None:
         np_stub.float32 = "float32"  # type: ignore[attr-defined]
         np_stub.int32 = "int32"  # type: ignore[attr-defined]
         np_stub.uint8 = "uint8"  # type: ignore[attr-defined]
+        np_stub.uint64 = "uint64"  # type: ignore[attr-defined]
 
         # v6.get_lidar_point_cloud stacks the decoded x/y/z arrays into (N, 3).
         # Enough of a stand-in to exercise that path: a list of rows with

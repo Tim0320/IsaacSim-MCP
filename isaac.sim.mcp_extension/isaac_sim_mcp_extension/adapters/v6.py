@@ -1136,19 +1136,38 @@ class IsaacAdapterV6(IsaacAdapterBase):
         # starts producing data on kit's regular render tick.
         from isaacsim.sensors.experimental.rtx import Lidar, LidarSensor
 
-        lidar = Lidar(path=prim_path)
-        self._lidar_sensors[prim_path] = LidarSensor(path=prim_path, annotators=["generic-model-output"])
+        lidar = Lidar(path=prim_path, aux_output_level="FULL")
+        self._lidar_sensors[prim_path] = LidarSensor(
+            lidar,
+            annotators=["generic-model-output", "stable-id-map"],
+        )
         return lidar
 
     def get_lidar_point_cloud(self, prim_path: str) -> np.ndarray:
+        frame = self.get_lidar_point_cloud_frame(prim_path)
+        return frame["fields"]["points"]["data"]
+
+    def get_lidar_point_cloud_frame(self, prim_path: str) -> Dict[str, Any]:
+        """Decode one V6 GenericModelOutput frame into typed point fields."""
         # 6.0 LidarSensor uses the unified "generic-model-output" annotator;
         # the 5.x `RtxSensorCpu+IsaacComputeRTXLidarPointCloud` chain is gone.
         # See `capture_camera_image` for the caching rationale.
+        import math
+
         from isaacsim.sensors.experimental.rtx import LidarSensor, parse_generic_model_output_data
+
+        try:
+            from isaacsim.sensors.experimental.rtx import parse_object_ids, parse_stable_id_map_data
+        except ImportError:
+            parse_object_ids = None
+            parse_stable_id_map_data = None
 
         sensor = self._lidar_sensors.get(prim_path)
         if sensor is None:
-            sensor = LidarSensor(path=prim_path, annotators=["generic-model-output"])
+            from isaacsim.sensors.experimental.rtx import Lidar
+
+            lidar = Lidar(path=prim_path, aux_output_level="FULL")
+            sensor = LidarSensor(lidar, annotators=["generic-model-output", "stable-id-map"])
             self._lidar_sensors[prim_path] = sensor
         data, info = sensor.get_data("generic-model-output")
         array = None
@@ -1164,7 +1183,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
         # only play_simulation produced data. Requesting one would just make the
         # caller retry forever.
         if array is None or getattr(array, "size", 0) == 0:
-            return np.zeros((0, 3), dtype=np.float32)
+            return self._empty_lidar_frame()
 
         # The "generic-model-output" annotator returns a packed GenericModelOutput
         # struct, not points: a uint8 buffer whose first four bytes are the magic
@@ -1178,11 +1197,120 @@ class IsaacAdapterV6(IsaacAdapterBase):
         gmo = parse_generic_model_output_data(data)
         count = int(getattr(gmo, "numElements", 0) or 0)
         if count <= 0:
-            return np.zeros((0, 3), dtype=np.float32)
-        x = np.asarray(gmo.x)[:count]
-        y = np.asarray(gmo.y)[:count]
-        z = np.asarray(gmo.z)[:count]
-        return np.stack([x, y, z], axis=-1).astype(np.float32)
+            return self._empty_lidar_frame()
+
+        raw_x = list(np.asarray(gmo.x)[:count])
+        raw_y = list(np.asarray(gmo.y)[:count])
+        raw_z = list(np.asarray(gmo.z)[:count])
+        coords_value = getattr(gmo, "elementsCoordsType", "CARTESIAN")
+        coords_name = str(getattr(coords_value, "name", coords_value)).upper()
+        spherical = "SPHERICAL" in coords_name
+
+        if spherical:
+            azimuth = [float(value) for value in raw_x]
+            elevation = [float(value) for value in raw_y]
+            ranges = [float(value) for value in raw_z]
+            point_x = []
+            point_y = []
+            point_z = []
+            for azimuth_deg, elevation_deg, range_m in zip(azimuth, elevation, ranges):
+                azimuth_rad = math.radians(azimuth_deg)
+                elevation_rad = math.radians(elevation_deg)
+                range_xy = range_m * math.cos(elevation_rad)
+                point_x.append(range_xy * math.cos(azimuth_rad))
+                point_y.append(range_xy * math.sin(azimuth_rad))
+                point_z.append(range_m * math.sin(elevation_rad))
+            points = np.stack([point_x, point_y, point_z], axis=-1).astype(np.float32)
+        else:
+            point_x = [float(value) for value in raw_x]
+            point_y = [float(value) for value in raw_y]
+            point_z = [float(value) for value in raw_z]
+            points = np.stack([point_x, point_y, point_z], axis=-1).astype(np.float32)
+            ranges = [math.sqrt(x * x + y * y + z * z) for x, y, z in zip(point_x, point_y, point_z)]
+            azimuth = [math.degrees(math.atan2(y, x)) for x, y in zip(point_x, point_y)]
+            elevation = [
+                math.degrees(math.atan2(z, math.sqrt(x * x + y * y))) for x, y, z in zip(point_x, point_y, point_z)
+            ]
+
+        fields: Dict[str, Dict[str, Any]] = {
+            "points": {"data": points, "dtype": "float32", "units": "meters"},
+            "range": {"data": np.asarray(ranges, dtype=np.float32), "dtype": "float32", "units": "meters"},
+            "azimuth": {"data": np.asarray(azimuth, dtype=np.float32), "dtype": "float32", "units": "degrees"},
+            "elevation": {"data": np.asarray(elevation, dtype=np.float32), "dtype": "float32", "units": "degrees"},
+        }
+        unavailable = ["semantic_id"]
+
+        intensity = getattr(gmo, "scalar", None)
+        if intensity is not None and len(intensity) >= count:
+            fields["intensity"] = {
+                "data": np.asarray(intensity[:count], dtype=np.float32),
+                "dtype": "float32",
+                "units": "normalized_return_strength",
+            }
+        else:
+            unavailable.append("intensity")
+
+        object_id_map: Dict[str, str] = {}
+        object_ids = None
+        if parse_object_ids is not None:
+            try:
+                object_ids = parse_object_ids(gmo.objId)[:count]
+            except Exception:
+                object_ids = None
+        if object_ids is not None and len(object_ids) == count:
+            mask = (1 << 64) - 1
+            fields["object_id_low"] = {
+                "data": np.asarray([int(value) & mask for value in object_ids], dtype=np.uint64),
+                "dtype": "uint64",
+                "units": "stable_object_id_low64",
+            }
+            fields["object_id_high"] = {
+                "data": np.asarray([int(value) >> 64 for value in object_ids], dtype=np.uint64),
+                "dtype": "uint64",
+                "units": "stable_object_id_high64",
+            }
+            if parse_stable_id_map_data is not None:
+                try:
+                    stable_data, _stable_info = sensor.get_data("stable-id-map")
+                    if stable_data is not None and getattr(stable_data, "size", 0) > 0:
+                        stable_map = parse_stable_id_map_data(stable_data)
+                        object_id_map = {f"{int(key):032x}": str(value) for key, value in stable_map.items()}
+                except Exception:
+                    object_id_map = {}
+        else:
+            unavailable.append("object_id")
+
+        frame_value = getattr(gmo, "frameOfReference", "unknown")
+        frame_name = str(getattr(frame_value, "name", frame_value)).lower()
+        try:
+            sensor_pose = self.get_prim_transform(prim_path)
+        except Exception:
+            sensor_pose = None
+
+        return {
+            "fields": fields,
+            "coordinate_type": "spherical" if spherical else "cartesian",
+            "coordinate_frame": frame_name,
+            "sensor_pose": sensor_pose,
+            "sensor_timestamp_ns": int(getattr(gmo, "timestampNs", 0) or 0),
+            "sensor_frame_id": int(getattr(gmo, "frameId", 0) or 0),
+            "object_id_map": object_id_map,
+            "unavailable_fields": unavailable,
+        }
+
+    @staticmethod
+    def _empty_lidar_frame() -> Dict[str, Any]:
+        return {
+            "fields": {
+                "points": {
+                    "data": np.zeros((0, 3), dtype=np.float32),
+                    "dtype": "float32",
+                    "units": "meters",
+                }
+            },
+            "coordinate_frame": "unknown",
+            "unavailable_fields": ["intensity", "range", "azimuth", "elevation", "object_id", "semantic_id"],
+        }
 
     # ── Materials ──────────────────────────────────────────
 

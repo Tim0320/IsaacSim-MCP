@@ -28,11 +28,13 @@ from __future__ import annotations
 import ast
 import base64
 import hashlib
+import io
 import os
 import struct
 import tempfile
 import time
 import uuid
+import zipfile
 import zlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -97,8 +99,9 @@ CAMERA_OUTPUT_SPECS = {
     },
 }
 
-_DTYPE_SIZE = {"float32": 4, "uint32": 4}
-_NPY_DESCR = {"float32": "<f4", "uint32": "<u4"}
+_DTYPE_SIZE = {"float32": 4, "uint32": 4, "uint64": 8, "int64": 8}
+_NPY_DESCR = {"float32": "<f4", "uint32": "<u4", "uint64": "<u8", "int64": "<i8"}
+_STRUCT_FORMAT = {"float32": "<f", "uint32": "<I", "uint64": "<Q", "int64": "<q"}
 
 
 def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
@@ -624,10 +627,201 @@ def create_lidar(
         return {"status": "error", "message": str(e)}
 
 
-def get_point_cloud(adapter: IsaacAdapterBase, prim_path: str = "/World/Lidar") -> Dict[str, Any]:
+def _field_shape(data: Any) -> list[int]:
+    shape = list(getattr(data, "shape", ()))
+    if shape:
+        return [int(value) for value in shape]
+    values = list(data)
+    if values and isinstance(values[0], (list, tuple)):
+        return [len(values), len(values[0])]
+    return [len(values)]
+
+
+def _flatten_values(data: Any) -> list[Any]:
+    values = list(data)
+    if values and isinstance(values[0], (list, tuple)):
+        return [item for row in values for item in row]
+    return values
+
+
+def _field_bytes(data: Any, dtype: str) -> bytes:
+    if hasattr(data, "tobytes"):
+        return data.tobytes(order="C")
+    return b"".join(struct.pack(_STRUCT_FORMAT[dtype], value) for value in _flatten_values(data))
+
+
+def _lidar_metadata(
+    adapter: IsaacAdapterBase,
+    prim_path: str,
+    frame: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, tuple[bytes, list[int], str]]]:
+    fields = frame.get("fields") or {}
+    if "points" not in fields:
+        raise ValueError("Lidar frame is missing the required 'points' field")
+
+    encoded_fields: Dict[str, tuple[bytes, list[int], str]] = {}
+    field_metadata: Dict[str, Any] = {}
+    point_count = None
+    for name, field in fields.items():
+        data = field.get("data")
+        dtype = str(field.get("dtype", ""))
+        if dtype not in _DTYPE_SIZE:
+            raise ValueError(f"Lidar field {name!r} has unsupported dtype {dtype!r}")
+        shape = _field_shape(data)
+        if name == "points" and shape == [0]:
+            shape = [0, 3]
+        if not shape or any(value < 0 for value in shape):
+            raise ValueError(f"Lidar field {name!r} has invalid shape {shape}")
+        if name == "points":
+            if len(shape) != 2 or shape[1] != 3:
+                raise ValueError(f"Lidar points must have shape [N, 3], got {shape}")
+            point_count = shape[0]
+        elif len(shape) != 1:
+            raise ValueError(f"Lidar field {name!r} must have shape [N], got {shape}")
+
+        raw = _field_bytes(data, dtype)
+        elements = 1
+        for dimension in shape:
+            elements *= dimension
+        expected_size = elements * _DTYPE_SIZE[dtype]
+        if len(raw) != expected_size:
+            raise ValueError(f"Lidar field {name!r} byte length mismatch: expected {expected_size}, got {len(raw)}")
+        encoded_fields[name] = (raw, shape, dtype)
+        field_metadata[name] = {
+            "dtype": dtype,
+            "shape": shape,
+            "units": str(field.get("units", "unknown")),
+            "size_bytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        }
+
+    assert point_count is not None
+    for name, metadata in field_metadata.items():
+        if name != "points" and metadata["shape"][0] != point_count:
+            raise ValueError(
+                f"Lidar field {name!r} row count {metadata['shape'][0]} does not match point_count {point_count}"
+            )
+
+    timestamp_ns = time.time_ns()
+    metadata = {
+        "lidar_prim": prim_path,
+        "point_count": point_count,
+        "fields": field_metadata,
+        "coordinate_type": str(frame.get("coordinate_type", "unknown")),
+        "coordinate_frame": str(frame.get("coordinate_frame", "unknown")),
+        "sensor_pose": _json_safe(frame.get("sensor_pose")),
+        "sensor_timestamp_ns": int(frame.get("sensor_timestamp_ns", 0) or 0),
+        "sensor_frame_id": int(frame.get("sensor_frame_id", 0) or 0),
+        "object_id_map": _json_safe(frame.get("object_id_map") or {}),
+        "unavailable_fields": sorted(set(str(value) for value in frame.get("unavailable_fields", []))),
+        "captured_at": datetime.fromtimestamp(timestamp_ns / 1_000_000_000, tz=timezone.utc).isoformat(),
+        "timestamp_ns": timestamp_ns,
+    }
+    metadata.update(_timeline_metadata(adapter))
+    return metadata, encoded_fields
+
+
+def _encode_npz(fields: Dict[str, tuple[bytes, list[int], str]]) -> bytes:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(fields):
+            raw, shape, dtype = fields[name]
+            archive.writestr(f"{name}.npy", _encode_npy(raw, shape, dtype))
+    return output.getvalue()
+
+
+def _write_npz_artifact(encoded: bytes, output_path: Optional[str], metadata: Dict[str, Any]) -> Dict[str, Any]:
+    artifact_id = uuid.uuid4().hex
+    managed = output_path is None
+    if managed:
+        path = _artifact_root() / f"lidar-point-cloud-{artifact_id}.npz"
+    else:
+        path = Path(output_path).expanduser().resolve()
+        if path.suffix.lower() != ".npz":
+            raise ValueError("output_path must end in .npz")
+        if not path.parent.is_dir():
+            raise ValueError(f"output_path parent does not exist: {path.parent}")
+
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     try:
-        pc = adapter.get_lidar_point_cloud(prim_path)
-        point_count = len(pc) if pc is not None else 0
+        temporary.write_bytes(encoded)
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+    return {
+        "id": artifact_id,
+        "handle": f"artifact://lidar/{artifact_id}",
+        "kind": "lidar.point_cloud",
+        "managed": managed,
+        "path": str(path),
+        "format": "npz",
+        "mime_type": "application/zip",
+        "size_bytes": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "lidar_prim": metadata["lidar_prim"],
+        "point_count": metadata["point_count"],
+        "fields": metadata["fields"],
+        "coordinate_frame": metadata["coordinate_frame"],
+        "sensor_timestamp_ns": metadata["sensor_timestamp_ns"],
+        "sensor_frame_id": metadata["sensor_frame_id"],
+    }
+
+
+def get_point_cloud(
+    adapter: IsaacAdapterBase,
+    prim_path: str = "/World/Lidar",
+    output_path: Optional[str] = None,
+    return_mode: str = "artifact",
+    inline_max_bytes: int = DEFAULT_INLINE_MAX_BYTES,
+) -> Dict[str, Any]:
+    if return_mode not in CAMERA_RETURN_MODES:
+        return {
+            "status": "error",
+            "code": "INVALID_RETURN_MODE",
+            "message": f"return_mode must be one of {sorted(CAMERA_RETURN_MODES)}, got {return_mode!r}",
+        }
+    if output_path and return_mode != "artifact":
+        return {
+            "status": "error",
+            "code": "OUTPUT_PATH_REQUIRES_ARTIFACT",
+            "message": "output_path can only be used with return_mode='artifact'",
+        }
+    if return_mode == "inline" and (isinstance(inline_max_bytes, bool) or not isinstance(inline_max_bytes, int)):
+        return {"status": "error", "code": "INVALID_INLINE_LIMIT", "message": "inline_max_bytes must be an integer"}
+    if return_mode == "inline" and not 1 <= inline_max_bytes <= MAX_INLINE_MAX_BYTES:
+        return {
+            "status": "error",
+            "code": "INVALID_INLINE_LIMIT",
+            "message": f"inline_max_bytes must be between 1 and {MAX_INLINE_MAX_BYTES}",
+        }
+
+    try:
+        frame_getter = getattr(adapter, "get_lidar_point_cloud_frame", None)
+        if callable(frame_getter):
+            frame = frame_getter(prim_path)
+        else:
+            frame = {
+                "fields": {
+                    "points": {
+                        "data": adapter.get_lidar_point_cloud(prim_path),
+                        "dtype": "float32",
+                        "units": "meters",
+                    }
+                },
+                "coordinate_frame": "sensor",
+                "unavailable_fields": [
+                    "intensity",
+                    "range",
+                    "azimuth",
+                    "elevation",
+                    "object_id",
+                    "semantic_id",
+                ],
+            }
+        metadata, fields = _lidar_metadata(adapter, prim_path, frame)
+        point_count = metadata["point_count"]
         # An empty return means Replicator has not produced a frame for this
         # sensor, not that the lidar saw nothing. Reporting it as success with
         # "Got 0 points" is indistinguishable from a lidar aimed at empty space.
@@ -640,6 +834,7 @@ def get_point_cloud(adapter: IsaacAdapterBase, prim_path: str = "/World/Lidar") 
             # sensor was still empty, and only play_simulation produced data.
             return {
                 "status": "error",
+                "code": "LIDAR_FRAME_NOT_READY",
                 "message": (
                     f"No lidar frame available from {prim_path}. RTX lidar data is produced by "
                     "Replicator while the timeline runs; a single rendered frame is not enough. "
@@ -647,6 +842,44 @@ def get_point_cloud(adapter: IsaacAdapterBase, prim_path: str = "/World/Lidar") 
                 ),
                 "point_count": 0,
             }
-        return {"status": "success", "message": f"Got {point_count} points", "point_count": point_count}
+        response: Dict[str, Any] = {
+            "status": "success",
+            "message": f"Got {point_count} points",
+            "return_mode": return_mode,
+            "point_count": point_count,
+            "lidar_point_cloud": metadata,
+        }
+        if return_mode == "metadata":
+            return response
+
+        encoded = _encode_npz(fields)
+        if return_mode == "inline":
+            if len(encoded) > inline_max_bytes:
+                return {
+                    "status": "error",
+                    "code": "INLINE_SIZE_LIMIT_EXCEEDED",
+                    "message": f"Encoded NPZ is {len(encoded)} bytes; inline limit is {inline_max_bytes} bytes",
+                    "return_mode": return_mode,
+                    "point_count": point_count,
+                    "lidar_point_cloud": metadata,
+                    "encoded_size_bytes": len(encoded),
+                    "inline_max_bytes": inline_max_bytes,
+                }
+            response["inline"] = {
+                "encoding": "base64",
+                "format": "npz",
+                "mime_type": "application/zip",
+                "size_bytes": len(encoded),
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+                "data": base64.b64encode(encoded).decode("ascii"),
+            }
+            return response
+
+        artifact = _write_npz_artifact(encoded, output_path, metadata)
+        response["message"] = f"Lidar point cloud saved to {artifact['path']}"
+        response["output_path"] = artifact["path"]
+        response["artifact_handle"] = artifact["handle"]
+        response["artifacts"] = [artifact]
+        return response
     except Exception as e:
         return {"status": "error", "message": str(e)}

@@ -1164,3 +1164,77 @@ def test_v6_get_simulation_state_survives_a_missing_stage(monkeypatch):
 
     assert state["timeline_state"] == "stopped"
     assert state["physics_dt"] == 1.0 / 60.0
+
+
+def test_v6_create_lidar_requests_full_auxiliary_output(monkeypatch):
+    """Task 1.3 fields require FULL GMO output and the stable-ID annotator."""
+    captured = {}
+
+    class _Lidar:
+        def __init__(self, path, aux_output_level):
+            captured["path"] = path
+            captured["aux_output_level"] = aux_output_level
+
+    class _LidarSensor:
+        def __init__(self, lidar, annotators):
+            captured["lidar"] = lidar
+            captured["annotators"] = annotators
+
+    rtx_mod = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx_mod.Lidar = _Lidar
+    rtx_mod.LidarSensor = _LidarSensor
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx_mod)
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
+
+    lidar = adapter.create_lidar("/World/TestLidar")
+
+    assert captured["path"] == "/World/TestLidar"
+    assert captured["aux_output_level"] == "FULL"
+    assert captured["lidar"] is lidar
+    assert captured["annotators"] == ["generic-model-output", "stable-id-map"]
+
+
+def test_v6_lidar_spherical_gmo_converts_to_cartesian(monkeypatch):
+    """GMO spherical x/y/z are azimuth/elevation/range, not Cartesian XYZ."""
+
+    class _Data:
+        def numpy(self):
+            return types.SimpleNamespace(size=1)
+
+    gmo = types.SimpleNamespace(
+        numElements=2,
+        x=[0.0, 90.0],
+        y=[0.0, 0.0],
+        z=[2.0, 3.0],
+        elementsCoordsType=types.SimpleNamespace(name="SPHERICAL"),
+        frameOfReference=types.SimpleNamespace(name="SENSOR"),
+        timestampNs=123,
+        frameId=7,
+        scalar=[0.25, 0.75],
+        objId=[],
+    )
+    rtx_mod = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx_mod.LidarSensor = object
+    rtx_mod.parse_generic_model_output_data = lambda _data: gmo
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx_mod)
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
+    adapter._lidar_sensors["/World/TestLidar"] = types.SimpleNamespace(get_data=lambda _annotator: (_Data(), {}))
+    monkeypatch.setattr(
+        adapter,
+        "get_prim_transform",
+        lambda _path: {"position": [0.0, 0.0, 1.0], "rotation": [0.0, 0.0, 0.0]},
+    )
+
+    frame = adapter.get_lidar_point_cloud_frame("/World/TestLidar")
+
+    points = frame["fields"]["points"]["data"]
+    assert points[0] == [2.0, 0.0, 0.0]
+    assert abs(points[1][0]) < 1e-6
+    assert abs(points[1][1] - 3.0) < 1e-6
+    assert points[1][2] == 0.0
+    assert frame["fields"]["range"]["data"] == [2.0, 3.0]
+    assert frame["fields"]["intensity"]["data"] == [0.25, 0.75]
+    assert frame["coordinate_type"] == "spherical"
+    assert frame["coordinate_frame"] == "sensor"
+    assert frame["sensor_timestamp_ns"] == 123
+    assert frame["sensor_frame_id"] == 7

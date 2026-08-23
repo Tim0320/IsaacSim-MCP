@@ -84,6 +84,15 @@ def test_handler_returns_stable_runtime_capability_contract():
         "state": "supported",
         "adapter_generation": 6,
     }
+    assert result["feature_flags"]["lidar.point_cloud"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+        "required_fields": ["points", "range", "azimuth", "elevation"],
+        "optional_fields": ["intensity", "object_id", "semantic_id"],
+        "return_modes": ["metadata", "artifact", "inline"],
+        "artifact_format": "npz",
+        "warmup_required": True,
+    }
     assert result["feature_flags"]["lidar.config"]["state"] == "accepted_not_applied"
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
     assert result["sensor_warmup"]["camera"]["state"] == "per_sensor_unknown"

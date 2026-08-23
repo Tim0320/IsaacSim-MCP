@@ -156,10 +156,14 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
             "state": camera_v6_state,
             "adapter_generation": adapter_generation,
         },
-        "lidar.point_count": {"state": "supported", "warmup_required": True},
-        "lidar.point_cloud_data": {
-            "state": "unsupported",
-            "reason": "the handler discards decoded points and returns point_count only",
+        "lidar.point_cloud": {
+            "state": "supported" if adapter_generation == 6 else "partial",
+            "adapter_generation": adapter_generation,
+            "required_fields": ["points", "range", "azimuth", "elevation"],
+            "optional_fields": ["intensity", "object_id", "semantic_id"],
+            "return_modes": ["metadata", "artifact", "inline"],
+            "artifact_format": "npz",
+            "warmup_required": True,
         },
         "lidar.config": {
             "state": lidar_config_state,

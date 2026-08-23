@@ -34,7 +34,7 @@
 - **多 GPU / PhysX 重點限制**：`/physics/cudaDevice=-1` 已在 Timeline `Stop` 重現 `PhysXGpu_64.dll` native crash。Windows launcher 會偵測當下唯一的 `display_active=Enabled` GPU 並解析成明確 ordinal；判定失敗才警告並 fallback 到 GPU 0。可由 `-PhysicsGpu` 或 `ISAAC_PHYSICS_GPU` 覆寫。此防護只針對 PhysX，renderer multi-GPU 設定不能替代它；Newton 尚未宣稱適用。
 - `capture_image` 支援 `metadata|artifact|inline`；預設回受控 PNG artifact，inline 有 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。
 - `capture_camera_output` 在 V6 支援七種 typed RTX output，預設回受控 `.npy` artifact；inline 傳 raw little-endian bytes，具有相同 1 MiB 預設與 4 MiB hard cap。契約見 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)。
-- `get_lidar_point_cloud` 目前只回 `point_count`，尚未傳回 decoded XYZ points。
+- `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回受控 `.npz` artifact。V6 必有 Cartesian `points`、range、azimuth、elevation，可用時另含 intensity 與 128-bit object ID；semantic ID 目前明確列為 unavailable。契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。
 - V6 `create_lidar(config=...)` 接受參數，但尚未 author 對應 RTX LiDAR schema attributes。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
 - Robot named tools 支援 joint position；velocity、effort、IK 與 trajectory 尚未支援。
@@ -81,6 +81,16 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - read-back：已知 cube 的非零 depth/normals、semantic label 與 instance prim path 可在 annotator data/info 讀回
 - calibration：`64x48` resolution、pinhole intrinsic、camera-to-world/world-to-camera、projection 與 units 驗證通過
 - lifecycle：Play transition 明確 commit；Play 中不排程會觸發 Stop 的 fallback render；scratch prim 已清除
+
+2026-08-23 完成 LiDAR point cloud live 驗證：
+
+- scratch LiDAR/targets：`/World/MCP_Task_1_3_Lidar` 與四個 cardinal-direction cube，建立與 transform read-back 成功
+- runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX
+- frame：134,880 points；Cartesian XYZ、range、azimuth、elevation、intensity、object-ID high/low 全數 row count 一致
+- contract：dtype、shape、units、每個 raw field SHA-256 與 `.npz` artifact SHA-256 驗證通過
+- coordinates：原始 spherical GMO 正確轉 Cartesian meters；frame=`sensor`、sensor timestamp/frame 與 pose `[0,0,1]` 可讀回
+- object read-back：stable ID 成功解析至 `/World/MCP_Task_1_3_Target_YN`；semantic ID 目前明確 unavailable
+- lifecycle：Play 暖機、capture、Stop 後 Kit/8766 仍存活；沒有新增 native dump；scratch prim 全數清除
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

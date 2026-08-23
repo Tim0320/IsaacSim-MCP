@@ -95,3 +95,31 @@ def test_get_camera_calibration_forwards_camera_path():
 
     assert response["status"] == "success"
     assert connection.calls == [("sensors.get_camera_calibration", {"prim_path": "/World/TestCamera"})]
+
+
+def test_get_lidar_point_cloud_forwards_transfer_contract():
+    mcp = _MCP()
+    connection = _Connection()
+    register_tools(mcp, lambda: connection)
+
+    response = json.loads(
+        mcp.tools["get_lidar_point_cloud"](
+            prim_path="/World/TestLidar",
+            output_path="D:/captures/cloud.npz",
+            return_mode="artifact",
+            inline_max_bytes=123456,
+        )
+    )
+
+    assert response["status"] == "success"
+    assert connection.calls == [
+        (
+            "sensors.get_point_cloud",
+            {
+                "prim_path": "/World/TestLidar",
+                "return_mode": "artifact",
+                "inline_max_bytes": 123456,
+                "output_path": "D:/captures/cloud.npz",
+            },
+        )
+    ]

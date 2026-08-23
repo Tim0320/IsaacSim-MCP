@@ -102,11 +102,16 @@
   > 離線驗收：Task 1.2 focused tests `74 passed, 1 deselected`；排除 live/destructive 與本 sandbox Git-for-Windows shell 問題的 suite `193 passed, 1 deselected`；Ruff、format check、`git diff --check` 通過。完整 suite 另有既有 backup-script tests `2` 項因 sandbox 的 `git-submodule` 找不到 `git-sh-setup` 失敗，與 Camera 變更無關。
   > 驗證腳本：`scripts/verify_camera_outputs_live.py`。完整輸出契約：`docs/CAMERA_OUTPUTS.md`。
 
-- [ ] 3. LiDAR point cloud 資料回傳
+- [x] 3. LiDAR point cloud 資料回傳
   > 現況（已確認）：V6 adapter 已能取得 point cloud，但 handler 最後只回傳 `point_count`，XYZ points 被丟棄。
   > 缺漏位置：`handlers/sensors.py:126-146`、`adapters/v6.py` 的 RTX LiDAR 讀取路徑、`tools/sensors.py` response schema。
   > 實作：輸出 XYZ，並在可用時加入 intensity、range、azimuth、elevation、object/semantic ID；大型資料存 `.npy`、`.npz` 或 PCD artifact。
   > 驗收：warm-up 後 point count 大於 0；artifact row count 等於 `point_count`，座標系、units、timestamp、sensor pose 可讀回。
+  > 已實作：`get_lidar_point_cloud` 支援 `metadata|artifact|inline`，預設回受控 `.npz`；fields 內含 Cartesian `points`、range、azimuth、elevation，以及 GMO 可用時的 intensity 與 128-bit object ID high/low。每個 `.npy` member 都有 dtype、shape、units、size 與 raw SHA-256；semantic ID 無 direct GMO field，因此明確列為 unavailable。
+  > V6 修正：以 `FULL` auxiliary output 建立 LiDAR，掛載 `generic-model-output` 與 `stable-id-map` annotators；依官方公式把 GMO spherical azimuth/elevation/range 轉成 Cartesian meters，避免把角度與距離誤標為 XYZ。
+  > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；取得 134,880 points，七個 fields 的 row count、dtype/shape/units、raw hashes 與 NPZ hash 全數通過。coordinate frame=`sensor`、timestamp/frame、pose `[0,0,1]` 可讀回；stable object ID 成功解析到已知 scratch cube；Play、Stop 後 Kit/8766 存活，沒有新增 native dump，scratch prim 全數清除。
+  > 離線驗收：Task 1.3 focused tests `72 passed, 1 deselected`；排除 live、固定 `C:\isaacsim` version-negative case 與缺少 `/bin/bash` 的 Unix launcher tests 後，專案 suite `201 passed, 1 deselected`；Ruff 與 `git diff --check` 通過。
+  > 驗證腳本：`scripts/verify_lidar_point_cloud_live.py`。完整輸出契約：`docs/LIDAR_POINT_CLOUD.md`。
 
 - [ ] 4. LiDAR `config` 真正套用到 Isaac Sim 6.0.1
   > 現況（已確認）：建立 LiDAR 時接受 `config`，V6 路徑目前主要以 `Lidar(path=prim_path)` 建立，輸入設定沒有完整映射與 read-back。

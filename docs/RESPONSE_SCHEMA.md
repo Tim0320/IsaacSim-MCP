@@ -57,4 +57,4 @@ IsaacSim-MCP 的 48 個 named tools 統一回傳 JSON text，解碼後固定包�
 
 rolling upgrade 期間，MCP Server 仍可接收舊 extension 的 `{status, result}` response，並在回給 client 前轉成 schema 1.0。
 
-Camera RGB artifact 已使用此欄位，包含 handle、resolved path、PNG SHA-256、dimensions、dtype、frame 與 timestamp。詳見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。
+Camera 與 LiDAR artifact 已使用此欄位。Camera 契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md) 與 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)；LiDAR `.npz`、typed fields 與 per-field hash 契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。

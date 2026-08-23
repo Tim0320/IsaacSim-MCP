@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — typed RTX LiDAR point clouds
+
+- Expanded `get_lidar_point_cloud` from a point count into a bounded transfer
+  contract with metadata, controlled `.npz` artifacts, and size-limited inline
+  output. Each artifact stores typed `.npy` arrays for Cartesian XYZ, range,
+  azimuth, elevation, and available auxiliary fields with per-field hashes.
+- Isaac Sim 6 GMO spherical azimuth/elevation/range data is now converted to
+  Cartesian meters instead of being mislabeled as XYZ. Responses also expose
+  coordinate type/frame, sensor timestamp/frame, sensor pose, stable 128-bit
+  object IDs and their prim map when available; unavailable fields are explicit.
+- V6 LiDAR wrappers request `FULL` auxiliary output and attach both
+  `generic-model-output` and `stable-id-map` annotators.
+
 ### Added — typed RTX camera outputs and calibration
 
 - Added `capture_camera_output` for depth, distance-to-image-plane,

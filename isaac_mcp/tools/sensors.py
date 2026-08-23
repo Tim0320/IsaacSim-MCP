@@ -165,15 +165,30 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps({"status": "error", "message": str(e)})
 
     @mcp.tool("get_lidar_point_cloud")
-    def get_lidar_point_cloud(prim_path: str = "/World/Lidar") -> str:
-        """Get point cloud data from a lidar sensor.
+    def get_lidar_point_cloud(
+        prim_path: str = "/World/Lidar",
+        output_path: Optional[str] = None,
+        return_mode: str = "artifact",
+        inline_max_bytes: int = 1024 * 1024,
+    ) -> str:
+        """Get typed point cloud fields from a lidar sensor.
 
         Args:
             prim_path: Prim path of the lidar sensor.
+            output_path: Optional explicit .npz path for artifact mode.
+            return_mode: metadata, artifact, or inline. Defaults to artifact.
+            inline_max_bytes: Maximum encoded NPZ bytes allowed in inline mode.
         """
         try:
             conn = get_connection()
-            result = conn.send_command("sensors.get_point_cloud", {"prim_path": prim_path})
+            params = {
+                "prim_path": prim_path,
+                "return_mode": return_mode,
+                "inline_max_bytes": inline_max_bytes,
+            }
+            if output_path:
+                params["output_path"] = output_path
+            result = conn.send_command("sensors.get_point_cloud", params)
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})

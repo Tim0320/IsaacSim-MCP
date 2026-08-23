@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import struct
+import zipfile
 
 from isaac_sim_mcp_extension.handlers.sensors import capture_camera_output, capture_image, get_camera_calibration
 
@@ -485,10 +487,75 @@ def test_lidar_reports_an_error_when_no_frame_is_available():
 def test_lidar_success_reports_the_point_count():
     from isaac_sim_mcp_extension.handlers.sensors import get_point_cloud
 
-    result = get_point_cloud(_LidarAdapter([(0, 0, 0)] * 7), prim_path="/World/Lidar")
+    result = get_point_cloud(
+        _LidarAdapter([(0, 0, 0)] * 7),
+        prim_path="/World/Lidar",
+        return_mode="metadata",
+    )
 
     assert result["status"] == "success"
     assert result["point_count"] == 7
+
+
+class _LidarFrameAdapter:
+    def get_lidar_point_cloud_frame(self, prim_path):
+        points = struct.pack("<ffffff", 1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+        ranges = struct.pack("<ff", 3.7416575, 8.774964)
+        intensity = struct.pack("<ff", 0.25, 0.75)
+        return {
+            "fields": {
+                "points": {"data": _TypedFrame((2, 3), "float32", points), "dtype": "float32", "units": "meters"},
+                "range": {"data": _TypedFrame((2,), "float32", ranges), "dtype": "float32", "units": "meters"},
+                "intensity": {
+                    "data": _TypedFrame((2,), "float32", intensity),
+                    "dtype": "float32",
+                    "units": "normalized_return_strength",
+                },
+            },
+            "coordinate_type": "cartesian",
+            "coordinate_frame": "world",
+            "sensor_pose": {"position": [1.0, 2.0, 3.0]},
+            "sensor_timestamp_ns": 123456789,
+            "sensor_frame_id": 12,
+            "object_id_map": {"00000000000000000000000000000001": "/World/Box"},
+            "unavailable_fields": ["semantic_id"],
+        }
+
+
+def test_lidar_artifact_contains_typed_npz_fields(tmp_path, monkeypatch):
+    from isaac_sim_mcp_extension.handlers import sensors
+
+    monkeypatch.setenv("ISAAC_MCP_ARTIFACT_ROOT", str(tmp_path))
+    result = sensors.get_point_cloud(_LidarFrameAdapter(), prim_path="/World/Lidar")
+
+    assert result["status"] == "success"
+    assert result["point_count"] == 2
+    metadata = result["lidar_point_cloud"]
+    assert metadata["coordinate_frame"] == "world"
+    assert metadata["sensor_pose"] == {"position": [1.0, 2.0, 3.0]}
+    assert metadata["sensor_timestamp_ns"] == 123456789
+    artifact = result["artifacts"][0]
+    assert artifact["format"] == "npz"
+    assert artifact["point_count"] == 2
+    with zipfile.ZipFile(artifact["path"]) as archive:
+        assert sorted(archive.namelist()) == ["intensity.npy", "points.npy", "range.npy"]
+        points_npy = archive.read("points.npy")
+    assert sensors._decode_npy_header(points_npy) == {
+        "descr": "<f4",
+        "fortran_order": False,
+        "shape": (2, 3),
+    }
+
+
+def test_lidar_inline_enforces_encoded_size_limit():
+    from isaac_sim_mcp_extension.handlers.sensors import get_point_cloud
+
+    success = get_point_cloud(_LidarFrameAdapter(), return_mode="inline", inline_max_bytes=4096)
+    too_large = get_point_cloud(_LidarFrameAdapter(), return_mode="inline", inline_max_bytes=1)
+
+    assert success["status"] == "success"
+    assert base64.b64decode(success["inline"]["data"]).startswith(b"PK")
+    assert too_large["code"] == "INLINE_SIZE_LIMIT_EXCEEDED"
 
 
 def test_lidar_does_not_promise_that_retrying_will_work():

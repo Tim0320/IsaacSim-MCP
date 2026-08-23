@@ -246,6 +246,7 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 - `step_simulation` 只能在暫停或停止狀態使用；播放中會明確拒絕。
 - Action Graph 使用 `execution` evaluator，只有 timeline 播放時執行。
 - Camera 與 LiDAR 建立後需要播放並暖機數個 frame 才會產生資料。
+- `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回傳包含 typed `.npy` fields 的 `.npz` artifact。完整契約見 [`docs/LIDAR_POINT_CLOUD.md`](docs/LIDAR_POINT_CLOUD.md)。
 - `set_physics_params` 目前直接支援 `gravity`；`time_step` 與 `gpu_enabled` 需使用 `execute_script`。
 - `edit_action_graph` 可修改一般 attribute 與新增連線；修改 inline `ScriptNode.inputs:script` 在 6.0.1 仍有限制。
 - 載入含 non-manifold collision 的資產可能使 PhysX native plugin 崩潰。先在乾淨 Stage 驗證資產與碰撞設定。

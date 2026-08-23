@@ -260,6 +260,32 @@ class IsaacAdapterBase(ABC):
         """Get point cloud data from a lidar sensor."""
         ...
 
+    def get_lidar_point_cloud_frame(self, prim_path: str) -> Dict[str, Any]:
+        """Get point fields plus sensor/frame metadata.
+
+        Older adapters expose XYZ only. The default preserves that support while
+        V6 overrides this method with GenericModelOutput auxiliary fields.
+        """
+        points = self.get_lidar_point_cloud(prim_path)
+        return {
+            "fields": {
+                "points": {
+                    "data": points,
+                    "dtype": "float32",
+                    "units": "meters",
+                }
+            },
+            "coordinate_frame": "sensor",
+            "unavailable_fields": [
+                "intensity",
+                "range",
+                "azimuth",
+                "elevation",
+                "object_id",
+                "semantic_id",
+            ],
+        }
+
     # ── Materials ──────────────────────────────────────────
 
     @abstractmethod
