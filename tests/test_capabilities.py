@@ -151,6 +151,27 @@ def test_handler_returns_stable_runtime_capability_contract():
         "atomic_validation": True,
         "readback": True,
     }
+    assert result["feature_flags"]["robot.joint_drive_config"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+        "backend": "physx",
+        "backend_verification": "verified",
+        "tool": "set_joint_drive_config",
+        "read_tool": "get_joint_config",
+        "fields": {
+            "stiffness": "supported",
+            "damping": "supported",
+            "max_force": "supported",
+            "max_velocity": "supported",
+            "drive_type": "supported",
+        },
+        "drive_types": ["force", "acceleration"],
+        "subset_selectors": ["joint_names", "joint_indices"],
+        "requires_stopped_timeline": True,
+        "atomic_validation": True,
+        "rollback_on_apply_error": True,
+        "readback": True,
+    }
     assert result["feature_flags"]["robot.joint_effort"]["renew_each_update"] is True
     assert "create_lidar" not in result["unsupported_arguments"]
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
@@ -189,7 +210,28 @@ def test_v5_reports_physx_and_supported_lidar_config():
     assert result["feature_flags"]["lidar.config"]["generic_schema_config"] is False
     assert result["feature_flags"]["robot.joint_state"]["state"] == "partial"
     assert result["feature_flags"]["robot.joint_command"]["state"] == "unsupported"
+    assert result["feature_flags"]["robot.joint_drive_config"]["state"] == "unsupported"
     assert result["unsupported_arguments"]["create_lidar"]["horizontal_fov_deg"]["state"] == "unsupported"
+
+
+def test_newton_reports_physx_only_max_velocity_and_unverified_drive_fields():
+    class _AdapterV6Newton(_AdapterV6):
+        def get_simulation_state(self):
+            return {"engine": "newton", "isaacsim_version": "6.0.1-rc.7"}
+
+    result = get_capabilities(_AdapterV6Newton(), {}, extension_manager=_ExtensionManager())
+    feature = result["feature_flags"]["robot.joint_drive_config"]
+
+    assert feature["state"] == "partial"
+    assert feature["backend"] == "newton"
+    assert feature["backend_verification"] == "unverified"
+    assert feature["fields"] == {
+        "stiffness": "unverified",
+        "damping": "unverified",
+        "max_force": "unverified",
+        "max_velocity": "unsupported",
+        "drive_type": "unverified",
+    }
 
 
 def test_tool_adds_mcp_server_metadata_and_uses_system_command():

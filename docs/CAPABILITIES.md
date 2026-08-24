@@ -39,7 +39,7 @@
 - V6 `create_lidar` 支援 named preset，或以 FOV、角解析度、rotation rate 與 range 建立 generic RTX LiDAR；兩種模式不可混用。`get_lidar_config` 會從 USD Core schema 讀回有效值與 raw attributes。契約見 [`LIDAR_CONFIG.md`](LIDAR_CONFIG.md)。
 - `delete_sensor` 會完整 teardown Camera/LiDAR runtime，刪除 prim，等待 Kit updates，再驗證 prim、RenderProduct、cache 與 LiDAR metadata 均不存在。timeline 必須處於 Pause 或 Stop；`delete_object` 遇到 managed sensor 會走相同流程。契約見 [`SENSOR_LIFECYCLE.md`](SENSOR_LIFECYCLE.md)。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
-- Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。V5 僅保留 position，IK 與 trajectory 尚未支援。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md)。
+- Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。Drive config 可在 stopped timeline 原子寫入 gains、max force/velocity 與 force/acceleration type，並 rollback 失敗寫入。V5 不支援 typed drive setter；Newton 的 max velocity 明確不支援，其餘 drive 欄位維持 unverified。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md) 與 [`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md)。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
 - Newton 只有實際通過 live matrix 的項目才能標為 verified。
 
@@ -125,6 +125,15 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - atomicity：不存在的 joint name 回 `JOINT_NOT_FOUND`、`applied=false`，命令前後三種 targets 完全一致
 - lifecycle：Play 前 stale tensor wrapper 會重綁目前 SimulationView；cleanup 先 Stop 再刪 articulation，scratch prim read-back absent
 - runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；Kit PID/TCP `8766` 存活，fixed physics GPU 對應 active display GPU，run-scoped log 無 warning/error，新增 native dump `0`
+
+2026-08-24 完成 Robot joint drive config live 驗證：
+
+- registry：57 extension commands；`set_joint_drive_config` 已註冊，PhysX 五個欄位均為 supported/verified
+- fixture：`/World/MCP_Task_2_2_Robot` Franka，9 DOF；選定 `panda_joint1` 以 name subset 寫入
+- read-back：stiffness `20626.48047`、damping `4125.29639`、max force `78.300003`、max velocity `1.5`、drive type `acceleration`，與 requested 值符合 float32 容差
+- atomicity：負值、未知 joint、active timeline 均回穩定拒絕且 `applied=false`，五欄 snapshot 不變
+- backend：`max_velocity` 透過 `PhysxJointAPI`，Newton 明確 unsupported；Newton 其餘 USD DriveAPI 欄位維持 unverified
+- lifecycle：timeline stopped、scratch prim absent、Kit PID/TCP `8766` 存活、GPU 0 為唯一 active display GPU、error-like log `0`、新增 native dump `0`
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

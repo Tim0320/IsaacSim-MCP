@@ -29,7 +29,7 @@ import math
 import traceback
 from typing import Any, Dict, List, Optional, Sequence
 
-from ..adapters.base import IsaacAdapterBase
+from ..adapters.base import IsaacAdapterBase, JointDriveConfigApplyError
 
 # Hardcoded fallback — used only if live discovery fails.
 # Keys are lowercase robot names, asset_path is relative to the assets root.
@@ -124,6 +124,7 @@ def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["robots.get_joints"] = lambda **p: get_joints(adapter, **p)
     registry["robots.get_joint_state"] = lambda **p: get_joint_state(adapter, **p)
     registry["robots.set_joint_command"] = lambda **p: set_joint_command(adapter, **p)
+    registry["robots.set_joint_drive_config"] = lambda **p: set_joint_drive_config(adapter, **p)
 
 
 def create(
@@ -440,3 +441,145 @@ def set_joint_command(
         }
     except Exception as exc:
         return _error("JOINT_COMMAND_FAILED", str(exc))
+
+
+_DRIVE_NUMERIC_FIELDS = ("stiffness", "damping", "max_force", "max_velocity")
+_DRIVE_TYPES = {"force", "acceleration"}
+_FLOAT32_MAX = 3.4028234663852886e38
+
+
+def _selected_drive_config(raw_config: Dict[str, Any], selected_indices: Sequence[int]) -> Dict[str, Any]:
+    joints = list(raw_config.get("joints") or [])
+    by_index = {joint.get("index"): joint for joint in joints}
+    missing = [index for index in selected_indices if index not in by_index]
+    if missing:
+        raise ValueError(f"Drive read-back is missing DOF indices: {missing}")
+    return {
+        "prim_path": raw_config.get("prim_path"),
+        "joint_count": raw_config.get("joint_count", len(joints)),
+        "selection_count": len(selected_indices),
+        "joints": [by_index[index] for index in selected_indices],
+    }
+
+
+def set_joint_drive_config(
+    adapter: IsaacAdapterBase,
+    prim_path: Optional[str] = None,
+    stiffness: Optional[float] = None,
+    damping: Optional[float] = None,
+    max_force: Optional[float] = None,
+    max_velocity: Optional[float] = None,
+    drive_type: Optional[str] = None,
+    joint_names: Optional[Sequence[str]] = None,
+    joint_indices: Optional[Sequence[int]] = None,
+) -> Dict[str, Any]:
+    if not prim_path:
+        return _error("INVALID_ARGUMENT", "prim_path is required")
+
+    raw_config = {
+        "stiffness": stiffness,
+        "damping": damping,
+        "max_force": max_force,
+        "max_velocity": max_velocity,
+        "drive_type": drive_type,
+    }
+    if all(value is None for value in raw_config.values()):
+        return _error("EMPTY_JOINT_DRIVE_CONFIG", "At least one drive configuration field is required")
+
+    config: Dict[str, Any] = {}
+    for field in _DRIVE_NUMERIC_FIELDS:
+        value = raw_config[field]
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            return _error("INVALID_JOINT_DRIVE_VALUE", f"{field} must be a finite non-negative number")
+        try:
+            normalized = float(value)
+        except (TypeError, ValueError):
+            return _error("INVALID_JOINT_DRIVE_VALUE", f"{field} must be a finite non-negative number")
+        if not math.isfinite(normalized) or normalized < 0 or normalized > _FLOAT32_MAX:
+            return _error(
+                "INVALID_JOINT_DRIVE_VALUE",
+                f"{field} must be a finite number in the range 0..{_FLOAT32_MAX}",
+            )
+        config[field] = normalized
+
+    if drive_type is not None:
+        normalized_drive_type = str(drive_type).strip().lower()
+        if normalized_drive_type not in _DRIVE_TYPES:
+            return _error("INVALID_JOINT_DRIVE_TYPE", f"drive_type must be one of {sorted(_DRIVE_TYPES)}")
+        config["drive_type"] = normalized_drive_type
+
+    try:
+        simulation_state = adapter.get_simulation_state()
+        timeline_state = str(simulation_state.get("timeline_state", "unknown")).lower()
+        if timeline_state != "stopped":
+            return _error(
+                "JOINT_DRIVE_TIMELINE_ACTIVE",
+                f"Drive configuration requires a stopped timeline; current state is {timeline_state}",
+            )
+        engine = str(simulation_state.get("engine", "unknown")).lower()
+        if engine == "newton" and "max_velocity" in config:
+            return {
+                "status": "unsupported",
+                "code": "JOINT_DRIVE_FIELD_UNSUPPORTED",
+                "message": "max_velocity uses PhysxJointAPI and is unavailable under Newton",
+                "applied": False,
+            }
+
+        info = adapter.get_robot_joint_info(prim_path)
+        available_names = list(info.get("joint_names") or [])
+        if not available_names:
+            return _error("JOINT_STATE_UNAVAILABLE", f"No articulation DOFs found at {prim_path}")
+        selected, error = _resolve_joint_indices(
+            available_names,
+            joint_names=joint_names,
+            joint_indices=joint_indices,
+        )
+        if error:
+            return error
+        assert selected is not None
+
+        adapter.set_joint_drive_config(prim_path, config, selected)
+        try:
+            readback = _selected_drive_config(adapter.get_joint_drive_config(prim_path), selected)
+        except Exception as exc:
+            return {
+                "status": "partial",
+                "code": "JOINT_DRIVE_READBACK_FAILED",
+                "message": f"Drive configuration was applied, but read-back failed: {exc}",
+                "applied": True,
+                "prim_path": prim_path,
+                "config": config,
+                "joint_indices": selected,
+                "joint_names": [available_names[index] for index in selected],
+            }
+        return {
+            "status": "success",
+            "message": f"Updated drive configuration on {len(selected)} joint(s) at {prim_path}",
+            "applied": True,
+            "prim_path": prim_path,
+            "config": config,
+            "joint_indices": selected,
+            "joint_names": [available_names[index] for index in selected],
+            "readback": readback,
+        }
+    except NotImplementedError as exc:
+        return {
+            "status": "unsupported",
+            "code": "JOINT_DRIVE_CONFIG_UNSUPPORTED",
+            "message": str(exc),
+            "applied": False,
+        }
+    except JointDriveConfigApplyError as exc:
+        if exc.rollback_succeeded:
+            return _error("JOINT_DRIVE_CONFIG_FAILED", str(exc))
+        return {
+            "status": "partial",
+            "code": "JOINT_DRIVE_ROLLBACK_FAILED",
+            "message": str(exc),
+            "applied": None,
+            "rollback_succeeded": False,
+        }
+    except Exception as exc:
+        return _error("JOINT_DRIVE_CONFIG_FAILED", str(exc))

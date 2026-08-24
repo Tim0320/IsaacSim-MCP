@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — atomic V6 joint drive configuration
+
+- Added `set_joint_drive_config` for stiffness, damping, maximum effort,
+  maximum velocity, and force/acceleration drive type with name/index subsets.
+- Drive writes require a stopped timeline, validate every field before apply,
+  snapshot selected values, rollback already-written fields on failure, and
+  return typed SI-unit read-back through `get_joint_config`.
+- Capability discovery now separates verified PhysX fields from Newton's
+  unverified USD DriveAPI fields and PhysX-only maximum velocity.
+- Added an isolated Franka verifier for before/after values, invalid request
+  atomicity, active-timeline rejection, cleanup, logs, and native dumps.
+- The Isaac Sim 6.0.1 PhysX live run passed all five fields on `panda_joint1`,
+  three pre-apply rejection paths, scratch cleanup, process/port survival,
+  active-display GPU selection, log review, and native-dump review.
+
 ### Added — complete V6 joint state and command modes
 
 - Added `get_joint_state` for joint name/index mapping, measured position,

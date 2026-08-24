@@ -45,6 +45,14 @@ class SensorLifecycleError(RuntimeError):
         self.report = report or {}
 
 
+class JointDriveConfigApplyError(RuntimeError):
+    """A drive write failed after apply began, with explicit rollback status."""
+
+    def __init__(self, message: str, *, rollback_succeeded: bool) -> None:
+        super().__init__(message)
+        self.rollback_succeeded = rollback_succeeded
+
+
 class IsaacAdapterBase(ABC):
     """Abstract interface that isolates all Isaac Sim version-specific API calls.
 
@@ -203,6 +211,19 @@ class IsaacAdapterBase(ABC):
             self.set_joint_positions(prim_path, values, joint_indices)
             return
         raise NotImplementedError(f"Joint command mode '{mode}' requires the Isaac Sim 6.x adapter")
+
+    def get_joint_drive_config(self, prim_path: str) -> Dict[str, Any]:
+        """Return typed drive gains, limits, and drive modes in runtime units."""
+        raise NotImplementedError("Joint drive configuration requires the Isaac Sim 6.x adapter")
+
+    def set_joint_drive_config(
+        self,
+        prim_path: str,
+        config: Dict[str, Any],
+        joint_indices: Optional[List[int]] = None,
+    ) -> None:
+        """Atomically apply one validated drive configuration to selected DOFs."""
+        raise NotImplementedError("Joint drive configuration requires the Isaac Sim 6.x adapter")
 
     @abstractmethod
     def get_joint_config(self, prim_path: str) -> Dict[str, Any]:

@@ -157,11 +157,17 @@
   > lifecycle／安全證據：Play 前快取的 stale tensor wrapper 會自動淘汰並重綁目前 SimulationView；cleanup 必須先 Stop 再刪 articulation，避免 Pause 中刪除使 PhysX tensor view 失效。scratch robot read-back 為 absent，timeline=`stopped`，Kit PID `2008`／TCP `8766` 存活，`/physics/cudaDevice=0` 對應唯一 active display GPU，當次 run-scoped log 無 warning/error，新增 native dump `0`。
   > 驗證腳本與契約：`scripts/verify_robot_joint_control_live.py`、`docs/ROBOT_JOINT_CONTROL.md`。
 
-- [ ] 8. Drive gains、limits 與控制器參數寫入
+- [x] 8. Drive gains、limits 與控制器參數寫入
   > 現況：joint/drive 設定讀取能力高於寫入能力，缺 stiffness、damping、max force、velocity、drive type 的 typed setter。
   > 缺漏位置：robot tool/handler、USD drive schema adapter。
   > 實作：新增 `set_joint_drive_config`，支援 atomic validate-then-apply 與完整 read-back。
   > 驗收：修改前後讀回一致；輸入超出限制時不留下半套用狀態；PhysX/Newton 支援差異要出現在 capability。
+  > 已實作：支援 stiffness、damping、max force、max velocity、force/acceleration drive type 與 name/index subset。timeline 必須為 stopped；所有 selector、enum 與 float32 有限非負範圍先驗證。Adapter 對每個 USD attribute 保存 authored/value snapshot，失敗時反向 rollback；rollback 失敗會回 partial 與 unknown applied state。
+  > API／units：stopped setter 直接 author `UsdPhysics.DriveAPI` 與 PhysX-only `PhysxSchema.PhysxJointAPI`，避免 experimental tensor setter silent no-op；read-back 以 V6 Articulation API 正規化 revolute per-degree USD gains 為 per-radian SI units。
+  > backend：目前 PhysX 五欄 supported/verified；Newton 的 `max_velocity` unsupported，其餘 USD DriveAPI 欄位標為 unverified，未宣稱 live 支援。
+  > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、57 commands。Franka 9 DOF 的 `panda_joint1` 由 stiffness/damping/max force/max velocity/drive type=`22918.3125/4583.6626/87/2.175/force` 改為 requested `20626.48125/4125.29634/78.3/1.5/acceleration`；read-back=`20626.48047/4125.29639/78.300003/1.5/acceleration`，符合 float32 容差。
+  > atomic／lifecycle：負 stiffness、未知 joint name 與 Play 中寫入均在 apply 前拒絕，前後五欄 snapshot 完全一致；scratch prim absent、timeline stopped、Kit PID `22232`／TCP `8766` 存活、`cudaDevice=0` 對應唯一 active display GPU、run-scoped error-like log `0`、新增 native dump `0`。
+  > 驗證腳本與契約：`scripts/verify_robot_joint_drive_config_live.py`、`docs/ROBOT_JOINT_DRIVE_CONFIG.md`。
 
 - [ ] 9. IK、trajectory、motion planning 與 controller lifecycle
   > 現況：沒有 named tool 可建立/選擇 controller、求 IK、產生 trajectory、執行、暫停、取消與查詢 job。

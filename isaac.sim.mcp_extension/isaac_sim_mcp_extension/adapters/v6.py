@@ -25,11 +25,12 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .base import IsaacAdapterBase
+from .base import IsaacAdapterBase, JointDriveConfigApplyError
 from .transforms import read_transform, set_transform
 from .units import limit_units, normalize_limit
 from .version import version_string
@@ -779,6 +780,202 @@ class IsaacAdapterV6(IsaacAdapterBase):
         else:
             raise ValueError(f"Unsupported joint command mode: {mode}")
 
+    @staticmethod
+    def _drive_units(joint_type: str) -> Dict[str, str]:
+        if joint_type == "revolute":
+            return {
+                "stiffness": "newton_meters_per_radian",
+                "damping": "newton_meter_seconds_per_radian",
+                "max_force": "newton_meters",
+                "max_velocity": "radians_per_second",
+            }
+        if joint_type == "prismatic":
+            return {
+                "stiffness": "newtons_per_meter",
+                "damping": "newton_seconds_per_meter",
+                "max_force": "newtons",
+                "max_velocity": "meters_per_second",
+            }
+        return {field: "unknown" for field in ("stiffness", "damping", "max_force", "max_velocity")}
+
+    def _drive_config_articulation(self, prim_path: str) -> Any:
+        """Return a fresh USD-backed wrapper, avoiding stale tensor-view caches."""
+        from isaacsim.core.experimental.prims import Articulation
+
+        stage = self.get_stage()
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+        art = Articulation(paths=[prim_path])
+        if not art.valid:
+            raise ValueError(f"Invalid articulation at {prim_path}")
+        return art
+
+    def get_joint_drive_config(self, prim_path: str) -> Dict[str, Any]:
+        """Read typed drive configuration using the V6 Articulation USD backend."""
+        self._ensure_physics_world()
+        art = self._drive_config_articulation(prim_path)
+        names = list(art.dof_names or [])
+        types = [self._joint_type_name(value) for value in list(art.dof_types or [])]
+        if not names:
+            raise ValueError(f"No articulation DOFs found at {prim_path}")
+
+        stiffnesses_raw, dampings_raw = art.get_dof_gains()
+        stiffnesses = self._flatten_joint_values(stiffnesses_raw)
+        dampings = self._flatten_joint_values(dampings_raw)
+        max_forces = self._flatten_joint_values(art.get_dof_max_efforts())
+        drive_types_raw = art.get_dof_drive_types()
+        drive_types = list(drive_types_raw[0]) if drive_types_raw else []
+        if self._engine == "newton":
+            max_velocities: List[Optional[float]] = [None] * len(names)
+        else:
+            max_velocities = self._flatten_joint_values(art.get_dof_max_velocities())
+
+        values_by_field = {
+            "joint_types": types,
+            "stiffness": stiffnesses,
+            "damping": dampings,
+            "max_force": max_forces,
+            "max_velocity": max_velocities,
+            "drive_type": drive_types,
+        }
+        for field, values in values_by_field.items():
+            if len(values) != len(names):
+                raise RuntimeError(f"Articulation returned {len(values)} {field} entries for {len(names)} joints")
+
+        joints = []
+        for index, name in enumerate(names):
+            joint_type = types[index]
+            joints.append(
+                {
+                    "index": index,
+                    "name": name,
+                    "type": joint_type,
+                    "stiffness": stiffnesses[index],
+                    "damping": dampings[index],
+                    "max_force": max_forces[index],
+                    "max_velocity": max_velocities[index],
+                    "drive_type": drive_types[index],
+                    "units": self._drive_units(joint_type),
+                }
+            )
+        return {"prim_path": prim_path, "joint_count": len(joints), "joints": joints}
+
+    def set_joint_drive_config(
+        self,
+        prim_path: str,
+        config: Dict[str, Any],
+        joint_indices: Optional[List[int]] = None,
+    ) -> None:
+        """Author selected USD drive fields and restore every changed opinion on failure."""
+        self._ensure_physics_world()
+        state = self.get_simulation_state()
+        if str(state.get("timeline_state", "unknown")).lower() != "stopped":
+            raise RuntimeError("Drive configuration requires a stopped timeline")
+        if self._engine == "newton" and "max_velocity" in config:
+            raise NotImplementedError("max_velocity uses PhysxJointAPI and is unavailable under Newton")
+
+        art = self._drive_config_articulation(prim_path)
+        count = len(list(art.dof_names or []))
+        selected = list(range(count)) if joint_indices is None else list(joint_indices)
+        if (
+            not selected
+            or len(set(selected)) != len(selected)
+            or any(index < 0 or index >= count for index in selected)
+        ):
+            raise ValueError("Drive configuration contains an invalid or duplicate DOF index")
+
+        from pxr import PhysxSchema, UsdPhysics
+
+        paths = list((art.dof_paths or [[]])[0])
+        joint_types = [self._joint_type_name(value) for value in list(art.dof_types or [])]
+        if len(paths) != count or len(joint_types) != count:
+            raise RuntimeError("Articulation DOF metadata is incomplete for drive authoring")
+
+        stage = self.get_stage()
+        snapshots: List[tuple[Any, bool, Any]] = []
+        newly_applied: List[tuple[Any, Any, Optional[str]]] = []
+
+        def _snapshot_and_set(attribute: Any, value: Any, label: str) -> None:
+            authored = bool(attribute.HasAuthoredValueOpinion())
+            previous = attribute.Get() if authored else None
+            snapshots.append((attribute, authored, previous))
+            if not attribute.Set(value):
+                raise RuntimeError(f"Failed to author {label}")
+
+        try:
+            for index in selected:
+                prim = stage.GetPrimAtPath(paths[index])
+                if not prim.IsValid():
+                    raise ValueError(f"Joint prim not found: {paths[index]}")
+                joint_type = joint_types[index]
+                if joint_type not in {"revolute", "prismatic"}:
+                    raise ValueError(f"Unsupported DOF type at index {index}: {joint_type}")
+                drive_axis = "angular" if joint_type == "revolute" else "linear"
+                drive = UsdPhysics.DriveAPI.Get(prim, drive_axis)
+                if not drive:
+                    drive = UsdPhysics.DriveAPI.Apply(prim, drive_axis)
+                    if not drive:
+                        raise RuntimeError(f"Could not apply {drive_axis} DriveAPI at {paths[index]}")
+                    newly_applied.append((prim, UsdPhysics.DriveAPI, drive_axis))
+
+                if "drive_type" in config:
+                    _snapshot_and_set(drive.GetTypeAttr(), config["drive_type"], f"drive_type[{index}]")
+                if "stiffness" in config:
+                    value = config["stiffness"]
+                    if joint_type == "revolute":
+                        value *= math.pi / 180.0
+                    _snapshot_and_set(drive.GetStiffnessAttr(), value, f"stiffness[{index}]")
+                if "damping" in config:
+                    value = config["damping"]
+                    if joint_type == "revolute":
+                        value *= math.pi / 180.0
+                    _snapshot_and_set(drive.GetDampingAttr(), value, f"damping[{index}]")
+                if "max_force" in config:
+                    _snapshot_and_set(drive.GetMaxForceAttr(), config["max_force"], f"max_force[{index}]")
+                if "max_velocity" in config:
+                    had_physx_api = prim.HasAPI(PhysxSchema.PhysxJointAPI)
+                    physx_joint = (
+                        PhysxSchema.PhysxJointAPI(prim) if had_physx_api else PhysxSchema.PhysxJointAPI.Apply(prim)
+                    )
+                    if not physx_joint:
+                        raise RuntimeError(f"Could not apply PhysxJointAPI at {paths[index]}")
+                    if not had_physx_api:
+                        newly_applied.append((prim, PhysxSchema.PhysxJointAPI, None))
+                    value = config["max_velocity"]
+                    if joint_type == "revolute":
+                        value *= 180.0 / math.pi
+                    _snapshot_and_set(
+                        physx_joint.GetMaxJointVelocityAttr(),
+                        value,
+                        f"max_velocity[{index}]",
+                    )
+        except Exception as apply_error:
+            rollback_errors = []
+            for attribute, authored, previous in reversed(snapshots):
+                try:
+                    restored = attribute.Set(previous) if authored else attribute.Clear()
+                    if not restored:
+                        rollback_errors.append(f"attribute {attribute.GetPath()}: restore returned false")
+                except Exception as exc:
+                    rollback_errors.append(f"attribute restore: {exc}")
+            for prim, schema, instance in reversed(newly_applied):
+                try:
+                    removed = prim.RemoveAPI(schema, instance) if instance is not None else prim.RemoveAPI(schema)
+                    if not removed:
+                        rollback_errors.append(f"API {schema}: remove returned false")
+                except Exception as exc:
+                    rollback_errors.append(f"API remove: {exc}")
+            if rollback_errors:
+                raise JointDriveConfigApplyError(
+                    f"Drive configuration failed: {apply_error}; rollback failed: {rollback_errors}",
+                    rollback_succeeded=False,
+                ) from apply_error
+            raise JointDriveConfigApplyError(
+                f"Drive configuration failed: {apply_error}; rollback succeeded",
+                rollback_succeeded=True,
+            ) from apply_error
+
     def get_joint_config(self, prim_path: str) -> Dict[str, Any]:
         from pxr import Usd, UsdPhysics
 
@@ -789,6 +986,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
             raise ValueError(f"Prim not found: {prim_path}")
         joint_names = self._get_joint_names(prim_path)
         current_pos_list = self.get_joint_positions(prim_path)
+        typed_drive = self.get_joint_drive_config(prim_path)
+        typed_drive_by_name = {joint["name"]: joint for joint in typed_drive["joints"]}
 
         runtime_targets: List[float] = []
         try:
@@ -830,6 +1029,18 @@ class IsaacAdapterV6(IsaacAdapterBase):
                         joint_data["target_position"] = target_attr.Get() if target_attr else None
                         break
                 jname = desc.GetName()
+                if jname in typed_drive_by_name:
+                    typed = typed_drive_by_name[jname]
+                    joint_data.update(
+                        {
+                            "stiffness": typed["stiffness"],
+                            "damping": typed["damping"],
+                            "max_force": typed["max_force"],
+                            "max_velocity": typed["max_velocity"],
+                            "drive_type": typed["drive_type"],
+                            "drive_units": typed["units"],
+                        }
+                    )
                 if jname in joint_names:
                     idx = joint_names.index(jname)
                     if idx < len(current_pos_list):

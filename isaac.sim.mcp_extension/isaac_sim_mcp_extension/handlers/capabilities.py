@@ -132,6 +132,15 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
     backend_verification = "verified" if physics_backend == "physx" else "unverified"
     camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
     joint_v6_state = "supported" if adapter_generation == 6 else "unsupported"
+    if adapter_generation != 6:
+        drive_config_state = "unsupported"
+        drive_field_state = "unsupported"
+    elif physics_backend == "newton":
+        drive_config_state = "partial"
+        drive_field_state = "unverified"
+    else:
+        drive_config_state = "supported"
+        drive_field_state = "supported"
     return {
         "scene.basic_crud": {"state": "supported"},
         "sensor.lifecycle": {
@@ -242,6 +251,29 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
             "tool": "set_joint_command",
             "modes": ["position", "velocity", "effort"],
             "atomic_validation": True,
+            "readback": True,
+        },
+        "robot.joint_drive_config": {
+            "state": drive_config_state,
+            "adapter_generation": adapter_generation,
+            "backend": physics_backend,
+            "backend_verification": backend_verification,
+            "tool": "set_joint_drive_config",
+            "read_tool": "get_joint_config",
+            "fields": {
+                "stiffness": drive_field_state,
+                "damping": drive_field_state,
+                "max_force": drive_field_state,
+                "max_velocity": (
+                    "supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported"
+                ),
+                "drive_type": drive_field_state,
+            },
+            "drive_types": ["force", "acceleration"],
+            "subset_selectors": ["joint_names", "joint_indices"],
+            "requires_stopped_timeline": True,
+            "atomic_validation": True,
+            "rollback_on_apply_error": True,
             "readback": True,
         },
         "motion.ik_and_planning": {"state": "unsupported"},

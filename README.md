@@ -2,7 +2,7 @@
 
 用 Model Context Protocol（MCP）控制 NVIDIA Isaac Sim。AI 助理可以建立工廠場景、載入 NVIDIA 資產、操作機器人與人物、讀取感測器、控制模擬，以及建立 Action Graph。
 
-此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 56 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
+此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 57 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
 
 > 本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。原始作者與後續貢獻者資訊保留於 `LICENSE` 及原始檔案標頭。
 
@@ -42,10 +42,13 @@
 | 研究項目 | 能力 | Named tools | 契約／驗證 |
 |---|---|---|---|
 | 2.1 | 完整 joint name/index mapping、position/velocity/effort measured state 與三種 atomic command mode | `get_joint_state`, `set_joint_command` | [`ROBOT_JOINT_CONTROL.md`](docs/ROBOT_JOINT_CONTROL.md)／[`verify_robot_joint_control_live.py`](scripts/verify_robot_joint_control_live.py) |
+| 2.2 | Drive stiffness/damping、max force/velocity、force/acceleration mode 的 stopped-timeline atomic setter | `set_joint_drive_config`, `get_joint_config` | [`ROBOT_JOINT_DRIVE_CONFIG.md`](docs/ROBOT_JOINT_DRIVE_CONFIG.md)／[`verify_robot_joint_drive_config_live.py`](scripts/verify_robot_joint_drive_config_live.py) |
 
 `effort` 是每個 update 必須重送的 command。連續控制由後續 controller lifecycle 負責；目前 tool 會套用一次並立即 read-back。
 
 2026-08-24 已在 Isaac Sim `6.0.1-rc.7`／PhysX 以 9-DOF Franka scratch fixture 完成 2.1 live 驗證；三種 target、physics update 後 measured state、invalid-name atomicity、Stop-first cleanup、PID/port、GPU、log 與 native dump 檢查均通過。
+
+2026-08-24 已完成 2.2 PhysX live 驗證：`panda_joint1` 的 stiffness、damping、max force、max velocity 與 drive type 寫入/read-back 均符合 float32 容差；負值、未知 joint 與 active timeline 寫入會在 apply 前拒絕。Newton 的 max velocity 明確 unsupported，其餘 drive 欄位等待專用 Newton live run。
 
 ## 系統需求
 
@@ -166,7 +169,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。完整 schema 請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md)。
 
-全部 56 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 57 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -174,7 +177,7 @@ get_scene_info
 
 ## MCP Tools
 
-目前共 56 個 tools：
+目前共 57 個 tools：
 
 | 類別 | Tools |
 |---|---|
@@ -184,7 +187,7 @@ get_scene_info
 | 物件 | `create_object`, `delete_object`, `transform_object`, `clone_object` |
 | 燈光 | `create_light`, `modify_light` |
 | 材質 | `create_material`, `apply_material` |
-| 機器人 | `create_robot`, `list_available_robots`, `refresh_robot_library`, `get_robot_info`, `set_joint_positions`, `get_joint_positions`, `get_joint_state`, `set_joint_command` |
+| 機器人 | `create_robot`, `list_available_robots`, `refresh_robot_library`, `get_robot_info`, `set_joint_positions`, `get_joint_positions`, `get_joint_state`, `set_joint_command`, `set_joint_drive_config` |
 | 人物 | `spawn_human` |
 | 感測器 | `create_camera`, `capture_image`, `capture_camera_output`, `get_camera_calibration`, `create_lidar`, `get_lidar_config`, `get_lidar_point_cloud`, `delete_sensor` |
 | 資產 | `list_nvidia_assets`, `spawn_nvidia_asset`, `import_urdf`, `load_usd`, `search_usd`, `generate_3d` |
@@ -336,7 +339,7 @@ uv run ruff format --check .
 ```text
 IsaacSim-MCP/
 ├─ .agents/                   專案 skill 與 1.x 後續 agent 閱讀索引
-├─ isaac_mcp/                 Python MCP Server 與 56 個 tool 定義
+├─ isaac_mcp/                 Python MCP Server 與 57 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
 ├─ demo/                      機器人控制範例

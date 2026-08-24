@@ -101,6 +101,8 @@ def test_detect_version_reads_isaacsim_core_version(monkeypatch):
 
 def test_detect_version_returns_zero_on_failure(monkeypatch):
     """When neither isaacsim.core.version nor a VERSION file is reachable, returns 0."""
+    monkeypatch.delenv("ISAAC_PATH", raising=False)
+    monkeypatch.delenv("ISAACSIM_PATH", raising=False)
     for name in list(sys.modules):
         if name.startswith("isaacsim"):
             monkeypatch.delitem(sys.modules, name, raising=False)

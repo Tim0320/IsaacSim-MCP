@@ -218,3 +218,53 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("set_joint_drive_config")
+    def set_joint_drive_config(
+        prim_path: str,
+        stiffness: Optional[float] = None,
+        damping: Optional[float] = None,
+        max_force: Optional[float] = None,
+        max_velocity: Optional[float] = None,
+        drive_type: Optional[str] = None,
+        joint_names: Optional[List[str]] = None,
+        joint_indices: Optional[List[int]] = None,
+    ) -> str:
+        """Atomically update drive gains, limits, or drive type for selected joints.
+
+        The timeline must be stopped. Numeric fields must be finite and
+        non-negative. Values use runtime SI units: revolute gains are per radian,
+        revolute velocity is radians_per_second, and prismatic velocity is
+        meters_per_second. drive_type is force or acceleration. All inputs are
+        validated before writing, and an apply failure triggers rollback.
+
+        Args:
+            prim_path: USD path of the articulation root.
+            stiffness: Optional proportional gain applied to every selected joint.
+            damping: Optional derivative gain applied to every selected joint.
+            max_force: Optional maximum drive effort.
+            max_velocity: Optional maximum joint velocity; PhysX only.
+            drive_type: Optional force or acceleration drive mode.
+            joint_names: Optional exact, case-sensitive joint subset.
+            joint_indices: Optional DOF-index subset; mutually exclusive with joint_names.
+        """
+        try:
+            conn = get_connection()
+            params = {"prim_path": prim_path}
+            for name, value in (
+                ("stiffness", stiffness),
+                ("damping", damping),
+                ("max_force", max_force),
+                ("max_velocity", max_velocity),
+                ("drive_type", drive_type),
+            ):
+                if value is not None:
+                    params[name] = value
+            if joint_names is not None:
+                params["joint_names"] = joint_names
+            if joint_indices is not None:
+                params["joint_indices"] = joint_indices
+            result = conn.send_command("robots.set_joint_drive_config", params)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})

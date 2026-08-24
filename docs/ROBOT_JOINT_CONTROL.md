@@ -38,7 +38,8 @@ effort command through `get_dof_efforts()`.
 
 `position` and `velocity` write targets. Their physical tracking depends on the
 joint drive configuration. Velocity control normally requires zero stiffness
-and non-zero damping; drive configuration is handled by task 2.2.
+and non-zero damping; drive configuration is defined in
+[`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md).
 
 `effort` calls `set_dof_efforts()`. Isaac Sim requires the effort to be renewed
 on every simulation update for continuous effort control. One MCP call applies
