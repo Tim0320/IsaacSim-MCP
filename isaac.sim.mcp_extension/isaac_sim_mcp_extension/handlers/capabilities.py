@@ -29,6 +29,8 @@ RELEVANT_EXTENSIONS = (
     "omni.replicator.core",
     "isaacsim.replicator.agent.core",
     "isaacsim.ros2.bridge",
+    "isaacsim.ros2.core",
+    "isaacsim.ros2.nodes",
     "isaacsim.robot_motion.motion_generation",
     "isaacsim.robot.experimental.wheeled_robots",
     "isaacsim.physics.newton",
@@ -187,6 +189,9 @@ def _feature_flags(
     graph_core_enabled: Optional[bool] = None,
     graph_action_enabled: Optional[bool] = None,
     graph_scriptnode_enabled: Optional[bool] = None,
+    ros2_bridge_enabled: Optional[bool] = None,
+    ros2_core_enabled: Optional[bool] = None,
+    ros2_nodes_enabled: Optional[bool] = None,
 ) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     fallback_verification = "verified" if physics_backend == "physx" else "unverified"
@@ -617,7 +622,32 @@ def _feature_flags(
             "graph_scoped_script_reload": True,
             "runtime_error_messages": True,
         },
-        "ros2.named_tools": {"state": "unsupported"},
+        "ros2.named_tools": {
+            "state": (
+                "supported"
+                if ros2_bridge_enabled is True and ros2_core_enabled is True and ros2_nodes_enabled is True
+                else "unavailable"
+                if ros2_bridge_enabled is False or ros2_core_enabled is False or ros2_nodes_enabled is False
+                else "unknown"
+            ),
+            "tools": [
+                "get_ros2_status",
+                "list_ros2_workflows",
+                "create_ros2_clock_publisher",
+                "create_ros2_tf_publisher",
+                "create_ros2_joint_state_publisher",
+                "create_ros2_camera_publisher",
+                "create_ros2_lidar_publisher",
+                "delete_ros2_workflow",
+            ],
+            "required_extensions": ["isaacsim.ros2.bridge", "isaacsim.ros2.core", "isaacsim.ros2.nodes"],
+            "qos_profiles": ["default", "sensor_data", "system_default", "services"],
+            "requires_stopped_timeline_for_writes": True,
+            "preview_default": True,
+            "publishers_active_on_play_only": True,
+            "ownership_guarded_delete": True,
+            "external_subscriber_verification_required": True,
+        },
         "replicator.sdg_workflows": {"state": "unsupported"},
         "human.spawn": {"state": "supported"},
         "human.lifecycle": {"state": "partial"},
@@ -691,6 +721,9 @@ def get_capabilities(
     graph_core_enabled = extensions["omni.graph.core"]["enabled"]
     graph_action_enabled = extensions["omni.graph.action"]["enabled"]
     graph_scriptnode_enabled = extensions["omni.graph.scriptnode"]["enabled"]
+    ros2_bridge_enabled = extensions["isaacsim.ros2.bridge"]["enabled"]
+    ros2_core_enabled = extensions["isaacsim.ros2.core"]["enabled"]
+    ros2_nodes_enabled = extensions["isaacsim.ros2.nodes"]["enabled"]
     backend_matrix = _backend_matrix(adapter, runtime["physics_backend"])
     return {
         "status": "success",
@@ -714,6 +747,9 @@ def get_capabilities(
             graph_core_enabled,
             graph_action_enabled,
             graph_scriptnode_enabled,
+            ros2_bridge_enabled,
+            ros2_core_enabled,
+            ros2_nodes_enabled,
         ),
         "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"], runtime["physics_backend"]),
         "sensor_warmup": _sensor_warmup(adapter),

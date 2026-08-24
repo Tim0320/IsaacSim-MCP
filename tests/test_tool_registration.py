@@ -35,6 +35,7 @@ EXPECTED_MODULES = [
     "scene.py",
     "objects.py",
     "physics.py",
+    "ros2.py",
     "humans.py",
     "lighting.py",
     "robots.py",
@@ -71,6 +72,7 @@ def test_init_imports_all_modules():
         "scene",
         "objects",
         "physics",
+        "ros2",
         "humans",
         "lighting",
         "robots",
@@ -82,7 +84,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_98_unique_names():
+def test_named_tool_inventory_has_106_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -99,7 +101,7 @@ def test_named_tool_inventory_has_98_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 98
+    assert len(names) == 106
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
     assert {

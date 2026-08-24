@@ -47,7 +47,7 @@
 - Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。Drive config 可在 stopped timeline 原子寫入 gains、max force/velocity 與 force/acceleration type，並 rollback 失敗寫入。V5 不支援 typed drive setter；Newton 的 max velocity 明確不支援，其餘 drive 欄位維持 unverified。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md) 與 [`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md)。
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
-- ROS 2 與完整 Replicator SDG 尚無 named tools。
+- ROS 2 已有 8 個 guarded named workflows；完整 Replicator SDG 尚無 named tools。
 - PhysX/Newton 分流、`null`/`false` 支援語意與 21 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
 
 ## 呼叫範例
@@ -68,7 +68,7 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 - runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX
 - command registry：46 commands，包含 `system.get_capabilities`
 - enabled：MCP extension、core simulation manager、RTX sensors、Replicator Core、IRA Core、motion generation
-- disabled：ROS 2 bridge、Newton
+- 當次啟動初始 disabled：ROS 2 bridge、Newton；Task 4.2 verifier 後續以 bundled Jazzy runtime 啟用 ROS 2 bridge/core/nodes
 - sensor：Camera/LiDAR 尚未建立，因此 warm-up state 為 `not_created`
 - 場景影響：沒有建立、修改或刪除 prim，沒有播放或 step simulation
 
@@ -213,6 +213,15 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 - evaluation：stopped explicit evaluate 只增加 OnTick compute count，ScriptNode 維持 `0`，沒有誤報未收到 playback tick 的 downstream compute；runtime exception 由 status 回 `evaluation_state=error`
 - enabled/delete：disabled graph 的 compute count 固定為 `27`；delete 後 graph 與 backing prim 都不存在，最後 graph list 還原且 timeline stopped
 - verifier：`scripts/verify_omnigraph_lifecycle_live.py`；不可用 destructive `tests/test_integration.py` 取代
+
+2026-08-25 完成 Task 4.2 ROS 2 prerequisite 與 Clock publisher live 驗收：
+
+- registry：106 extension commands；`feature_flags.ros2.named_tools` 列出 8 個 tools、三項 required extensions、四種 QoS profile 與 ownership guard
+- fail-closed：bridge/core/nodes disabled 時，實際 create 回 `ROS2_PREREQUISITE_MISSING` 且 Stage 未新增 graph
+- runtime：啟用 bundled Jazzy 後 bridge/core/nodes 版本為 `5.1.2`／`1.9.4`／`1.18.13`，domain 可由每個 workflow 明確覆寫
+- external subscriber：獨立 `C:\isaacsim\python.bat` Jazzy `rclpy` process 在 domain `42` 收到 20 筆 `/mcp_task_4_2/clock`；schema=`rosgraph_msgs/msg/Clock`，最近一次首筆 `{sec:0,nanosec:116666666}`、末筆 `{sec:0,nanosec:433333333}`，觀測頻率約 `60.23 Hz`
+- teardown：`delete_ros2_workflow` 後 graph、USD prim 與 ownership marker 都 absent；workflow list 還原、timeline stopped
+- 邊界：TF／JointState／Camera／RTX LiDAR 的 6.0 graph topology 與 public forwarding 已 offline 驗證；各資產型 publisher 仍須用相符外部 subscriber 做逐型 live message 驗收，不由 Clock 結果代替
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

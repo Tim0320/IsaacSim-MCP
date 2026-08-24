@@ -2,7 +2,7 @@
 
 用 Model Context Protocol（MCP）控制 NVIDIA Isaac Sim。AI 助理可以建立工廠場景、載入 NVIDIA 資產、操作機器人與人物、讀取感測器、控制模擬，以及建立 Action Graph。
 
-此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 98 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
+此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 106 個 MCP tools、NVIDIA Replicator Agent 人物支援、ROS 2 publisher workflows、NVIDIA 資產目錄，以及工廠配置與互動範例。
 
 > 本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。原始作者與後續貢獻者資訊保留於 `LICENSE` 及原始檔案標頭。
 
@@ -55,7 +55,7 @@
 4. 對應 live verifier，確認 fixture namespace、guard、read-back、cleanup 與 health gate 的實際執行方式。
 5. [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)，確認整體 Phase 2 狀態與後續 task 邊界。
 
-README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 98-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
+README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 106-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
 
 `effort` 是每個 update 必須重送的 command。連續控制由後續 controller lifecycle 負責；目前 tool 會套用一次並立即 read-back。
 
@@ -96,12 +96,15 @@ README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版
 | 研究項目 | 能力 | Named tools | 契約／驗證 |
 |---|---|---|---|
 | 4.1 | Action Graph 完整 lifecycle、runtime status、exact ScriptNode configure/reload | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` | [`OMNIGRAPH_LIFECYCLE.md`](docs/OMNIGRAPH_LIFECYCLE.md)／[`verify_omnigraph_lifecycle_live.py`](scripts/verify_omnigraph_lifecycle_live.py) |
+| 4.2 | ROS 2 prerequisite/domain/QoS status與 typed publisher workflows | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` | [`ROS2_WORKFLOWS.md`](docs/ROS2_WORKFLOWS.md)／[`verify_ros2_workflows_live.py`](scripts/verify_ros2_workflows_live.py) |
 
 4.1 已完成 12 個 named tools 的程式與 offline contract。新增寫入預設 `preview=true`，所有 graph 寫入要求 stopped timeline；唯一例外是 `set_action_graph_enabled(enabled=false)` 可在 playing 時緊急停用。連線、enabled state、ScriptNode 與刪除各自執行 read-back 和 rollback；刪除使用可 `undo()` 的 `DeletePrimsCommand`。enabled state 屬於 runtime-only，不會宣稱已持久寫入 USD。
 
 ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file` 模式互斥；file mode 只接受可解析、已存在的 `.py`。`reload_script_node` 只重新編譯指定 graph/node，不會跨 graph fallback。runtime status 與 explicit evaluation 會回傳 node compute count、messages 與 error state。
 
 2026-08-25 的專用 live verifier 以 98-command registry 與 `/World/MCP_Task_4_1` scratch graph 完成 4.1 驗收。Graph 有 3 nodes 與 1 條初始 edge；短 Play/Stop 驗證 inline `A→B→RECOVERED`、file `C→D` reload，disabled 時 compute count 固定為 `27`。duplicate edge、runtime exception status、delete 後 graph/prim absence、graph list restore 與 stopped timeline 全數通過。stopped explicit evaluation 只增加 OnTick count，ScriptNode 維持 `0`，因此 response 不會把沒有 playback tick 的 ScriptNode 誤報為已執行。不可用 static/offline tests 取代這項證據，也不可在 live `8766` 開啟時把 destructive `tests/test_integration.py` 混入離線 regression suite。
+
+4.2 新增 8 個 ROS 2 named workflows。建立操作預設 `preview=true` 並要求 stopped timeline；bridge/core/nodes 未啟用時回 `ROS2_PREREQUISITE_MISSING`。每個 publisher 都使用 explicit `ROS2Context` 與 `ROS2QoSProfile`，TF／JointState 採 Isaac Sim 6.0 的 compute/read sensor pipeline，Camera／LiDAR 可從 MCP-owned sensor prim 精確解析 render product。刪除只接受具有 MCP ownership marker 的 graph。專用 verifier 以外部 Jazzy `rclpy` process 在 domain `42` 收到 20 筆 `/mcp_task_4_2/clock`，message schema 為 `rosgraph_msgs/msg/Clock`，最近一次觀測頻率約 `60.23 Hz`；graph/prim/marker 均清除並還原 workflow list。
 
 ## 系統需求
 
@@ -222,7 +225,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
-全部 98 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 106 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -236,7 +239,7 @@ Action Graph lifecycle 支援 graph/node/edge query、exact connect/disconnect�
 
 ## MCP Tools
 
-目前共 98 個 tools：
+目前共 106 個 tools：
 
 | 類別 | Tools |
 |---|---|
@@ -256,6 +259,7 @@ Action Graph lifecycle 支援 graph/node/edge query、exact connect/disconnect�
 | 資產 | `list_nvidia_assets`, `spawn_nvidia_asset`, `import_urdf`, `load_usd`, `search_usd`, `generate_3d` |
 | 模擬與診斷 | `play_simulation`, `pause_simulation`, `stop_simulation`, `step_simulation`, `set_physics_params`, `get_isaac_logs`, `get_simulation_state`, `get_physics_state`, `get_joint_config`, `execute_script`, `reload_script` |
 | Action Graph | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` |
+| ROS 2 | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` |
 
 ## 基本使用範例
 
@@ -411,7 +415,7 @@ uv run ruff format --check .
 ```text
 IsaacSim-MCP/
 ├─ .agents/                   專案 skill 與 1.x／2.x／3.x 後續 agent 閱讀索引
-├─ isaac_mcp/                 Python MCP Server 與 98 個 tool 定義
+├─ isaac_mcp/                 Python MCP Server 與 106 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
 ├─ demo/                      機器人控制範例

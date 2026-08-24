@@ -266,11 +266,14 @@
   > evaluation/enabled/delete：stopped explicit evaluate 只增加 OnTick compute count，ScriptNode count 維持 `0`，沒有把未收到 playback tick 的 downstream node 誤報為已執行；短 Play/Stop 才驗證 ScriptNode source。disabled graph 的 compute count 固定為 `27`；delete 後 graph/prim 均 absent，最後 graph list restore、timeline stopped。Verifier：`scripts/verify_omnigraph_lifecycle_live.py`。
   > 驗證邊界：live `8766` 開啟時不可把 `tests/test_integration.py` 混入離線 regression suite。該檔會建立未 teardown Camera/LiDAR/robots，歷史上曾在後續 simulation play 進入 Replicator `reset_scenario()` 時造成 native crash；4.1 必須使用專用、具 teardown 與 health gate 的 verifier。
 
-- [ ] 17. ROS 2 named workflows
-  > 現況：沒有 ROS 2 專用 named tools，現有能力需手動 graph 或 script 組裝。
-  > 缺漏位置：tool registry 尚無 `ros2.py`，缺 extension/capability check 與 domain/QoS schema。
-  > 實作：先提供 extension/domain 狀態、clock、TF、joint state、camera/LiDAR publisher 建立與刪除；QoS 使用明確 profile。
-  > 驗收：無 ROS 2 環境時安全回報 prerequisite；有環境時用外部 subscriber 驗證 topic、frame_id、frequency 與 message schema。
+- [x] 17. ROS 2 named workflows
+  > 已實作：新增 `get_ros2_status`、`list_ros2_workflows`、Clock／TF／JointState／Camera／RTX LiDAR publisher create 與 `delete_ros2_workflow`，registry 由 98 增至 106。extension.toml 將 bridge 列為 optional，MCP 本體不因 ROS 2 環境缺失而無法載入。
+  > contract：domain 可明確指定 `0..232` 或使用 `ROS_DOMAIN_ID`；QoS 只接受 `default|sensor_data|system_default|services`，由 `ROS2QoSProfile` node 連入 publisher。所有 create/delete 預設 `preview=true` 且要求 stopped timeline；delete 只處理具有 schema `1.0` ownership marker 的 graph。
+  > Isaac Sim 6.0：TF 使用 `IsaacComputeTransformTree` 的 frames/translations/orientations outputs；JointState 使用 `IsaacReadJointState` 的 joint arrays、DOF type、stage scale 與 sensor time。Camera／LiDAR 從 MCP-owned sensor runtime 精確解析 render product，也可接受 explicit override。
+  > fail-closed live：bridge/core/nodes disabled 時，status 回三項 missing extensions，實際 create 回 `ROS2_PREREQUISITE_MISSING`，workflow count 維持 `0`。
+  > external subscriber live（2026-08-25）：啟用 bundled Jazzy bridge/core/nodes `5.1.2/1.9.4/1.18.13`；domain `42` 的獨立 rclpy process 收到 20 筆 `/mcp_task_4_2/clock`，schema=`rosgraph_msgs/msg/Clock`，最近一次觀測約 `60.23 Hz`。delete 後 graph/prim/marker absent、list restore、timeline stopped。
+  > offline 驗收：ROS 2 focused contract `43 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `336 passed`，Ruff、Python compile 與 `git diff --check` 通過。
+  > 驗證邊界：Clock 已完成真正外部 subscriber；TF／JointState／Camera／LiDAR 已完成 6.0 topology、forwarding、validation、preview/ownership offline contract，但仍需各自對應資產與外部 subscriber 的逐型 live schema/frame 驗收，不能由 Clock 證據代替。契約與 verifier：`docs/ROS2_WORKFLOWS.md`、`scripts/verify_ros2_workflows_live.py`。
 
 - [ ] 18. Replicator 與 synthetic data generation
   > 現況：除基本 camera capture 與 `spawn_human` 外，缺 randomizer、writer、trigger、annotation export 與 job lifecycle 的 typed 控制。

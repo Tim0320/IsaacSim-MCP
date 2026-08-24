@@ -22,6 +22,7 @@ keywords = ["mcp", "server", "socket", "simulation", "robotics"]
 # Keep it optional so older runtimes load and report motion as unavailable.
 "isaacsim.robot_motion.motion_generation" = { optional = true }
 "isaacsim.robot.experimental.wheeled_robots" = { optional = true }
+"isaacsim.ros2.bridge" = { optional = true }
 "omni.kit.uiapp" = {}
 "isaacsim.gui.components" = {}
 

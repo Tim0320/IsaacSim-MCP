@@ -75,6 +75,8 @@ def test_handler_returns_stable_runtime_capability_contract():
     assert result["extension"]["command_names"] == ["scene.get_info", "system.get_capabilities"]
     assert result["extensions"]["isaac.sim.mcp_extension"]["state"] == "enabled"
     assert result["extensions"]["isaacsim.ros2.bridge"]["state"] == "disabled"
+    assert result["extensions"]["isaacsim.ros2.core"]["state"] == "disabled"
+    assert result["extensions"]["isaacsim.ros2.nodes"]["state"] == "disabled"
     matrix = result["backend_matrix"]
     assert matrix["schema_version"] == "1.0"
     assert matrix["active_backend"] == "physx"
@@ -140,6 +142,26 @@ def test_handler_returns_stable_runtime_capability_contract():
         "script_modes": ["inline", "file"],
         "graph_scoped_script_reload": True,
         "runtime_error_messages": True,
+    }
+    assert result["feature_flags"]["ros2.named_tools"] == {
+        "state": "unavailable",
+        "tools": [
+            "get_ros2_status",
+            "list_ros2_workflows",
+            "create_ros2_clock_publisher",
+            "create_ros2_tf_publisher",
+            "create_ros2_joint_state_publisher",
+            "create_ros2_camera_publisher",
+            "create_ros2_lidar_publisher",
+            "delete_ros2_workflow",
+        ],
+        "required_extensions": ["isaacsim.ros2.bridge", "isaacsim.ros2.core", "isaacsim.ros2.nodes"],
+        "qos_profiles": ["default", "sensor_data", "system_default", "services"],
+        "requires_stopped_timeline_for_writes": True,
+        "preview_default": True,
+        "publishers_active_on_play_only": True,
+        "ownership_guarded_delete": True,
+        "external_subscriber_verification_required": True,
     }
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",

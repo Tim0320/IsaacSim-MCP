@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — guarded ROS 2 publisher workflows
+
+- Added eight named ROS 2 tools for runtime/prerequisite status, owned-workflow
+  listing, Clock, TF, JointState, Camera and RTX LiDAR publisher creation, and
+  ownership-guarded deletion. The named-tool inventory is now 106.
+- Publisher creation defaults to preview, requires a stopped timeline, reports
+  missing bridge/core/nodes extensions without mutating the Stage, and encodes
+  explicit domain and QoS policy through ROS2Context and ROS2QoSProfile nodes.
+- TF and JointState use the Isaac Sim 6.0 compute/sensor pipelines. Camera and
+  LiDAR workflows resolve the exact render product owned by an MCP sensor
+  runtime, with an explicit render-product override for external fixtures.
+- Added an out-of-process Jazzy rclpy live verifier. It received 20 Clock
+  messages on domain 42 at about 60 Hz, validated the message schema, and
+  proved graph/prim/marker deletion plus workflow-list restoration.
+
 ### Added — guarded OmniGraph lifecycle and exact ScriptNode control
 
 - Expanded Action Graph control from create/edit to twelve named tools, adding
