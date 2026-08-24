@@ -38,7 +38,13 @@ class _AdapterV6:
 
 
 class _ExtensionManager:
-    enabled = {"isaac.sim.mcp_extension", "isaacsim.core.simulation_manager"}
+    enabled = {
+        "isaac.sim.mcp_extension",
+        "isaacsim.core.simulation_manager",
+        "omni.graph.core",
+        "omni.graph.action",
+        "omni.graph.scriptnode",
+    }
 
     def is_extension_enabled(self, name):
         return name in self.enabled
@@ -109,6 +115,31 @@ def test_handler_returns_stable_runtime_capability_contract():
         "preview_default": True,
         "source_overwrite_default": False,
         "atomic_batch_rollback": True,
+    }
+    assert result["feature_flags"]["omnigraph.lifecycle"] == {
+        "state": "supported",
+        "tools": [
+            "create_action_graph",
+            "edit_action_graph",
+            "list_action_graphs",
+            "get_action_graph",
+            "delete_action_graph",
+            "connect_action_graph",
+            "disconnect_action_graph",
+            "set_action_graph_enabled",
+            "get_action_graph_status",
+            "configure_script_node",
+            "reload_script_node",
+            "evaluate_action_graph",
+        ],
+        "required_extensions": ["omni.graph.core", "omni.graph.action", "omni.graph.scriptnode"],
+        "query_readback": True,
+        "preview_default_for_new_writes": True,
+        "operation_specific_rollback": True,
+        "enabled_state_runtime_only": True,
+        "script_modes": ["inline", "file"],
+        "graph_scoped_script_reload": True,
+        "runtime_error_messages": True,
     }
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",

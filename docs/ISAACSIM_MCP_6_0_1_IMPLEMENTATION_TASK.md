@@ -255,11 +255,16 @@
 
 ## Phase 4：OmniGraph、ROS 2、Replicator 與 Humans
 
-- [ ] 16. OmniGraph 完整 lifecycle
-  > 現況：已有 create/edit Action Graph；缺 query、delete、connect/disconnect、enable/disable、runtime status 與穩定的 ScriptNode reload 契約。
-  > 缺漏位置：`tools/graphs.py`、`handlers/graphs.py`、graph adapter 與 live tests。
-  > 實作：新增 list/get/delete graph、node/edge query、connect/disconnect、enabled state、evaluation error；ScriptNode inline/file 模式分開定義。
-  > 驗收：建立、修改、執行、停用、刪除全流程 read-back；既有 inline ScriptNode edit 必須在目前 commit 重跑，不沿用舊 partial 結果。
+- [x] 16. OmniGraph 完整 lifecycle
+  > 已實作：Action Graph 共 12 個 named tools。保留 `create_action_graph`、`edit_action_graph`，新增 `list_action_graphs`、`get_action_graph`、`delete_action_graph`、`connect_action_graph`、`disconnect_action_graph`、`set_action_graph_enabled`、`get_action_graph_status`、`configure_script_node`、`reload_script_node`、`evaluate_action_graph`；named tool registry 由 88 增至 98。
+  > query/status：list/get 回 graph、node、edge、attribute 與可選 value/source；status 回 enabled、timeline、evaluation state、compute count 及 node messages。Script source 預設不回傳。enabled state 明確標示 `runtime_state_persistent=false`，不可宣稱會由 USD save/reopen 保留。
+  > write guard：所有 graph 寫入要求 stopped timeline，只有 `set_action_graph_enabled(enabled=false)` 可在 playing 時緊急停用。新增 delete/connect/disconnect/enabled/configure/reload 寫入預設 `preview=true`；既有 create/edit 沒有 preview 參數。每項 apply 都做 operation-specific read-back/rollback，失敗使用 `GRAPH_TRANSACTION_ROLLED_BACK` 或 `GRAPH_ROLLBACK_FAILED`；delete 使用 `DeletePrimsCommand(destructive=False)` 並以 `undo()` rollback。
+  > ScriptNode：`inline`／`file` mode 互斥，file mode 只接受 canonical existing `.py`；configure/reload 必須指定 exact graph/node，不允許跨 graph fallback。reload 會清除 ScriptNode cache、重設 `state:omni_initialized`，成功 read-back source hash/path 並回 `compile_state=pending_evaluation`。
+  > evaluate/error：explicit evaluation 要求 stopped timeline且 graph enabled；pre/post node compute count 與 runtime messages 放入 read-back。disabled、render-pipeline graph 或 node error 分別回 `GRAPH_DISABLED`、`GRAPH_NOT_EXPLICITLY_EVALUABLE`、`GRAPH_EVALUATION_FAILED`。
+  > offline 驗證：tool count、capability、schema、public forwarding 與 handler contract tests 已加入；排除 Windows launcher 與 destructive live integration 的完整 safe suite 為 `322 passed`，Ruff lint 與 `git diff --check` 通過。完整契約為 `docs/OMNIGRAPH_LIFECYCLE.md`。
+  > live 驗收（2026-08-25）：Isaac Sim 6.0.1 live extension 為 98-command registry；`/World/MCP_Task_4_1` graph 建立 3 nodes、1 條初始 edge。list/get、connect/disconnect、duplicate `CONNECTION_ALREADY_EXISTS`、inline `A→B→RECOVERED`、file `C→D` configure/reload 與 runtime exception `evaluation_state=error` 均通過。
+  > evaluation/enabled/delete：stopped explicit evaluate 只增加 OnTick compute count，ScriptNode count 維持 `0`，沒有把未收到 playback tick 的 downstream node 誤報為已執行；短 Play/Stop 才驗證 ScriptNode source。disabled graph 的 compute count 固定為 `27`；delete 後 graph/prim 均 absent，最後 graph list restore、timeline stopped。Verifier：`scripts/verify_omnigraph_lifecycle_live.py`。
+  > 驗證邊界：live `8766` 開啟時不可把 `tests/test_integration.py` 混入離線 regression suite。該檔會建立未 teardown Camera/LiDAR/robots，歷史上曾在後續 simulation play 進入 Replicator `reset_scenario()` 時造成 native crash；4.1 必須使用專用、具 teardown 與 health gate 的 verifier。
 
 - [ ] 17. ROS 2 named workflows
   > 現況：沒有 ROS 2 專用 named tools，現有能力需手動 graph 或 script 組裝。

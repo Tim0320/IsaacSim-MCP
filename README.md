@@ -2,7 +2,7 @@
 
 用 Model Context Protocol（MCP）控制 NVIDIA Isaac Sim。AI 助理可以建立工廠場景、載入 NVIDIA 資產、操作機器人與人物、讀取感測器、控制模擬，以及建立 Action Graph。
 
-此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 88 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
+此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 98 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
 
 > 本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。原始作者與後續貢獻者資訊保留於 `LICENSE` 及原始檔案標頭。
 
@@ -16,7 +16,7 @@
 - 產生 NVIDIA IRA 動畫人物，支援 wander、patrol、stop、manual
 - 建立 Camera 與 RTX LiDAR，輸出 RGB 影像及點雲
 - 播放、暫停、停止及逐 frame 執行模擬
-- 建立 Action Graph、ScriptNode、連線與 attribute
+- 建立、查詢、連線、停用、評估與刪除 Action Graph，並管理 exact ScriptNode
 - 執行或重新載入 Isaac Sim Python script
 - 建立 10 個工作區、3 台 AGV、機器手臂、輸送帶與人物的工廠範例
 
@@ -55,7 +55,7 @@
 4. 對應 live verifier，確認 fixture namespace、guard、read-back、cleanup 與 health gate 的實際執行方式。
 5. [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)，確認整體 Phase 2 狀態與後續 task 邊界。
 
-README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 88-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
+README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 98-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
 
 `effort` 是每個 update 必須重送的 command。連續控制由後續 controller lifecycle 負責；目前 tool 會套用一次並立即 read-back。
 
@@ -90,6 +90,18 @@ README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版
 歷史驗收基準：2026-08-24 的 3.1 驗證 120 Hz 與 12 steps=`0.1 s`；3.2 目前 matrix 為 PhysX 21/21 supported/verified、Newton 0 supported／18 untested／3 unsupported；3.3 驗證 body/collider/mass/group/三種 joint、rollback 與 120 steps；3.4 以 181 steps 驗證摩擦滑行及 restitution 回彈差異。2026-08-25 的 3.5 驗證 88-command registry、composition/variant/LabelsAPI/typed attributes、batch rollback、save/reopen 與原 Stage `15→15` restore。
 
 這些結果只能當歷史基準。宣稱目前仍可用前，必須重新核對 checkout、`get_capabilities`、backend、physics GPU、stopped timeline、scratch guard、read-back/rollback、cleanup、Kit/TCP、run log 與 native dump。Newton 的 `null`/untested 或 `false`/unsupported 不得因共用 V6 code、USD schema 或 import 成功而升級。live `8766` 開啟時，不可把 destructive `tests/test_integration.py` 混入離線 regression suite；3.5 必須使用專用 verifier。
+
+## IsaacSim-MCP 4.x 整合 lifecycle
+
+| 研究項目 | 能力 | Named tools | 契約／驗證 |
+|---|---|---|---|
+| 4.1 | Action Graph 完整 lifecycle、runtime status、exact ScriptNode configure/reload | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` | [`OMNIGRAPH_LIFECYCLE.md`](docs/OMNIGRAPH_LIFECYCLE.md)／[`verify_omnigraph_lifecycle_live.py`](scripts/verify_omnigraph_lifecycle_live.py) |
+
+4.1 已完成 12 個 named tools 的程式與 offline contract。新增寫入預設 `preview=true`，所有 graph 寫入要求 stopped timeline；唯一例外是 `set_action_graph_enabled(enabled=false)` 可在 playing 時緊急停用。連線、enabled state、ScriptNode 與刪除各自執行 read-back 和 rollback；刪除使用可 `undo()` 的 `DeletePrimsCommand`。enabled state 屬於 runtime-only，不會宣稱已持久寫入 USD。
+
+ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file` 模式互斥；file mode 只接受可解析、已存在的 `.py`。`reload_script_node` 只重新編譯指定 graph/node，不會跨 graph fallback。runtime status 與 explicit evaluation 會回傳 node compute count、messages 與 error state。
+
+2026-08-25 的專用 live verifier 以 98-command registry 與 `/World/MCP_Task_4_1` scratch graph 完成 4.1 驗收。Graph 有 3 nodes 與 1 條初始 edge；短 Play/Stop 驗證 inline `A→B→RECOVERED`、file `C→D` reload，disabled 時 compute count 固定為 `27`。duplicate edge、runtime exception status、delete 後 graph/prim absence、graph list restore 與 stopped timeline 全數通過。stopped explicit evaluation 只增加 OnTick count，ScriptNode 維持 `0`，因此 response 不會把沒有 playback tick 的 ScriptNode 誤報為已執行。不可用 static/offline tests 取代這項證據，也不可在 live `8766` 開啟時把 destructive `tests/test_integration.py` 混入離線 regression suite。
 
 ## 系統需求
 
@@ -210,7 +222,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
-全部 88 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 98 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -220,9 +232,11 @@ Physics material 支援 static/dynamic friction、restitution、`material:bindin
 
 Stage composition 支援 scratch-guarded new/open/save-as、subLayer、reference/payload load/unload、variant、Isaac Sim 6.0.1 `UsdSemantics.LabelsAPI`、typed attribute 與 atomic batch rollback；契約與 live fixture 見 [`docs/STAGE_COMPOSITION.md`](docs/STAGE_COMPOSITION.md)。
 
+Action Graph lifecycle 支援 graph/node/edge query、exact connect/disconnect、runtime-only enabled state、runtime status、explicit evaluation、inline/file ScriptNode configure/reload，以及具有 read-back/rollback 的刪除；契約與 live fixture 見 [`docs/OMNIGRAPH_LIFECYCLE.md`](docs/OMNIGRAPH_LIFECYCLE.md) 與 [`scripts/verify_omnigraph_lifecycle_live.py`](scripts/verify_omnigraph_lifecycle_live.py)。
+
 ## MCP Tools
 
-目前共 88 個 tools：
+目前共 98 個 tools：
 
 | 類別 | Tools |
 |---|---|
@@ -241,7 +255,7 @@ Stage composition 支援 scratch-guarded new/open/save-as、subLayer、reference
 | 感測器 | `create_camera`, `capture_image`, `capture_camera_output`, `get_camera_calibration`, `create_lidar`, `get_lidar_config`, `get_lidar_point_cloud`, `delete_sensor` |
 | 資產 | `list_nvidia_assets`, `spawn_nvidia_asset`, `import_urdf`, `load_usd`, `search_usd`, `generate_3d` |
 | 模擬與診斷 | `play_simulation`, `pause_simulation`, `stop_simulation`, `step_simulation`, `set_physics_params`, `get_isaac_logs`, `get_simulation_state`, `get_physics_state`, `get_joint_config`, `execute_script`, `reload_script` |
-| Action Graph | `create_action_graph`, `edit_action_graph` |
+| Action Graph | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` |
 
 ## 基本使用範例
 
@@ -269,13 +283,19 @@ create_action_graph(
 )
 ```
 
-修改 script 後呼叫：
+修改 script 後，先在 stopped timeline 對 exact graph/node 預覽，再套用 reload：
 
 ```text
-reload_script(file_path="D:\\Dev\\IsaacSim-MCP\\scripts\\controller.py")
+reload_script_node(
+  graph_path="/World/RobotController",
+  node_path="ScriptNode",
+  mode="file",
+  script_file="D:\\Dev\\IsaacSim-MCP\\scripts\\controller.py",
+  preview=false
+)
 ```
 
-`script_file + reload_script` 已在 Isaac Sim 6.0.1 實測通過，適合持續開發。inline ScriptNode 適合短而固定的程式碼。
+`reload_script_node` 的 file mode 會重新驗證 canonical `.py` path，並重設指定 ScriptNode 的 compile state。inline ScriptNode 適合短而固定的程式碼；兩種模式不可同時提供 source。
 
 ### 產生 NVIDIA 人物
 
@@ -325,13 +345,15 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 ## 操作原則與限制
 
 - `step_simulation` 只能在暫停或停止狀態使用；播放中會明確拒絕。
-- Action Graph 使用 `execution` evaluator，只有 timeline 播放時執行。
+- Action Graph 預設使用 `execution` evaluator。Graph 寫入要求 stopped timeline；只有停用 graph 可在 playing 時作為緊急停止。explicit `evaluate_action_graph` 也要求 stopped timeline。
 - Camera 與 LiDAR 建立後需要播放並暖機數個 frame 才會產生資料。
 - `create_lidar` 可選 named preset，或直接指定 FOV、角解析度、rotation rate 與 range；`get_lidar_config` 會讀回實際 USD Core schema。兩種模式與限制見 [`docs/LIDAR_CONFIG.md`](docs/LIDAR_CONFIG.md)。
 - `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回傳包含 typed `.npy` fields 的 `.npz` artifact。完整契約見 [`docs/LIDAR_POINT_CLOUD.md`](docs/LIDAR_POINT_CLOUD.md)。
 - V6 PhysX `set_physics_params` 支援 `gravity`、`time_step` 與 `gpu_enabled`，要求 stopped timeline，並回傳 USD/runtime 雙重 read-back；完整 mapping、原子 rollback 與 Stage timing side effects 見 [`docs/PHYSICS_PARAMS.md`](docs/PHYSICS_PARAMS.md)。
 - V6 不等於 Newton 已驗證。`get_capabilities.data.backend_matrix` 的 `newton_supported=null` 代表尚未 live 驗證，`false` 代表已知 PhysX-only；兩者都必須 fail closed。
-- `edit_action_graph` 可修改一般 attribute 與新增連線；修改 inline `ScriptNode.inputs:script` 在 6.0.1 仍有限制。
+- 新增的 Action Graph writes 預設只做 preview；實際套用要明確傳入 `preview=false`。`create_action_graph`／`edit_action_graph` 是既有介面，沒有 preview 參數。
+- `set_action_graph_enabled` 的狀態只存在於目前 runtime，不保證儲存或重開 Stage 後保留。
+- ScriptNode 改用 `configure_script_node`／`reload_script_node` 的 exact graph/node、inline/file 契約；避免用一般 `edit_action_graph` 猜測 reload state。
 - 載入含 non-manifold collision 的資產可能使 PhysX native plugin 崩潰。先在乾淨 Stage 驗證資產與碰撞設定。
 - Isaac Sim 6.0.1 多 GPU 環境必須讓 PhysX 使用明確 GPU ordinal；launcher 會依當下主要顯示 GPU 決定，不可移除這項防護或改回未警告的 `-1`。
 - `execute_script` 權限很高，只執行可信任程式碼，並避免在 Action Graph 同時控制相同 articulation 時修改它。
@@ -389,7 +411,7 @@ uv run ruff format --check .
 ```text
 IsaacSim-MCP/
 ├─ .agents/                   專案 skill 與 1.x／2.x／3.x 後續 agent 閱讀索引
-├─ isaac_mcp/                 Python MCP Server 與 88 個 tool 定義
+├─ isaac_mcp/                 Python MCP Server 與 98 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
 ├─ demo/                      機器人控制範例

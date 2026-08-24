@@ -1,6 +1,6 @@
 # MCP response schema
 
-IsaacSim-MCP 的 88 個 named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
+IsaacSim-MCP 的 98 個 named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
 
 ```json
 {
@@ -58,3 +58,17 @@ IsaacSim-MCP 的 88 個 named tools 統一回傳 JSON text，解碼後固定包�
 rolling upgrade 期間，MCP Server 仍可接收舊 extension 的 `{status, result}` response，並在回給 client 前轉成 schema 1.0。
 
 Camera 與 LiDAR artifact 已使用此欄位。共用 TTL、容量、分塊下載、hash、刪除與 cleanup 契約見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)；Camera 契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md) 與 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)；LiDAR `.npz`、typed fields 與 per-field hash 契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。
+
+## OmniGraph lifecycle response
+
+12 個 Action Graph tools 使用相同 envelope，詳細資料依操作放在 `data` 或 `readback`：
+
+- query：`list_action_graphs`、`get_action_graph` 與 `get_action_graph_status` 將 graph/node/edge、enabled、compute count、messages 或 evaluation state 放在 `data`。
+- preview：新增 write tools 預設 `preview=true`，並在 `data.preview=true` 回傳已驗證的 exact target；未修改 graph。
+- apply：connect/disconnect、enabled state、ScriptNode 與 delete 成功後，在 `readback` 回傳實際 connection/state/source hash/prim absence。
+- rollback：apply 失敗且還原成功時使用 `status=error`、`code=GRAPH_TRANSACTION_ROLLED_BACK` 及 `readback.rolled_back=true`；還原本身失敗使用 `GRAPH_ROLLBACK_FAILED`。
+- evaluation：`evaluate_action_graph` 回傳每個 node 的 `compute_count_before`／`compute_count_after` 和 messages；node error 使用 `GRAPH_EVALUATION_FAILED`，不得改寫成成功。
+
+enabled state 是 runtime-only。相關 response 會明確回傳 `runtime_state_persistent=false`，client 不可據此推論 Stage save/reopen 後仍保持相同狀態。Script source 預設不回傳；只有 `get_action_graph(include_script_source=true)` 才回 inline source，file mode 仍以 path、存在狀態、mtime、bytes 與 SHA-256 描述。
+
+OmniGraph stable errors 包含 `TIMELINE_NOT_STOPPED`、`TIMELINE_STATE_UNAVAILABLE`、`INVALID_GRAPH_PATH`、`GRAPH_NOT_FOUND`、`ATTRIBUTE_NOT_FOUND`、`NODE_NOT_FOUND`、`CONNECTION_ALREADY_EXISTS`、`CONNECTION_NOT_FOUND`、`INVALID_ENABLED_STATE`、`GRAPH_DISABLED`、`GRAPH_NOT_EXPLICITLY_EVALUABLE`、`GRAPH_EVALUATION_FAILED`、`SCRIPT_MODE_CONFLICT`、`SCRIPT_FILE_NOT_FOUND`、`SCRIPT_NODE_REQUIRED`、`GRAPH_TRANSACTION_ROLLED_BACK` 與 `GRAPH_ROLLBACK_FAILED`。完整操作契約見 [`OMNIGRAPH_LIFECYCLE.md`](OMNIGRAPH_LIFECYCLE.md)。

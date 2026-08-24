@@ -32,6 +32,9 @@ RELEVANT_EXTENSIONS = (
     "isaacsim.robot_motion.motion_generation",
     "isaacsim.robot.experimental.wheeled_robots",
     "isaacsim.physics.newton",
+    "omni.graph.core",
+    "omni.graph.action",
+    "omni.graph.scriptnode",
 )
 
 
@@ -181,6 +184,9 @@ def _feature_flags(
     backend_matrix: Mapping[str, Any],
     motion_generation_enabled: Optional[bool] = None,
     wheeled_robots_enabled: Optional[bool] = None,
+    graph_core_enabled: Optional[bool] = None,
+    graph_action_enabled: Optional[bool] = None,
+    graph_scriptnode_enabled: Optional[bool] = None,
 ) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     fallback_verification = "verified" if physics_backend == "physx" else "unverified"
@@ -567,8 +573,50 @@ def _feature_flags(
             "nonzero_command_requires_playing_timeline": True,
             "stop_readback": True,
         },
-        "omnigraph.create_edit": {"state": "partial"},
-        "omnigraph.lifecycle": {"state": "unsupported"},
+        "omnigraph.create_edit": {
+            "state": (
+                "supported"
+                if graph_core_enabled is True and graph_action_enabled is True
+                else "unavailable"
+                if graph_core_enabled is False or graph_action_enabled is False
+                else "unknown"
+            ),
+            "tools": ["create_action_graph", "edit_action_graph"],
+            "requires_stopped_timeline": True,
+            "validate_apply_readback": True,
+            "rollback_on_failure": True,
+        },
+        "omnigraph.lifecycle": {
+            "state": (
+                "supported"
+                if graph_core_enabled is True and graph_action_enabled is True and graph_scriptnode_enabled is True
+                else "unavailable"
+                if graph_core_enabled is False or graph_action_enabled is False or graph_scriptnode_enabled is False
+                else "unknown"
+            ),
+            "tools": [
+                "create_action_graph",
+                "edit_action_graph",
+                "list_action_graphs",
+                "get_action_graph",
+                "delete_action_graph",
+                "connect_action_graph",
+                "disconnect_action_graph",
+                "set_action_graph_enabled",
+                "get_action_graph_status",
+                "configure_script_node",
+                "reload_script_node",
+                "evaluate_action_graph",
+            ],
+            "required_extensions": ["omni.graph.core", "omni.graph.action", "omni.graph.scriptnode"],
+            "query_readback": True,
+            "preview_default_for_new_writes": True,
+            "operation_specific_rollback": True,
+            "enabled_state_runtime_only": True,
+            "script_modes": ["inline", "file"],
+            "graph_scoped_script_reload": True,
+            "runtime_error_messages": True,
+        },
         "ros2.named_tools": {"state": "unsupported"},
         "replicator.sdg_workflows": {"state": "unsupported"},
         "human.spawn": {"state": "supported"},
@@ -640,6 +688,9 @@ def get_capabilities(
     extensions = _extension_states(extension_manager)
     motion_enabled = extensions["isaacsim.robot_motion.motion_generation"]["enabled"]
     wheeled_enabled = extensions["isaacsim.robot.experimental.wheeled_robots"]["enabled"]
+    graph_core_enabled = extensions["omni.graph.core"]["enabled"]
+    graph_action_enabled = extensions["omni.graph.action"]["enabled"]
+    graph_scriptnode_enabled = extensions["omni.graph.scriptnode"]["enabled"]
     backend_matrix = _backend_matrix(adapter, runtime["physics_backend"])
     return {
         "status": "success",
@@ -660,6 +711,9 @@ def get_capabilities(
             backend_matrix,
             motion_enabled,
             wheeled_enabled,
+            graph_core_enabled,
+            graph_action_enabled,
+            graph_scriptnode_enabled,
         ),
         "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"], runtime["physics_backend"]),
         "sensor_warmup": _sensor_warmup(adapter),

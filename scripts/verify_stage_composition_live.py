@@ -116,7 +116,10 @@ def main() -> int:
     try:
         _data(connection.send_command("simulation.stop"))
         capabilities = _data(connection.send_command("system.get_capabilities"))
-        assert capabilities["extension"]["command_count"] == 88, capabilities["extension"]
+        # Task 3.5 introduced an 88-command baseline. Later phases may add
+        # commands, so keep this historical verifier forward-compatible while
+        # still proving that the Stage composition contract is registered.
+        assert capabilities["extension"]["command_count"] >= 88, capabilities["extension"]
         feature = capabilities["feature_flags"]["stage.composition"]
         assert feature["scratch_guarded_lifecycle"] is True
         assert feature["atomic_batch_rollback"] is True

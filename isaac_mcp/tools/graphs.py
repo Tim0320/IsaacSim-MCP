@@ -24,7 +24,7 @@
 """Action Graph MCP tools."""
 
 import json
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -33,6 +33,14 @@ if TYPE_CHECKING:
 
 
 def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]") -> None:
+
+    def send(command: str, params: Dict[str, Any]) -> str:
+        """Forward one graph command; the registry-wide wrapper adds schema 1.0."""
+        try:
+            result = get_connection().send_command(command, params)
+            return json.dumps(result, indent=2)
+        except Exception as exc:
+            return json.dumps({"status": "error", "message": str(exc)})
 
     @mcp.tool("create_action_graph")
     def create_action_graph(
@@ -147,3 +155,151 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("list_action_graphs")
+    def list_action_graphs(root_path: str = "/World", include_disabled: bool = True) -> str:
+        """List Action Graphs below a USD root, including disabled graphs by default.
+
+        Args:
+            root_path: USD subtree to inspect.
+            include_disabled: Include graphs whose evaluation is disabled.
+        """
+        return send(
+            "graphs.list_action_graphs",
+            {"root_path": root_path, "include_disabled": include_disabled},
+        )
+
+    @mcp.tool("get_action_graph")
+    def get_action_graph(
+        graph_path: str,
+        include_values: bool = False,
+        include_script_source: bool = False,
+    ) -> str:
+        """Read one Action Graph's nodes, edges, state, and optional values or script source.
+
+        Script source is omitted by default because inline source and local file
+        contents may be large or sensitive.
+        """
+        return send(
+            "graphs.get_action_graph",
+            {
+                "graph_path": graph_path,
+                "include_values": include_values,
+                "include_script_source": include_script_source,
+            },
+        )
+
+    @mcp.tool("delete_action_graph")
+    def delete_action_graph(graph_path: str, preview: bool = True) -> str:
+        """Preview or delete one exact Action Graph, with deletion read-back."""
+        return send("graphs.delete_action_graph", {"graph_path": graph_path, "preview": preview})
+
+    @mcp.tool("connect_action_graph")
+    def connect_action_graph(
+        graph_path: str,
+        source_attr: str,
+        target_attr: str,
+        preview: bool = True,
+    ) -> str:
+        """Preview or connect one source output to one target input in an Action Graph."""
+        return send(
+            "graphs.connect_action_graph",
+            {
+                "graph_path": graph_path,
+                "source_attr": source_attr,
+                "target_attr": target_attr,
+                "preview": preview,
+            },
+        )
+
+    @mcp.tool("disconnect_action_graph")
+    def disconnect_action_graph(
+        graph_path: str,
+        source_attr: str,
+        target_attr: str,
+        preview: bool = True,
+    ) -> str:
+        """Preview or remove one exact connection from an Action Graph."""
+        return send(
+            "graphs.disconnect_action_graph",
+            {
+                "graph_path": graph_path,
+                "source_attr": source_attr,
+                "target_attr": target_attr,
+                "preview": preview,
+            },
+        )
+
+    @mcp.tool("set_action_graph_enabled")
+    def set_action_graph_enabled(graph_path: str, enabled: bool, preview: bool = True) -> str:
+        """Preview or enable/disable one Action Graph and read back its effective state."""
+        return send(
+            "graphs.set_action_graph_enabled",
+            {"graph_path": graph_path, "enabled": enabled, "preview": preview},
+        )
+
+    @mcp.tool("get_action_graph_status")
+    def get_action_graph_status(graph_path: str) -> str:
+        """Read one Action Graph's enabled, evaluation, and error status."""
+        return send("graphs.get_action_graph_status", {"graph_path": graph_path})
+
+    @mcp.tool("evaluate_action_graph")
+    def evaluate_action_graph(graph_path: str) -> str:
+        """Explicitly evaluate one exact Action Graph and return post-evaluation status."""
+        return send("graphs.evaluate_action_graph", {"graph_path": graph_path})
+
+    @mcp.tool("configure_script_node")
+    def configure_script_node(
+        graph_path: str,
+        node_path: str = "ScriptNode",
+        mode: str = "inline",
+        inline_script: Optional[str] = None,
+        script_file: Optional[str] = None,
+        preview: bool = True,
+    ) -> str:
+        """Preview or configure one exact ScriptNode in explicit inline/file mode.
+
+        ``mode='inline'`` requires ``inline_script`` and forbids ``script_file``.
+        ``mode='file'`` requires ``script_file`` and forbids ``inline_script``.
+        The extension validates the mode before mutating the graph.
+        """
+        params: Dict[str, Any] = {
+            "graph_path": graph_path,
+            "node_path": node_path,
+            "mode": mode,
+            "preview": preview,
+        }
+        if inline_script is not None:
+            params["inline_script"] = inline_script
+        if script_file is not None:
+            params["script_file"] = script_file
+        return send("graphs.configure_script_node", params)
+
+    @mcp.tool("reload_script_node")
+    def reload_script_node(
+        graph_path: str,
+        node_path: str = "ScriptNode",
+        mode: Optional[str] = None,
+        inline_script: Optional[str] = None,
+        script_file: Optional[str] = None,
+        preview: bool = True,
+    ) -> str:
+        """Preview or recompile one exact ScriptNode without cross-graph fallback.
+
+        Supply ``mode='inline'`` with ``inline_script`` to replace inline source.
+        For ``mode='file'``, ``script_file`` may select a new canonical local file;
+        when omitted, the node's existing canonical file path is reloaded. Omitting
+        ``mode`` asks the extension to retain and validate the node's current mode.
+        """
+        params: Dict[str, Any] = {
+            "graph_path": graph_path,
+            "node_path": node_path,
+            "preview": preview,
+        }
+        if mode is not None:
+            params["mode"] = mode
+        if inline_script is not None:
+            params["inline_script"] = inline_script
+        if script_file is not None:
+            params["script_file"] = script_file
+        return send("graphs.reload_script_node", params)

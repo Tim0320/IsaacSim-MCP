@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — guarded OmniGraph lifecycle and exact ScriptNode control
+
+- Expanded Action Graph control from create/edit to twelve named tools, adding
+  graph/node/edge query, delete, exact connect/disconnect, runtime-only enabled
+  state, runtime status, explicit evaluation, and graph-scoped ScriptNode
+  configure/reload. The named-tool inventory is now 98.
+- New graph writes default to preview and require a stopped timeline. Disabling
+  a graph remains available while playing as an emergency stop; enabling and
+  every other graph write fail closed until the timeline is stopped.
+- Added operation-specific apply/read-back/rollback for connections, enabled
+  state, ScriptNode source changes, create/edit, and deletion. Graph deletion
+  uses non-destructive `DeletePrimsCommand` with `undo()` on failed read-back.
+- ScriptNode inline and file modes are explicit and mutually exclusive. File
+  mode resolves an existing `.py`; configure/reload targets one exact graph and
+  node, clears ScriptNode caches, resets `state:omni_initialized`, and reports
+  source hash/path plus pending compile state.
+- Runtime status and explicit evaluation report node compute counts, messages,
+  and stable error codes. Enabled state responses explicitly state that this
+  runtime flag is not persistent USD authoring.
+- Added offline tool, capability, schema, and handler contract coverage. A
+  dedicated scratch live run verified 98 commands, exact edge handling,
+  inline/file ScriptNode reload, runtime errors, disabled compute-count freeze,
+  graph/prim deletion, graph-list restoration, and stopped-timeline cleanup.
+
 ### Added — guarded Stage, layer, composition, and semantic authoring
 
 - Added twelve named tools for scratch-guarded new/open/save-as, scoped Stage

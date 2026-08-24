@@ -43,10 +43,11 @@
 - `delete_sensor` 會完整 teardown Camera/LiDAR runtime，刪除 prim，等待 Kit updates，再驗證 prim、RenderProduct、cache 與 LiDAR metadata 均不存在。timeline 必須處於 Pause 或 Stop；`delete_object` 遇到 managed sensor 會走相同流程。契約見 [`SENSOR_LIFECYCLE.md`](SENSOR_LIFECYCLE.md)。
 - V6 PhysX `set_physics_params` 支援 `gravity`、整數 steps/sec 對應的 `time_step`，以及 GPU dynamics + GPU/MBP broadphase mapping。timeline 必須 stopped，成功需 USD、runtime wrapper、SimulationManager、Stage time codes 與 min-frame-rate read-back 一致；V5/Newton 仍明確 unsupported。契約見 [`PHYSICS_PARAMS.md`](PHYSICS_PARAMS.md)。
 - Stage composition 提供 12 個 named tools。Lifecycle 預設 preview 並受 scratch root 防護；subLayer、reference/payload、variant、`UsdSemantics.LabelsAPI`、typed attribute 與最多 100 項 batch 都要求 stopped timeline、read-back 及 rollback。契約見 [`STAGE_COMPOSITION.md`](STAGE_COMPOSITION.md)。
+- OmniGraph lifecycle 提供 12 個 named tools：create/edit/list/get/delete、connect/disconnect、runtime-only enabled state、runtime status、exact ScriptNode configure/reload 與 explicit evaluation。新增寫入預設 preview；所有 graph 寫入要求 stopped timeline，只有 `set_action_graph_enabled(enabled=false)` 可在 playing 時緊急停用。各操作具有 read-back 與 operation-specific rollback，刪除使用可 undo 的 `DeletePrimsCommand`。專用 live verifier 已通過，契約見 [`OMNIGRAPH_LIFECYCLE.md`](OMNIGRAPH_LIFECYCLE.md)。
 - Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。Drive config 可在 stopped timeline 原子寫入 gains、max force/velocity 與 force/acceleration type，並 rollback 失敗寫入。V5 不支援 typed drive setter；Newton 的 max velocity 明確不支援，其餘 drive 欄位維持 unverified。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md) 與 [`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md)。
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
-- ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
+- ROS 2 與完整 Replicator SDG 尚無 named tools。
 - PhysX/Newton 分流、`null`/`false` 支援語意與 21 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
 
 ## 呼叫範例
@@ -203,6 +204,15 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 - save/reopen：scoped prim count `5→5`，layer stack、composition arcs、variant、metadata、semantics 與 prim count 比對一致
 - restore/health：乾淨重啟後原 anonymous Stage root/session layer 完整還原，prim count `15→15`；scratch root absent、timeline stopped、Kit PID `29892`／TCP `8766` 存活、當次 log 關鍵 crash signature `0`、該 session 新增 native dump `0`
 - 驗證邊界：離線 suite 必須排除 `tests/test_integration.py`；它在 live `8766` 開啟時會建立未 teardown Camera/LiDAR/robots，後續 `simulation.play` 曾在 Replicator `reset_scenario()` 觸發 native crash。此廣泛 integration run 不屬於 3.5 verifier，也未納入驗收
+
+2026-08-25 完成 Task 4.1 OmniGraph lifecycle scratch live 驗收：
+
+- registry/fixture：98 extension commands；`/World/MCP_Task_4_1` graph 建立 3 nodes 與 1 條初始 edge
+- query/edge：list/get、exact connect/disconnect read-back 通過；duplicate edge 回 `CONNECTION_ALREADY_EXISTS`
+- ScriptNode：短 Play/Stop 驗證 inline source `A→B→RECOVERED` 與 file source `C→D`；configure/reload 限定 exact graph/node
+- evaluation：stopped explicit evaluate 只增加 OnTick compute count，ScriptNode 維持 `0`，沒有誤報未收到 playback tick 的 downstream compute；runtime exception 由 status 回 `evaluation_state=error`
+- enabled/delete：disabled graph 的 compute count 固定為 `27`；delete 後 graph 與 backing prim 都不存在，最後 graph list 還原且 timeline stopped
+- verifier：`scripts/verify_omnigraph_lifecycle_live.py`；不可用 destructive `tests/test_integration.py` 取代
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 
