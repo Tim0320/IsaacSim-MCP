@@ -36,6 +36,7 @@ EXPECTED_MODULES = [
     "humans.py",
     "lighting.py",
     "robots.py",
+    "motion.py",
     "sensors.py",
     "materials.py",
     "assets.py",
@@ -78,7 +79,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_57_unique_names():
+def test_named_tool_inventory_has_62_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -95,9 +96,16 @@ def test_named_tool_inventory_has_57_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 57
+    assert len(names) == 62
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
+    assert {
+        "compute_ik",
+        "plan_joint_trajectory",
+        "execute_trajectory",
+        "cancel_motion",
+        "get_motion_status",
+    } <= set(names)
     assert "get_lidar_config" in names
     assert "delete_sensor" in names
     assert {"get_joint_state", "set_joint_command", "set_joint_drive_config"} <= set(names)

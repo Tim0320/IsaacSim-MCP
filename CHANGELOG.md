@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — bounded V6 motion generation and controller jobs
+
+- Added `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`,
+  `cancel_motion`, and `get_motion_status` backed by NVIDIA Lula on 6.0.1.
+- IK exposes warm start, deterministic seed, iteration/time bounds, achieved
+  end-effector error, and an explicit unchecked collision result.
+- Joint planning separates collision-aware RRT from unchecked deterministic
+  C-space splines and stores results behind opaque trajectory IDs.
+- Execution uses Kit update callbacks and returns immediately with a job ID;
+  jobs support pause/resume, cancellation, deadline timeout, progress, and one
+  active job per articulation.
+- A live Franka namespace produced deterministic IK (`7.36e-7 m` error), RRT
+  collision result, and completed/cancelled/timed-out terminal states. Final
+  scratch-isolated acceptance remains gated because the current Stage contains
+  pre-existing prims and the verifier correctly refuses to clear it.
+
 ### Added — atomic V6 joint drive configuration
 
 - Added `set_joint_drive_config` for stiffness, damping, maximum effort,

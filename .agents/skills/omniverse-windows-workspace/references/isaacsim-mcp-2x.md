@@ -9,6 +9,21 @@ Use this reference for Phase 2 Robot control work in
 | --- | --- | --- | --- | --- | --- |
 | 2.1 | Phase 2 item 7 | Complete V6 joint state and atomic position/velocity/effort commands | `get_joint_state`, `set_joint_command` | `docs/ROBOT_JOINT_CONTROL.md` | `scripts/verify_robot_joint_control_live.py` |
 | 2.2 | Phase 2 item 8 | Atomic V6 drive gains, limits, and drive type | `set_joint_drive_config`, `get_joint_config` | `docs/ROBOT_JOINT_DRIVE_CONFIG.md` | `scripts/verify_robot_joint_drive_config_live.py` |
+| 2.3 | Phase 2 item 9 | Lula IK, RRT/C-space trajectories, bounded non-blocking jobs | `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`, `cancel_motion`, `get_motion_status` | `docs/MOTION_CONTROL.md` | `scripts/verify_motion_control_live.py` |
+
+## 2.3 invariants
+
+- IK is calculation-only and must report achieved position/orientation error.
+- Lula IK does not support collision avoidance; always report collision unchecked.
+- Only RRT may report a collision-checked path. Task 2.3 registers no USD scene
+  obstacles, so report count 0 and `scene_obstacles_included=false`.
+- C-space spline generation is deterministic but is not collision-aware.
+- Warm start, random seed, max iterations, elapsed time, and timeout must be explicit.
+- `execute_trajectory` returns immediately; Kit update callbacks advance jobs.
+- Active states are queued/running/paused. Terminal states are completed,
+  cancelled, failed, and timeout. A robot may have only one active job.
+- Live acceptance requires deterministic IK, end-effector error, RRT result,
+  pause/resume completion, cancel, timeout, finite read-back, and scratch cleanup.
 
 ## 2.2 invariants
 
@@ -64,3 +79,14 @@ nothing and preserved the complete snapshot. Scratch cleanup, stopped timeline,
 Kit/TCP survival, active-display GPU selection, zero error-like run logs, and
 zero new native dumps passed. Newton max velocity remains unsupported and its
 other DriveAPI fields remain unverified.
+
+## Recorded 2.3 evidence
+
+The 2026-08-24 Isaac Sim `6.0.1-rc.7` PhysX run produced functional evidence for 62 commands and
+motion-generation extension `8.2.9`. Franka IK reached `7.363885225415161e-7 m`
+position error and repeated exactly with warm start and seed 17. RRT returned a
+collision-checked valid path. The non-blocking job passed pause/resume to
+completion, explicit cancellation, and a 1 ms deadline timeout, followed by
+fixture-namespace cleanup. A later guard found pre-existing non-task prims and
+refused to clear or write the Stage. This is not scratch-isolated final evidence;
+rerun on a user-provided empty Stage before checking task 2.3 complete.

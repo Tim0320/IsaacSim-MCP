@@ -110,6 +110,10 @@ class MCPExtension(omni.ext.IExt):
                 self._adapter.release_all_sensors()
             except Exception as exc:
                 print("sensor teardown during extension shutdown failed:", exc)
+            try:
+                self._adapter.shutdown_motion()
+            except Exception as exc:
+                print("motion teardown during extension shutdown failed:", exc)
         self._play_sub = None
         self._registry.clear()
         gc.collect()

@@ -174,6 +174,11 @@
   > 缺漏位置：目前 `isaac_mcp/tools/` 沒有 motion/controller 模組。
   > 實作：先建立最小 `compute_ik`、`plan_joint_trajectory`、`execute_trajectory`、`cancel_motion`、`get_motion_status`；依 capabilities 掛接 Isaac Sim 可用 motion generation stack。
   > 驗收：對固定 robot fixture 驗證 end-effector 誤差、collision result、timeout/cancel 與 deterministic seed；禁止阻塞 MCP worker 無限等待。
+  > 已實作：新增五個 named tools、`motion.*` extension commands 與 V6 adapter。IK 使用 Lula warm start／seed／iteration bound；trajectory 支援 collision-aware RRT 與明確 unchecked 的 C-space spline；execution 使用 Kit update subscription 與 opaque job/trajectory ID，同一 robot 拒絕重疊 active job。
+  > 能力邊界：Lula IK 官方 API `supports_collision_avoidance()` 為 false，因此 IK response 永遠回 `collision_check.checked=false`。RRT 的 checked result 只包含 Lula robot model 與已註冊 world view；目前 USD scene obstacle count 為 0 且 `scene_obstacles_included=false`，不得宣稱整個 Stage collision-free，也不得把 `cspace` spline 宣稱為 collision-free path。
+  > live 功能證據（2026-08-24，尚未完成最終驗收）：Isaac Sim `6.0.1-rc.7`、motion generation `8.2.9`、PhysX、62 commands。Franka IK error=`7.363885225415161e-7 m`，相同 warm start／seed `17` 解完全一致；RRT path_valid；job 通過 pause/resume/completed、cancel 與 1 ms timeout，且 `execute_trajectory` 立即回 `non_blocking=true`；fixture namespace 已清除。
+  > 未完成 gate：重跑時新增的 scratch-stage guard 發現 live Stage 原本已有多個非 2.3 prim，因此拒絕 `clear_scene` 與後續寫入。以上功能結果不能標為 scratch-isolated 最終驗收；須由使用者切換至可清除的空白 Stage 後重跑 verifier，才勾選本項。
+  > 驗證腳本與契約：`scripts/verify_motion_control_live.py`、`docs/MOTION_CONTROL.md`。
 
 - [ ] 10. Gripper 與 mobile base 常用操作
   > 現況：可透過底層 joints 或 `execute_script` 組合，但缺少穩定、高階 named tools。

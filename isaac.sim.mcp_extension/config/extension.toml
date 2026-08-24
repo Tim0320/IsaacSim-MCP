@@ -18,6 +18,9 @@ keywords = ["mcp", "server", "socket", "simulation", "robotics"]
 # on 6.0 PhysX/Newton it resolves and the V6 adapter imports it lazily.
 "isaacsim.sensors.experimental.rtx" = { optional = true }
 "isaacsim.asset.importer.urdf" = {}
+# Isaac Sim 6.0.1 still ships the NVIDIA Lula/RRT stack under this extension.
+# Keep it optional so older runtimes load and report motion as unavailable.
+"isaacsim.robot_motion.motion_generation" = { optional = true }
 "omni.kit.uiapp" = {}
 "isaacsim.gui.components" = {}
 

@@ -212,6 +212,30 @@ class IsaacAdapterBase(ABC):
             return
         raise NotImplementedError(f"Joint command mode '{mode}' requires the Isaac Sim 6.x adapter")
 
+    def compute_ik(self, **_params: Any) -> Dict[str, Any]:
+        """Solve inverse kinematics without applying a command."""
+        raise NotImplementedError("Motion generation requires the Isaac Sim 6.x adapter")
+
+    def plan_joint_trajectory(self, **_params: Any) -> Dict[str, Any]:
+        """Create an opaque, executable trajectory."""
+        raise NotImplementedError("Motion generation requires the Isaac Sim 6.x adapter")
+
+    def execute_trajectory(self, **_params: Any) -> Dict[str, Any]:
+        """Start a non-blocking trajectory job."""
+        raise NotImplementedError("Motion execution requires the Isaac Sim 6.x adapter")
+
+    def cancel_motion(self, **_params: Any) -> Dict[str, Any]:
+        """Cancel a running trajectory job."""
+        raise NotImplementedError("Motion execution requires the Isaac Sim 6.x adapter")
+
+    def get_motion_status(self, **_params: Any) -> Dict[str, Any]:
+        """Return a trajectory job snapshot."""
+        raise NotImplementedError("Motion execution requires the Isaac Sim 6.x adapter")
+
+    def shutdown_motion(self) -> None:
+        """Release motion update subscriptions during extension shutdown."""
+        return None
+
     def get_joint_drive_config(self, prim_path: str) -> Dict[str, Any]:
         """Return typed drive gains, limits, and drive modes in runtime units."""
         raise NotImplementedError("Joint drive configuration requires the Isaac Sim 6.x adapter")

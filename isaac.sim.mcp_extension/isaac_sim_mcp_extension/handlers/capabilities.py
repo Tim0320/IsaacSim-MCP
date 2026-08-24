@@ -127,7 +127,9 @@ def _runtime_info(adapter: IsaacAdapterBase) -> Dict[str, Any]:
     }
 
 
-def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> Dict[str, Dict[str, Any]]:
+def _feature_flags(
+    adapter_generation: Optional[int], physics_backend: str, motion_generation_enabled: Optional[bool] = None
+) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     backend_verification = "verified" if physics_backend == "physx" else "unverified"
     camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
@@ -276,7 +278,27 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
             "rollback_on_apply_error": True,
             "readback": True,
         },
-        "motion.ik_and_planning": {"state": "unsupported"},
+        "motion.ik_and_planning": {
+            "state": (
+                "supported"
+                if adapter_generation == 6 and motion_generation_enabled is True
+                else "unavailable" if adapter_generation == 6 and motion_generation_enabled is False else "unknown"
+            ),
+            "adapter_generation": adapter_generation,
+            "required_extension": "isaacsim.robot_motion.motion_generation",
+            "tools": [
+                "compute_ik",
+                "plan_joint_trajectory",
+                "execute_trajectory",
+                "cancel_motion",
+                "get_motion_status",
+            ],
+            "planners": ["rrt", "cspace"],
+            "non_blocking_execution": True,
+            "bounded_iterations": True,
+            "deterministic_seed": True,
+            "ik_collision_check": False,
+        },
         "omnigraph.create_edit": {"state": "partial"},
         "omnigraph.lifecycle": {"state": "unsupported"},
         "ros2.named_tools": {"state": "unsupported"},
@@ -345,6 +367,8 @@ def get_capabilities(
     """Return a side-effect-free, machine-readable capability snapshot."""
     runtime = _runtime_info(adapter)
     commands = sorted(registry)
+    extensions = _extension_states(extension_manager)
+    motion_enabled = extensions["isaacsim.robot_motion.motion_generation"]["enabled"]
     return {
         "status": "success",
         "schema_version": CAPABILITIES_SCHEMA_VERSION,
@@ -355,8 +379,10 @@ def get_capabilities(
             "command_count": len(commands),
             "command_names": commands,
         },
-        "extensions": _extension_states(extension_manager),
-        "feature_flags": _feature_flags(runtime["adapter_generation"], runtime["physics_backend"]),
+        "extensions": extensions,
+        "feature_flags": _feature_flags(
+            runtime["adapter_generation"], runtime["physics_backend"], motion_enabled
+        ),
         "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"]),
         "sensor_warmup": _sensor_warmup(adapter),
     }
