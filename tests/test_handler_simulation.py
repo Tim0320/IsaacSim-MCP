@@ -25,6 +25,7 @@
 
 from unittest.mock import MagicMock
 
+import pytest
 from isaac_sim_mcp_extension.handlers import simulation as sim
 
 
@@ -128,12 +129,26 @@ def test_graph_suspension_restores_state():
 
 
 class _GravityAdapter:
-    def __init__(self):
+    def __init__(self, timeline_state="stopped"):
         self.calls = []
+        self.timeline_state = timeline_state
 
-    def create_physics_scene(self, gravity=None, scene_name="PhysicsScene"):
-        self.calls.append(gravity)
-        return "/World/" + scene_name
+    def get_simulation_state(self):
+        return {"timeline_state": self.timeline_state}
+
+    def configure_physics(self, gravity=None, time_step=None, gpu_enabled=None):
+        self.calls.append((gravity, time_step, gpu_enabled))
+        return {
+            "scene_path": "/World/PhysicsScene",
+            "backend": "physx",
+            "applied": [name for name, value in (("gravity", gravity), ("time_step", time_step), ("gpu_enabled", gpu_enabled)) if value is not None],
+            "requested": {"gravity": gravity, "time_step": time_step, "gpu_enabled": gpu_enabled},
+            "readback": {
+                "usd": {"time_step": time_step, "gpu_enabled": gpu_enabled},
+                "runtime": {"time_step": time_step, "gpu_enabled": gpu_enabled},
+            },
+            "atomic": True,
+        }
 
 
 def test_set_physics_forwards_gravity_to_the_adapter():
@@ -145,23 +160,20 @@ def test_set_physics_forwards_gravity_to_the_adapter():
     result = set_physics(adapter, gravity=[0, 0, -3.72])
 
     assert result["status"] == "success"
-    assert adapter.calls == [[0, 0, -3.72]]
+    assert result["code"] == "PHYSICS_PARAMS_APPLIED"
+    assert adapter.calls == [([0.0, 0.0, -3.72], None, None)]
 
 
-def test_set_physics_reports_parameters_it_cannot_apply():
-    """time_step and gpu_enabled are in the signature but unimplemented.
-
-    They were swallowed under a blanket "Physics parameters updated", so a
-    caller could set a time step, be told it worked, and silently run the whole
-    session at the default rate.
-    """
+def test_set_physics_forwards_time_step_and_gpu_with_typed_readback():
     from isaac_sim_mcp_extension.handlers.simulation import set_physics
 
-    result = set_physics(_GravityAdapter(), time_step=1.0 / 240.0, gpu_enabled=True)
+    adapter = _GravityAdapter()
+    result = set_physics(adapter, time_step=1.0 / 240.0, gpu_enabled=True)
 
-    assert result["status"] == "error"
-    assert "time_step" in result["message"]
-    assert "gpu_enabled" in result["message"]
+    assert result["status"] == "success"
+    assert result["data"]["atomic"] is True
+    assert result["readback"]["runtime"]["gpu_enabled"] is True
+    assert adapter.calls == [(None, 1.0 / 240.0, True)]
 
 
 def test_set_physics_rejects_an_empty_request():
@@ -170,3 +182,68 @@ def test_set_physics_rejects_an_empty_request():
     result = set_physics(_GravityAdapter())
 
     assert result["status"] == "error"
+    assert result["code"] == "PHYSICS_PARAMS_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"gravity": [0.0, float("nan"), -9.81]}, "gravity"),
+        ({"gravity": [0.0, -9.81]}, "gravity"),
+        ({"gravity": 9.81}, "gravity"),
+        ({"time_step": 0.0}, "time_step"),
+        ({"time_step": 0.007}, "nearest supported"),
+        ({"gpu_enabled": 1}, "gpu_enabled"),
+    ],
+)
+def test_set_physics_validates_every_field_before_apply(params, expected):
+    from isaac_sim_mcp_extension.handlers.simulation import set_physics
+
+    adapter = _GravityAdapter()
+    result = set_physics(adapter, **params)
+
+    assert result["status"] == "error"
+    assert result["code"] == "INVALID_PHYSICS_PARAMS"
+    assert expected in result["message"]
+    assert adapter.calls == []
+
+
+def test_set_physics_rejects_active_timeline_before_apply():
+    from isaac_sim_mcp_extension.handlers.simulation import set_physics
+
+    adapter = _GravityAdapter(timeline_state="playing")
+    result = set_physics(adapter, time_step=1.0 / 120.0)
+
+    assert result["status"] == "error"
+    assert result["code"] == "TIMELINE_NOT_STOPPED"
+    assert adapter.calls == []
+
+
+def test_set_physics_reports_unsupported_adapter_without_partial_apply():
+    from isaac_sim_mcp_extension.handlers.simulation import set_physics
+
+    adapter = _GravityAdapter()
+    adapter.configure_physics = MagicMock(side_effect=NotImplementedError("V6 PhysX required"))
+    result = set_physics(adapter, gravity=[0, 0, -9.81], gpu_enabled=True)
+
+    assert result["status"] == "unsupported"
+    assert result["code"] == "PHYSICS_PARAMS_UNSUPPORTED"
+    assert result["applied"] is False
+
+
+def test_set_physics_distinguishes_successful_and_failed_rollback():
+    from isaac_sim_mcp_extension.adapters.base import PhysicsParamsApplyError
+    from isaac_sim_mcp_extension.handlers.simulation import set_physics
+
+    for rollback_succeeded, status, code in (
+        (True, "error", "PHYSICS_PARAMS_APPLY_FAILED"),
+        (False, "partial", "PHYSICS_PARAMS_ROLLBACK_FAILED"),
+    ):
+        adapter = _GravityAdapter()
+        adapter.configure_physics = MagicMock(
+            side_effect=PhysicsParamsApplyError("write failed", rollback_succeeded=rollback_succeeded)
+        )
+        result = set_physics(adapter, time_step=1.0 / 120.0)
+        assert result["status"] == status
+        assert result["code"] == code
+        assert result["rollback_succeeded"] is rollback_succeeded

@@ -300,7 +300,7 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 - Camera 與 LiDAR 建立後需要播放並暖機數個 frame 才會產生資料。
 - `create_lidar` 可選 named preset，或直接指定 FOV、角解析度、rotation rate 與 range；`get_lidar_config` 會讀回實際 USD Core schema。兩種模式與限制見 [`docs/LIDAR_CONFIG.md`](docs/LIDAR_CONFIG.md)。
 - `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回傳包含 typed `.npy` fields 的 `.npz` artifact。完整契約見 [`docs/LIDAR_POINT_CLOUD.md`](docs/LIDAR_POINT_CLOUD.md)。
-- `set_physics_params` 目前直接支援 `gravity`；`time_step` 與 `gpu_enabled` 需使用 `execute_script`。
+- V6 PhysX `set_physics_params` 支援 `gravity`、`time_step` 與 `gpu_enabled`，要求 stopped timeline，並回傳 USD/runtime 雙重 read-back；完整 mapping、原子 rollback 與 Stage timing side effects 見 [`docs/PHYSICS_PARAMS.md`](docs/PHYSICS_PARAMS.md)。
 - `edit_action_graph` 可修改一般 attribute 與新增連線；修改 inline `ScriptNode.inputs:script` 在 6.0.1 仍有限制。
 - 載入含 non-manifold collision 的資產可能使 PhysX native plugin 崩潰。先在乾淨 Stage 驗證資產與碰撞設定。
 - Isaac Sim 6.0.1 多 GPU 環境必須讓 PhysX 使用明確 GPU ordinal；launcher 會依當下主要顯示 GPU 決定，不可移除這項防護或改回未警告的 `-1`。

@@ -136,14 +136,10 @@ async def main() -> int:
                 "apply_material",
                 {"material_path": "/World/Looks/TestMaterial", "target_prim_path": "/World/TestCube"},
             )
-            await call("set_physics_params", {"gravity": [0, 0, -9.81]})
-            unsupported_physics = await session.call_tool(
-                "set_physics_params", {"time_step": 0.0166667, "gpu_enabled": True}
+            await call(
+                "set_physics_params",
+                {"gravity": [0, 0, -9.81], "time_step": 1.0 / 60.0, "gpu_enabled": True},
             )
-            unsupported_physics_payload = parse_payload(unsupported_physics)
-            if unsupported_physics_payload.get("status") in {"partial", "unsupported"}:
-                results["set_physics_params"]["status"] = "partial"
-                results["set_physics_params"]["unsupported_probe"] = unsupported_physics_payload
             await call("get_physics_state", {"prim_path": "/World/TestCube"})
             await call("step_simulation", {"num_steps": 2, "observe_prims": ["/World/TestCube"]})
             await call("play_simulation")

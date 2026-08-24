@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .base import IsaacAdapterBase, JointDriveConfigApplyError
+from .base import IsaacAdapterBase, JointDriveConfigApplyError, PhysicsParamsApplyError
 from .transforms import read_transform, set_transform
 from .units import limit_units, normalize_limit
 from .version import version_string
@@ -1511,7 +1511,12 @@ class IsaacAdapterV6(IsaacAdapterBase):
             SimulationManager._cleanup_stale_physics_scenes()
         except Exception:
             pass
-        SimulationManager.setup_simulation(dt=1.0 / 60.0)
+        # Do not pass a dt here. setup_simulation(dt=1/60) silently rewrites a
+        # time_step configured through set_physics_params every time any tool
+        # calls this initializer (including execute_script and step). With no
+        # dt, Isaac Sim still creates a 60 Hz default scene when none exists,
+        # while preserving an authored rate on an existing scene.
+        SimulationManager.setup_simulation()
         SimulationManager.initialize_physics()
 
     def _arm_reset_point(self) -> None:
@@ -1607,6 +1612,226 @@ class IsaacAdapterV6(IsaacAdapterBase):
             # _apply_gravity.
             self._apply_gravity(scene_path, gravity)
         return scene_path
+
+    def configure_physics(
+        self,
+        gravity: Optional[Sequence[float]] = None,
+        time_step: Optional[float] = None,
+        gpu_enabled: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Atomically author and read back Isaac Sim 6 PhysX scene parameters."""
+        if self._engine != "physx":
+            if time_step is not None or gpu_enabled is not None:
+                raise NotImplementedError(
+                    f"time_step and gpu_enabled are not verified for physics backend {self._engine!r}"
+                )
+            return super().configure_physics(gravity=gravity)
+
+        state = self.get_simulation_state()
+        if state.get("timeline_state") != "stopped":
+            raise RuntimeError("Physics parameters require a stopped timeline")
+
+        import carb
+        from isaacsim.core.simulation_manager import PhysxScene, SimulationManager
+        from pxr import PhysxSchema, UsdPhysics
+
+        stage = self.get_stage()
+        scene_paths = [
+            prim.GetPath().pathString for prim in stage.Traverse() if prim.GetTypeName() == "PhysicsScene"
+        ]
+        if len(scene_paths) > 1:
+            raise RuntimeError(f"Multiple PhysicsScene prims are unsupported: {scene_paths}")
+
+        created = not scene_paths
+        scene_path = self.create_physics_scene()
+        prim = stage.GetPrimAtPath(scene_path)
+        had_physx_api = prim.HasAPI(PhysxSchema.PhysxSceneAPI)
+        attr_names = (
+            "physics:gravityDirection",
+            "physics:gravityMagnitude",
+            "physxScene:timeStepsPerSecond",
+            "physxScene:enableGPUDynamics",
+            "physxScene:broadphaseType",
+            "physxScene:enableCCD",
+        )
+
+        def snapshot_attr(name: str) -> tuple[bool, Any]:
+            attr = prim.GetAttribute(name)
+            authored = bool(attr and attr.HasAuthoredValueOpinion())
+            return authored, attr.Get() if attr else None
+
+        snapshots = {name: snapshot_attr(name) for name in attr_names}
+        stage_time_codes_before = float(stage.GetTimeCodesPerSecond())
+        manager_dt_before = float(SimulationManager.get_physics_dt(scene_path))
+        # The public getter logs a warning when no default exists, which is a
+        # normal fresh-stage state. Snapshot the manager field directly so a
+        # valid transaction does not pollute diagnostics.
+        default_scene_before = getattr(SimulationManager, "_default_physics_scene_path", None)
+        settings = carb.settings.get_settings()
+        min_frame_rate_key = "/persistent/simulation/minFrameRate"
+        min_frame_rate_before = settings.get(min_frame_rate_key)
+
+        try:
+            SimulationManager.set_default_physics_scene(scene_path)
+            usd_scene = UsdPhysics.Scene(prim)
+            physx_api = PhysxSchema.PhysxSceneAPI.Apply(prim)
+            runtime_scene = next(
+                (item for item in SimulationManager.get_physics_scenes() if str(item.path) == scene_path),
+                None,
+            )
+            required_runtime_methods = (
+                "set_steps_per_second",
+                "set_enabled_gpu_dynamics",
+                "set_broadphase_type",
+                "get_dt",
+                "get_enabled_gpu_dynamics",
+                "get_broadphase_type",
+            )
+            # Hot reload replaces the PhysxScene class object while
+            # SimulationManager can retain a valid instance of the previous
+            # class. Match that registered scene by path and protocol instead
+            # of isinstance; otherwise USD read-back changes but step() keeps
+            # using the stale registered 60 Hz wrapper.
+            if runtime_scene is None or not all(hasattr(runtime_scene, name) for name in required_runtime_methods):
+                runtime_scene = PhysxScene(scene_path)
+
+            applied: List[str] = []
+            requested: Dict[str, Any] = {}
+            if gravity is not None:
+                if not self._apply_gravity(scene_path, gravity):
+                    raise RuntimeError("Failed to author gravity on the PhysicsScene")
+                applied.append("gravity")
+                requested["gravity"] = [float(value) for value in gravity]
+            if gpu_enabled is not None:
+                runtime_scene.set_enabled_gpu_dynamics(bool(gpu_enabled))
+                runtime_scene.set_broadphase_type("GPU" if gpu_enabled else "MBP")
+            if time_step is not None:
+                steps_per_second = int(round(1.0 / float(time_step)))
+                stage.SetTimeCodesPerSecond(float(steps_per_second))
+                # Match the established PhysicsContext contract. Without this
+                # clamp, the next Kit update re-authors the default 60 Hz.
+                settings.set(min_frame_rate_key, steps_per_second)
+                runtime_scene.set_steps_per_second(steps_per_second)
+                # GPU dynamics can refresh SimulationManager's registered
+                # scene wrapper and reset its effective dt. Set dt last, then
+                # explicitly synchronize the manager used by step().
+                SimulationManager.set_physics_dt(float(time_step), physics_scene=scene_path)
+                applied.append("time_step")
+                requested["time_step"] = float(time_step)
+            if gpu_enabled is not None:
+                applied.append("gpu_enabled")
+                requested["gpu_enabled"] = bool(gpu_enabled)
+
+            # SimulationManager may materialize a separate registered wrapper
+            # for the same single USD scene. Synchronize every registered
+            # wrapper after authoring, then use it for runtime read-back and
+            # for the clock consumed by SimulationManager.step().
+            registered_scenes = list(SimulationManager.get_physics_scenes())
+            for registered_scene in registered_scenes:
+                if gpu_enabled is not None:
+                    registered_scene.set_enabled_gpu_dynamics(bool(gpu_enabled))
+                    registered_scene.set_broadphase_type("GPU" if gpu_enabled else "MBP")
+                if time_step is not None:
+                    registered_scene.set_steps_per_second(int(round(1.0 / float(time_step))))
+            if registered_scenes:
+                runtime_scene = registered_scenes[0]
+
+            gravity_direction = usd_scene.GetGravityDirectionAttr().Get()
+            gravity_magnitude = usd_scene.GetGravityMagnitudeAttr().Get()
+            usd_gravity = None
+            if gravity_direction is not None and gravity_magnitude is not None:
+                usd_gravity = [float(gravity_direction[index]) * float(gravity_magnitude) for index in range(3)]
+            usd_steps = physx_api.GetTimeStepsPerSecondAttr().Get()
+            usd_readback = {
+                "gravity": usd_gravity,
+                "time_steps_per_second": int(usd_steps) if usd_steps is not None else None,
+                "time_step": 1.0 / float(usd_steps) if usd_steps else 0.0,
+                "gpu_enabled": bool(physx_api.GetEnableGPUDynamicsAttr().Get()),
+                "broadphase_type": str(physx_api.GetBroadphaseTypeAttr().Get()),
+                "ccd_enabled": bool(physx_api.GetEnableCCDAttr().Get()),
+            }
+            runtime_readback = {
+                "time_step": float(runtime_scene.get_dt()),
+                "manager_time_step": float(SimulationManager.get_physics_dt()),
+                "default_scene_path": SimulationManager.get_default_physics_scene(),
+                "stage_time_codes_per_second": float(stage.GetTimeCodesPerSecond()),
+                "min_frame_rate": int(settings.get(min_frame_rate_key)),
+                "gpu_enabled": bool(runtime_scene.get_enabled_gpu_dynamics()),
+                "broadphase_type": str(runtime_scene.get_broadphase_type()),
+            }
+
+            if time_step is not None and not math.isclose(
+                runtime_readback["time_step"], float(time_step), rel_tol=5e-6, abs_tol=1e-9
+            ):
+                raise RuntimeError(
+                    f"time_step read-back mismatch: requested {time_step}, got {runtime_readback['time_step']}"
+                )
+            if time_step is not None and not math.isclose(
+                runtime_readback["manager_time_step"], float(time_step), rel_tol=5e-6, abs_tol=1e-9
+            ):
+                raise RuntimeError(
+                    "SimulationManager time_step read-back mismatch: "
+                    f"requested {time_step}, got {runtime_readback['manager_time_step']}"
+                )
+            if time_step is not None and runtime_readback["min_frame_rate"] != int(round(1.0 / float(time_step))):
+                raise RuntimeError("Physics minFrameRate read-back did not match time_steps_per_second")
+            if time_step is not None and runtime_readback["stage_time_codes_per_second"] != float(
+                int(round(1.0 / float(time_step)))
+            ):
+                raise RuntimeError("Stage timeCodesPerSecond read-back did not match the physics rate")
+            if runtime_readback["default_scene_path"] != scene_path:
+                raise RuntimeError("SimulationManager default PhysicsScene read-back did not match the target")
+            if gpu_enabled is not None:
+                expected_broadphase = "GPU" if gpu_enabled else "MBP"
+                if (
+                    usd_readback["gpu_enabled"] != bool(gpu_enabled)
+                    or runtime_readback["gpu_enabled"] != bool(gpu_enabled)
+                    or usd_readback["broadphase_type"] != expected_broadphase
+                    or runtime_readback["broadphase_type"] != expected_broadphase
+                ):
+                    raise RuntimeError("GPU dynamics or broadphase read-back did not match the request")
+
+            return {
+                "scene_path": scene_path,
+                "backend": "physx",
+                "applied": applied,
+                "requested": requested,
+                "readback": {"usd": usd_readback, "runtime": runtime_readback},
+                "side_effects": {
+                    "ccd_disabled_by_gpu_dynamics": bool(gpu_enabled) if gpu_enabled is not None else False,
+                    "physics_gpu_ordinal_changed": False,
+                },
+                "atomic": True,
+            }
+        except Exception as exc:
+            rollback_succeeded = True
+            try:
+                if created:
+                    stage.RemovePrim(scene_path)
+                else:
+                    for name, (authored, value) in snapshots.items():
+                        attr = prim.GetAttribute(name)
+                        if not attr:
+                            continue
+                        if authored:
+                            attr.Set(value)
+                        else:
+                            attr.Clear()
+                    if not had_physx_api and prim.HasAPI(PhysxSchema.PhysxSceneAPI):
+                        prim.RemoveAPI(PhysxSchema.PhysxSceneAPI)
+                    SimulationManager.set_physics_dt(manager_dt_before, physics_scene=scene_path)
+                if min_frame_rate_before is None:
+                    settings.destroy_item(min_frame_rate_key)
+                else:
+                    settings.set(min_frame_rate_key, min_frame_rate_before)
+                if default_scene_before is None:
+                    SimulationManager._default_physics_scene_path = None
+                else:
+                    SimulationManager.set_default_physics_scene(default_scene_before)
+                stage.SetTimeCodesPerSecond(stage_time_codes_before)
+            except Exception:
+                rollback_succeeded = False
+            raise PhysicsParamsApplyError(str(exc), rollback_succeeded=rollback_succeeded) from exc
 
     def get_physics_state(self, prim_path: str) -> Dict[str, Any]:
         from pxr import UsdPhysics

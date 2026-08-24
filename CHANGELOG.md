@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — atomic V6 PhysX scene parameters
+
+- Completed `set_physics_params` for gravity, integer-rate physics dt, GPU
+  dynamics, and matching GPU/MBP broadphase on Isaac Sim 6.0.1 PhysX.
+- Added stopped-timeline and single-scene guards, full input validation,
+  attribute snapshots, rollback status codes, and USD/runtime/SimulationManager
+  read-back. V5 and Newton continue to report time/GPU arguments unsupported.
+- Synchronized Stage time codes, the minimum simulation frame-rate clamp, and
+  the SimulationManager default scene with the selected physics rate.
+- Fixed `_ensure_physics_world()` so later tools no longer call
+  `setup_simulation(dt=1/60)` and silently erase a configured time step.
+- Added a guarded live verifier for 120 Hz clock timing, invalid-input and
+  active-timeline atomicity, GPU/CPU broadphase mapping, and exact baseline
+  restoration.
+
 ### Added — explicit gripper and mobile-base controller profiles
 
 - Added six named tools for profile discovery, Franka gripper open/close/width,

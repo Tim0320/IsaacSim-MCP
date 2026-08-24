@@ -112,12 +112,21 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
     def set_physics_params(
         gravity: Optional[List[float]] = None, time_step: Optional[float] = None, gpu_enabled: Optional[bool] = None
     ) -> str:
-        """Configure physics engine parameters.
+        """Atomically configure Isaac Sim 6 PhysX scene parameters.
+
+        The timeline must be stopped. ``time_step`` must be within
+        [0.0001, 1.0] seconds and map to an integer PhysX steps-per-second
+        value (for example, 1/60 or 1/120). Isaac Sim's Stage time codes and
+        minimum simulation frame-rate are synchronized to that rate. Enabling GPU physics selects GPU
+        dynamics and GPU broadphase; disabling it selects MBP broadphase.
+        This does not change the launcher-controlled physics GPU ordinal.
+        Success includes both USD and runtime read-back; failed application is
+        rolled back as one transaction.
 
         Args:
             gravity: Gravity vector [x, y, z].
             time_step: Physics time step in seconds.
-            gpu_enabled: Enable GPU-accelerated physics.
+            gpu_enabled: Enable or disable GPU dynamics and matching broadphase.
         """
         try:
             conn = get_connection()

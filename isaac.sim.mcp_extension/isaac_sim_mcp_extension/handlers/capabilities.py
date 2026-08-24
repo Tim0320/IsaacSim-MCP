@@ -147,6 +147,9 @@ def _feature_flags(
     else:
         drive_config_state = "supported"
         drive_field_state = "supported"
+    physics_scene_config_state = (
+        "supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported"
+    )
     return {
         "scene.basic_crud": {"state": "supported"},
         "sensor.lifecycle": {
@@ -227,9 +230,30 @@ def _feature_flags(
             ],
             "reason": None if adapter_generation == 6 else "Isaac Sim 5.x supports named presets only",
         },
-        "physics.gravity": {"state": "supported"},
-        "physics.time_step": {"state": "unsupported"},
-        "physics.gpu_enabled": {"state": "unsupported"},
+        "physics.gravity": {"state": "supported", "tool": "set_physics_params", "readback": True},
+        "physics.time_step": {
+            "state": physics_scene_config_state,
+            "tool": "set_physics_params",
+            "adapter_generation": adapter_generation,
+            "backend": physics_backend,
+            "requires_stopped_timeline": True,
+            "range_seconds": [0.0001, 1.0],
+            "integer_steps_per_second_required": True,
+            "synchronizes_stage_time_codes": True,
+            "synchronizes_min_frame_rate": True,
+            "usd_and_runtime_readback": adapter_generation == 6 and physics_backend == "physx",
+        },
+        "physics.gpu_enabled": {
+            "state": physics_scene_config_state,
+            "tool": "set_physics_params",
+            "adapter_generation": adapter_generation,
+            "backend": physics_backend,
+            "requires_stopped_timeline": True,
+            "true_broadphase": "GPU",
+            "false_broadphase": "MBP",
+            "changes_physics_gpu_ordinal": False,
+            "usd_and_runtime_readback": adapter_generation == 6 and physics_backend == "physx",
+        },
         "physics.backend_verification": {
             "state": backend_verification,
             "backend": physics_backend,
@@ -340,19 +364,21 @@ def _feature_flags(
     }
 
 
-def _unsupported_arguments(adapter_generation: Optional[int]) -> Dict[str, Dict[str, Dict[str, str]]]:
-    result = {
-        "set_physics_params": {
+def _unsupported_arguments(
+    adapter_generation: Optional[int], physics_backend: str
+) -> Dict[str, Dict[str, Dict[str, str]]]:
+    result: Dict[str, Dict[str, Dict[str, str]]] = {}
+    if adapter_generation != 6 or physics_backend != "physx":
+        result["set_physics_params"] = {
             "time_step": {
                 "state": "unsupported",
-                "reason": "accepted by the MCP schema but rejected by the extension handler",
+                "reason": "Requires the Isaac Sim 6.x PhysX scene adapter",
             },
             "gpu_enabled": {
                 "state": "unsupported",
-                "reason": "accepted by the MCP schema but rejected by the extension handler",
+                "reason": "Requires the Isaac Sim 6.x PhysX scene adapter",
             },
         }
-    }
     if adapter_generation == 5:
         result["create_lidar"] = {
             name: {"state": "unsupported", "reason": "Generic schema configuration requires Isaac Sim 6.x"}
@@ -415,6 +441,8 @@ def get_capabilities(
         "feature_flags": _feature_flags(
             runtime["adapter_generation"], runtime["physics_backend"], motion_enabled, wheeled_enabled
         ),
-        "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"]),
+        "unsupported_arguments": _unsupported_arguments(
+            runtime["adapter_generation"], runtime["physics_backend"]
+        ),
         "sensor_warmup": _sensor_warmup(adapter),
     }

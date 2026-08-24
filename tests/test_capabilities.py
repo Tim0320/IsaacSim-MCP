@@ -174,7 +174,26 @@ def test_handler_returns_stable_runtime_capability_contract():
     }
     assert result["feature_flags"]["robot.joint_effort"]["renew_each_update"] is True
     assert "create_lidar" not in result["unsupported_arguments"]
-    assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
+    assert result["feature_flags"]["physics.gravity"] == {
+        "state": "supported",
+        "tool": "set_physics_params",
+        "readback": True,
+    }
+    assert result["feature_flags"]["physics.time_step"] == {
+        "state": "supported",
+        "tool": "set_physics_params",
+        "adapter_generation": 6,
+        "backend": "physx",
+        "requires_stopped_timeline": True,
+        "range_seconds": [0.0001, 1.0],
+        "integer_steps_per_second_required": True,
+        "synchronizes_stage_time_codes": True,
+        "synchronizes_min_frame_rate": True,
+        "usd_and_runtime_readback": True,
+    }
+    assert result["feature_flags"]["physics.gpu_enabled"]["state"] == "supported"
+    assert result["feature_flags"]["physics.gpu_enabled"]["changes_physics_gpu_ordinal"] is False
+    assert "set_physics_params" not in result["unsupported_arguments"]
     assert result["sensor_warmup"]["camera"]["state"] == "per_sensor_unknown"
     assert result["sensor_warmup"]["lidar"]["state"] == "not_created"
 
@@ -211,6 +230,8 @@ def test_v5_reports_physx_and_supported_lidar_config():
     assert result["feature_flags"]["robot.joint_state"]["state"] == "partial"
     assert result["feature_flags"]["robot.joint_command"]["state"] == "unsupported"
     assert result["feature_flags"]["robot.joint_drive_config"]["state"] == "unsupported"
+    assert result["feature_flags"]["physics.time_step"]["state"] == "unsupported"
+    assert result["unsupported_arguments"]["set_physics_params"]["gpu_enabled"]["state"] == "unsupported"
     assert result["unsupported_arguments"]["create_lidar"]["horizontal_fov_deg"]["state"] == "unsupported"
 
 
@@ -221,6 +242,10 @@ def test_newton_reports_physx_only_max_velocity_and_unverified_drive_fields():
 
     result = get_capabilities(_AdapterV6Newton(), {}, extension_manager=_ExtensionManager())
     feature = result["feature_flags"]["robot.joint_drive_config"]
+
+    assert result["feature_flags"]["physics.time_step"]["state"] == "unsupported"
+    assert result["feature_flags"]["physics.gpu_enabled"]["state"] == "unsupported"
+    assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
 
     assert feature["state"] == "partial"
     assert feature["backend"] == "newton"

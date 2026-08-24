@@ -185,7 +185,7 @@ def test_v6_ensure_physics_world_calls_simulation_manager(monkeypatch):
     # test_v6_never_warms_physics_without_a_stage), so provide one.
     monkeypatch.setattr(adapter, "get_stage", lambda: object())
     adapter._ensure_physics_world()
-    assert ("setup_simulation", 1.0 / 60.0) in sm_calls
+    assert ("setup_simulation", None) in sm_calls
     assert ("initialize_physics",) in sm_calls
     # And confirm we picked up the engine
     assert adapter._engine == "newton"
@@ -340,6 +340,207 @@ def test_v6_holonomic_accepts_experimental_sequence_and_reorders_names(monkeypat
         ["axle_0_joint", "axle_1_joint", "axle_2_joint"],
     )
     assert result == [20.0, 30.0, 10.0]
+
+
+def test_v6_configure_physics_applies_dual_readback_and_rolls_back(monkeypatch):
+    class _Attr:
+        def __init__(self, value):
+            self.value = value
+            self.authored = True
+
+        def Get(self):
+            return self.value
+
+        def Set(self, value):
+            self.value = value
+            self.authored = True
+
+        def Clear(self):
+            self.value = None
+            self.authored = False
+
+        def HasAuthoredValueOpinion(self):
+            return self.authored
+
+        def __bool__(self):
+            return True
+
+    attrs = {
+        "physics:gravityDirection": _Attr([0.0, 0.0, -1.0]),
+        "physics:gravityMagnitude": _Attr(9.81),
+        "physxScene:timeStepsPerSecond": _Attr(60),
+        "physxScene:enableGPUDynamics": _Attr(False),
+        "physxScene:broadphaseType": _Attr("MBP"),
+        "physxScene:enableCCD": _Attr(True),
+    }
+
+    class _Prim:
+        def GetTypeName(self):
+            return "PhysicsScene"
+
+        def GetPath(self):
+            return types.SimpleNamespace(pathString="/World/PhysicsScene")
+
+        def GetAttribute(self, name):
+            return attrs[name]
+
+        def HasAPI(self, _api):
+            return True
+
+        def RemoveAPI(self, _api):
+            pass
+
+    prim = _Prim()
+
+    class _Stage:
+        time_codes_per_second = 60.0
+
+        def Traverse(self):
+            return [prim]
+
+        def GetPrimAtPath(self, _path):
+            return prim
+
+        def RemovePrim(self, _path):
+            raise AssertionError("existing PhysicsScene must be rolled back, not removed")
+
+        def GetTimeCodesPerSecond(self):
+            return self.time_codes_per_second
+
+        def SetTimeCodesPerSecond(self, value):
+            self.time_codes_per_second = float(value)
+
+    class _UsdScene:
+        def __init__(self, _prim):
+            pass
+
+        def GetGravityDirectionAttr(self):
+            return attrs["physics:gravityDirection"]
+
+        def GetGravityMagnitudeAttr(self):
+            return attrs["physics:gravityMagnitude"]
+
+    class _PhysxApi:
+        def __init__(self, _prim):
+            pass
+
+        @classmethod
+        def Apply(cls, prim_value):
+            return cls(prim_value)
+
+        def GetTimeStepsPerSecondAttr(self):
+            return attrs["physxScene:timeStepsPerSecond"]
+
+        def GetEnableGPUDynamicsAttr(self):
+            return attrs["physxScene:enableGPUDynamics"]
+
+        def GetBroadphaseTypeAttr(self):
+            return attrs["physxScene:broadphaseType"]
+
+        def GetEnableCCDAttr(self):
+            return attrs["physxScene:enableCCD"]
+
+    class _Path:
+        def __str__(self):
+            return "/World/PhysicsScene"
+
+    class _RuntimeScene:
+        # Live SimulationManager exposes an Sdf.Path-like object here; direct
+        # equality with the str scene path is false.
+        path = _Path()
+        fail_broadphase = False
+
+        def set_steps_per_second(self, value):
+            attrs["physxScene:timeStepsPerSecond"].Set(value)
+
+        def set_enabled_gpu_dynamics(self, value):
+            attrs["physxScene:enableGPUDynamics"].Set(value)
+            if value:
+                attrs["physxScene:enableCCD"].Set(False)
+
+        def set_broadphase_type(self, value):
+            if self.fail_broadphase:
+                raise RuntimeError("broadphase write failed")
+            attrs["physxScene:broadphaseType"].Set(value)
+
+        def get_dt(self):
+            return 1.0 / attrs["physxScene:timeStepsPerSecond"].Get()
+
+        def get_enabled_gpu_dynamics(self):
+            return attrs["physxScene:enableGPUDynamics"].Get()
+
+        def get_broadphase_type(self):
+            return attrs["physxScene:broadphaseType"].Get()
+
+    runtime = _RuntimeScene()
+
+    class _ReloadedPhysxScene:
+        def __init__(self, _path):
+            raise AssertionError("registered pre-reload scene wrapper must be reused")
+
+    manager_mod = types.ModuleType("isaacsim.core.simulation_manager")
+    manager_mod.PhysxScene = _ReloadedPhysxScene
+    manager = types.SimpleNamespace(
+        get_physics_scenes=lambda: [runtime],
+        get_physics_dt=lambda _path=None: runtime.get_dt(),
+        set_physics_dt=lambda dt, physics_scene=None: runtime.set_steps_per_second(round(1.0 / dt)),
+        _default_physics_scene_path=None,
+    )
+    manager.get_default_physics_scene = lambda: manager._default_physics_scene_path
+    manager.set_default_physics_scene = lambda path: setattr(manager, "_default_physics_scene_path", path)
+    manager_mod.SimulationManager = manager
+    monkeypatch.setitem(sys.modules, manager_mod.__name__, manager_mod)
+    setting_values = {"/persistent/simulation/minFrameRate": 60}
+    fake_settings = types.SimpleNamespace(
+        get=lambda key: setting_values.get(key),
+        set=lambda key, value: setting_values.__setitem__(key, value),
+        destroy_item=lambda key: setting_values.pop(key, None),
+    )
+    carb_mod = types.ModuleType("carb")
+    carb_mod.settings = types.SimpleNamespace(get_settings=lambda: fake_settings)
+    monkeypatch.setitem(sys.modules, "carb", carb_mod)
+    pxr_mod = sys.modules["pxr"]
+    monkeypatch.setattr(pxr_mod, "PhysxSchema", types.SimpleNamespace(PhysxSceneAPI=_PhysxApi), raising=False)
+    monkeypatch.setattr(pxr_mod, "UsdPhysics", types.SimpleNamespace(Scene=_UsdScene), raising=False)
+
+    from isaac_sim_mcp_extension.adapters.base import PhysicsParamsApplyError
+    from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+
+    monkeypatch.setattr(IsaacAdapterV6, "_engine", property(lambda _self: "physx"))
+    adapter = object.__new__(IsaacAdapterV6)
+    adapter.get_stage = lambda: _Stage()
+    adapter.get_simulation_state = lambda: {"timeline_state": "stopped"}
+    adapter.create_physics_scene = lambda **_kwargs: "/World/PhysicsScene"
+
+    def apply_gravity(_path, gravity):
+        attrs["physics:gravityDirection"].Set([0.0, 0.0, -1.0])
+        attrs["physics:gravityMagnitude"].Set(abs(gravity[2]))
+        return True
+
+    adapter._apply_gravity = apply_gravity
+    result = adapter.configure_physics(gravity=[0.0, 0.0, -3.72], time_step=1.0 / 120.0, gpu_enabled=True)
+    assert result["applied"] == ["gravity", "time_step", "gpu_enabled"]
+    assert result["readback"]["usd"]["time_steps_per_second"] == 120
+    assert result["readback"]["runtime"] == {
+        "time_step": 1.0 / 120.0,
+        "manager_time_step": 1.0 / 120.0,
+        "default_scene_path": "/World/PhysicsScene",
+        "stage_time_codes_per_second": 120.0,
+        "min_frame_rate": 120,
+        "gpu_enabled": True,
+        "broadphase_type": "GPU",
+    }
+    assert result["side_effects"]["physics_gpu_ordinal_changed"] is False
+
+    runtime.fail_broadphase = True
+    with pytest.raises(PhysicsParamsApplyError) as error:
+        adapter.configure_physics(time_step=1.0 / 240.0, gpu_enabled=False)
+    assert error.value.rollback_succeeded is True
+    assert attrs["physxScene:timeStepsPerSecond"].Get() == 120
+    assert attrs["physxScene:enableGPUDynamics"].Get() is True
+    assert attrs["physxScene:broadphaseType"].Get() == "GPU"
+    assert attrs["physxScene:enableCCD"].Get() is False
+    assert setting_values["/persistent/simulation/minFrameRate"] == 120
 
 
 def test_v6_joint_state_reads_measured_and_target_arrays():

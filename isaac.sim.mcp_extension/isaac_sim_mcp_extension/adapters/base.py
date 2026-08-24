@@ -53,6 +53,14 @@ class JointDriveConfigApplyError(RuntimeError):
         self.rollback_succeeded = rollback_succeeded
 
 
+class PhysicsParamsApplyError(RuntimeError):
+    """A physics-scene write failed after apply began, with rollback status."""
+
+    def __init__(self, message: str, *, rollback_succeeded: bool) -> None:
+        super().__init__(message)
+        self.rollback_succeeded = rollback_succeeded
+
+
 class IsaacAdapterBase(ABC):
     """Abstract interface that isolates all Isaac Sim version-specific API calls.
 
@@ -280,6 +288,25 @@ class IsaacAdapterBase(ABC):
     def create_physics_scene(self, gravity: Optional[Sequence[float]] = None, scene_name: str = "PhysicsScene") -> str:
         """Create a physics scene prim with gravity settings."""
         ...
+
+    def configure_physics(
+        self,
+        gravity: Optional[Sequence[float]] = None,
+        time_step: Optional[float] = None,
+        gpu_enabled: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Apply physics parameters supported by the active adapter."""
+        if time_step is not None or gpu_enabled is not None:
+            raise NotImplementedError("time_step and gpu_enabled require the Isaac Sim 6.x PhysX adapter")
+        scene_path = self.create_physics_scene(gravity=gravity)
+        return {
+            "scene_path": scene_path,
+            "backend": "unknown",
+            "applied": ["gravity"] if gravity is not None else [],
+            "requested": {"gravity": list(gravity)} if gravity is not None else {},
+            "readback": None,
+            "atomic": True,
+        }
 
     @abstractmethod
     def get_physics_state(self, prim_path: str) -> Dict[str, Any]:

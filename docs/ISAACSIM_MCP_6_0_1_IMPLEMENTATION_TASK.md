@@ -196,11 +196,16 @@
 
 ## Phase 3：Physics、材料與 USD stage
 
-- [ ] 11. 完成 `set_physics_params`
+- [x] 11. 完成 `set_physics_params`
   > 現況（已確認）：gravity 可套用；`time_step` 與 `gpu_enabled` 雖出現在 tool signature，handler 明確列為 unsupported/ignored。
   > 缺漏位置：`tools/simulation.py:113-130`、`handlers/simulation.py:106-140`、V6 physics scene adapter。
   > 實作：對 Isaac Sim 6.0.1 寫入 simulation/physics time step 與 GPU dynamics/broadphase 相關設定；先驗證 stage state，必要時 stop 後再改。
   > 驗收：設定後由 physics scene 與 runtime API 雙重 read-back；實際 step timing 符合設定；不能套用時回 unsupported，不得回 success。
+  > 已實作：V6 PhysX 支援 gravity、`time_step=[0.0001,1.0] s`（必須對應整數 steps/sec）與 boolean `gpu_enabled`。true author GPU dynamics + GPU broadphase；false author GPU dynamics off + MBP。timeline 非 stopped、多個 PhysicsScene、非有限/型別錯誤或無法整數映射全部在 apply 前拒絕。
+  > timing lifecycle：time step 同步 `physxScene:timeStepsPerSecond`、Stage `timeCodesPerSecond`、`/persistent/simulation/minFrameRate` 與 SimulationManager default scene。修正 `_ensure_physics_world()` 原本每次以 `setup_simulation(dt=1/60)` 覆寫設定的問題，改為不傳 dt 並保留既有 authored rate。
+  > atomicity/read-back：成功 response 同時回 USD、runtime wrapper、SimulationManager dt、Stage time codes、min frame-rate、default scene 與 GPU/broadphase；apply/read-back 失敗會還原所有 authored attributes、Stage/global timing 與 default scene。`gpu_enabled` 不改 launcher `/physics/cudaDevice` ordinal；GPU dynamics 停用 CCD 的 PhysX side effect 會明確回報。
+  > live 驗收（2026-08-24）：乾淨重啟、Isaac Sim `6.0.1-rc.7`／PhysX、`/physics/cudaDevice=0`（唯一 display-active GPU）完成。120 Hz USD/runtime/manager read-back一致；初始化 warm-up 後 12 steps 的 physics clock 精確增加 `0.1 s`。invalid `0.007 s` 與 playing timeline request 均保持 snapshot 不變；GPU/GPU broadphase 與 CPU/MBP mapping 通過。
+  > cleanup／health：verifier 對 Isaac baseline `/PhysicsScene` 做完整 snapshot/restore，不刪除既有 scene；attributes、Stage `60 Hz`、min-frame-rate `30`、default scene `None` 全部恢復，timeline stopped，Kit PID `38160`／TCP `8766` 存活，新增 native dump `0`。Stop 有四筆既有 tensor SimulationView invalidation warning，但無 CUDA/device-lost/native crash signature。契約：`docs/PHYSICS_PARAMS.md`。
 
 - [ ] 12. PhysX 與 Newton 能力分流
   > 現況：adapter 介面宣稱 backend-neutral，但 reset/step、articulation、sensor 等路徑尚無完整 Newton live matrix。

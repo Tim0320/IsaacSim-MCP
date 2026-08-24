@@ -26,10 +26,11 @@
 from __future__ import annotations
 
 import glob
+import math
 import os
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-from ..adapters.base import IsaacAdapterBase
+from ..adapters.base import IsaacAdapterBase, PhysicsParamsApplyError
 
 
 def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
@@ -109,37 +110,94 @@ def set_physics(
     time_step: Optional[float] = None,
     gpu_enabled: Optional[bool] = None,
 ) -> Dict[str, Any]:
+    if gravity is None and time_step is None and gpu_enabled is None:
+        return {
+            "status": "error",
+            "code": "PHYSICS_PARAMS_REQUIRED",
+            "message": "At least one physics parameter is required",
+            "applied": False,
+        }
     try:
-        applied = []
-        unsupported = []
+        normalized_gravity = None
         if gravity is not None:
-            adapter.create_physics_scene(gravity=gravity)
-            applied.append("gravity")
-        # time_step and gpu_enabled are accepted by the signature but no adapter
-        # implements them. They used to be swallowed silently under a blanket
-        # "Physics parameters updated", so a caller could set a time step, be
-        # told it worked, and run the whole session at the default rate. Say so
-        # instead of pretending.
+            try:
+                gravity_length = len(gravity)
+            except TypeError as exc:
+                raise ValueError("gravity must contain exactly three finite numbers") from exc
+            if isinstance(gravity, (str, bytes)) or gravity_length != 3:
+                raise ValueError("gravity must contain exactly three finite numbers")
+            normalized_gravity = []
+            for value in gravity:
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise ValueError("gravity must contain exactly three finite numbers")
+                normalized_gravity.append(float(value))
+        normalized_time_step = None
         if time_step is not None:
-            unsupported.append("time_step")
+            if isinstance(time_step, bool) or not isinstance(time_step, (int, float)) or not math.isfinite(time_step):
+                raise ValueError("time_step must be a finite number in seconds")
+            normalized_time_step = float(time_step)
+            if not 1.0 / 10000.0 <= normalized_time_step <= 1.0:
+                raise ValueError("time_step must be within [0.0001, 1.0] seconds")
+            steps_per_second = int(round(1.0 / normalized_time_step))
+            effective_time_step = 1.0 / steps_per_second
+            if not math.isclose(normalized_time_step, effective_time_step, rel_tol=5e-6, abs_tol=1e-9):
+                raise ValueError(
+                    "time_step must map to an integer PhysX steps-per-second value; "
+                    f"nearest supported value is {effective_time_step}"
+                )
         if gpu_enabled is not None:
-            unsupported.append("gpu_enabled")
+            if not isinstance(gpu_enabled, bool):
+                raise ValueError("gpu_enabled must be a boolean")
 
-        if not applied and not unsupported:
-            return {"status": "error", "message": "No physics parameters supplied"}
-        if unsupported:
+        state = adapter.get_simulation_state()
+        if state.get("timeline_state") != "stopped":
             return {
                 "status": "error",
-                "message": (
-                    f"Applied: {applied or 'nothing'}. Not supported by this adapter and therefore "
-                    f"ignored: {unsupported}. Set them directly with execute_script if you need them."
-                ),
-                "applied": applied,
-                "unsupported": unsupported,
+                "code": "TIMELINE_NOT_STOPPED",
+                "message": "Stop the simulation before changing physics scene parameters",
+                "applied": False,
             }
-        return {"status": "success", "message": f"Physics parameters updated: {applied}", "applied": applied}
+        result = adapter.configure_physics(
+            gravity=normalized_gravity,
+            time_step=normalized_time_step,
+            gpu_enabled=gpu_enabled,
+        )
+        return {
+            "status": "success",
+            "code": "PHYSICS_PARAMS_APPLIED",
+            "message": f"Physics parameters updated: {result['applied']}",
+            "data": result,
+            "readback": result.get("readback"),
+        }
+    except NotImplementedError as exc:
+        return {
+            "status": "unsupported",
+            "code": "PHYSICS_PARAMS_UNSUPPORTED",
+            "message": str(exc),
+            "applied": False,
+        }
+    except PhysicsParamsApplyError as exc:
+        return {
+            "status": "error" if exc.rollback_succeeded else "partial",
+            "code": "PHYSICS_PARAMS_APPLY_FAILED" if exc.rollback_succeeded else "PHYSICS_PARAMS_ROLLBACK_FAILED",
+            "message": str(exc),
+            "applied": False if exc.rollback_succeeded else None,
+            "rollback_succeeded": exc.rollback_succeeded,
+        }
+    except ValueError as exc:
+        return {
+            "status": "error",
+            "code": "INVALID_PHYSICS_PARAMS",
+            "message": str(exc),
+            "applied": False,
+        }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {
+            "status": "error",
+            "code": "PHYSICS_PARAMS_FAILED",
+            "message": str(e),
+            "applied": False,
+        }
 
 
 def execute_script(adapter: IsaacAdapterBase, code: Optional[str] = None, cwd: Optional[str] = None) -> Dict[str, Any]:

@@ -38,7 +38,7 @@
 - `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回受控 `.npz` artifact。V6 必有 Cartesian `points`、range、azimuth、elevation，可用時另含 intensity 與 128-bit object ID；semantic ID 目前明確列為 unavailable。契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。
 - V6 `create_lidar` 支援 named preset，或以 FOV、角解析度、rotation rate 與 range 建立 generic RTX LiDAR；兩種模式不可混用。`get_lidar_config` 會從 USD Core schema 讀回有效值與 raw attributes。契約見 [`LIDAR_CONFIG.md`](LIDAR_CONFIG.md)。
 - `delete_sensor` 會完整 teardown Camera/LiDAR runtime，刪除 prim，等待 Kit updates，再驗證 prim、RenderProduct、cache 與 LiDAR metadata 均不存在。timeline 必須處於 Pause 或 Stop；`delete_object` 遇到 managed sensor 會走相同流程。契約見 [`SENSOR_LIFECYCLE.md`](SENSOR_LIFECYCLE.md)。
-- `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
+- V6 PhysX `set_physics_params` 支援 `gravity`、整數 steps/sec 對應的 `time_step`，以及 GPU dynamics + GPU/MBP broadphase mapping。timeline 必須 stopped，成功需 USD、runtime wrapper、SimulationManager、Stage time codes 與 min-frame-rate read-back 一致；V5/Newton 仍明確 unsupported。契約見 [`PHYSICS_PARAMS.md`](PHYSICS_PARAMS.md)。
 - Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。Drive config 可在 stopped timeline 原子寫入 gains、max force/velocity 與 force/acceleration type，並 rollback 失敗寫入。V5 不支援 typed drive setter；Newton 的 max velocity 明確不支援，其餘 drive 欄位維持 unverified。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md) 與 [`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md)。
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
@@ -155,6 +155,15 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - mobile base：Jetbot targets `[2.9583333,3.7083333]`、Kaya targets `[-9.304024,-6.6114283,-9.497344] rad/s`，兩者 measured velocities 均為有限值；stop 後全部 profiled wheel targets 讀回零
 - lifecycle：clean restart 後依序完成 2.4、2.3；scratch fixtures/physics prim 全 absent、timeline stopped、Kit PID/TCP 存活、當次 log 無 GPU/device-lost/PhysX crash signature、新增 native dump `0`
 - 歷史警示：舊長時間 session 曾因錯誤 device allocation 後出現 RTX CUDA external-memory failures、GPU page fault 與 `ERROR_DEVICE_LOST`，該 session 未納入驗收；Warp arrays 現在固定跟隨 Articulation physics device
+
+2026-08-24 完成 Physics parameters scratch live 驗收：
+
+- runtime：Isaac Sim `6.0.1-rc.7`、V6 PhysX、68 commands；launcher `/physics/cudaDevice=0` 對應唯一 display-active GPU
+- mapping：gravity `[0,0,-3.72]`；120 Hz time step；GPU dynamics + GPU broadphase，以及 GPU dynamics off + MBP broadphase均由 USD/runtime 讀回
+- timing：初始化 warm-up 後，12 個 stopped physics steps 的 clock 精確增加 `0.1 s`
+- atomicity：`0.007 s` 無法對應整數 steps/sec 時回 `INVALID_PHYSICS_PARAMS`；playing timeline 回 `TIMELINE_NOT_STOPPED`；兩者完整 snapshot 不變
+- lifecycle：修正 `_ensure_physics_world()` 原本固定重設 60 Hz；verifier 以 timeline state postcondition 等待 queued Stop，最後還原 PhysicsScene attrs、Stage `60 Hz`、min-frame-rate `30` 與 default scene `None`
+- health：Kit PID `38160`／TCP `8766` 存活，新增 native dump `0`；Stop 造成四筆已知 tensor SimulationView invalidation warning，沒有 CUDA/device-lost/native crash signature
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

@@ -41,7 +41,7 @@ TCP：`127.0.0.1:8766`，LISTENING（Kit PID 20692）
 | 模擬 | `stop_simulation` | 可用 | timeline 停止並重設 |
 | 模擬 | `step_simulation` | 可用 | 單步執行並觀察 prim/joint |
 | 模擬 | `get_simulation_state` | 可用 | 成功取得 timeline 狀態 |
-| 物理 | `set_physics_params` | 部分可用 | `gravity` 可用；`time_step`、`gpu_enabled` 被 6.0.1 adapter 明確拒絕 |
+| 物理 | `set_physics_params` | 可用 | V6 PhysX gravity、120 Hz time step、GPU dynamics/GPU 或 CPU/MBP mapping 均完成雙重 read-back與 step timing 驗證 |
 | 物理 | `get_physics_state` | 可用 | 成功取得 rigid-body 狀態 |
 | Robot | `list_available_robots` | 可用 | 找到 207 個 robot 定義 |
 | Robot | `refresh_robot_library` | 可用 | robot library 更新成功 |
@@ -77,7 +77,7 @@ Accessed invalid expired 'Xform' prim </Environment/TestGrid>
 ## 使用限制與注意事項
 
 - Camera 與 LiDAR 在建立後的第一個 frame 尚無資料；必須保持 simulation 播放，等待 sensor 初始化/暖機後再讀取。這是時序要求，不是工具失效。
-- `set_physics_params` 在 V6 adapter 目前只驗證到 `gravity`；`time_step`、`gpu_enabled` 需用 `execute_script` 直接設定或擴充 adapter。
+- `set_physics_params` 的 `time_step`/`gpu_enabled` 僅在 V6 PhysX 宣稱 supported；V5 與 Newton 仍 fail closed。time step 會同步 Stage time codes 與 min frame-rate，詳見 `docs/PHYSICS_PARAMS.md`。
 - `edit_action_graph` 可修改一般 attribute，但目前不能用測試格式更新 inline ScriptNode script。
 
 ### 2026-08-21 Action Graph 隔離重測
