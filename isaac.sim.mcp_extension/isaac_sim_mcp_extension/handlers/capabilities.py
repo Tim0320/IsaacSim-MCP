@@ -19,7 +19,7 @@ from ..artifact_store import (
 )
 from .sensors import DEFAULT_INLINE_MAX_BYTES, MAX_INLINE_MAX_BYTES
 
-CAPABILITIES_SCHEMA_VERSION = "1.0"
+CAPABILITIES_SCHEMA_VERSION = "1.1"
 EXTENSION_ID = "isaac.sim.mcp_extension"
 
 RELEVANT_EXTENSIONS = (
@@ -128,32 +128,162 @@ def _runtime_info(adapter: IsaacAdapterBase) -> Dict[str, Any]:
     }
 
 
+def _backend_matrix(adapter: IsaacAdapterBase, active_backend: str) -> Dict[str, Any]:
+    """Read the adapter-owned matrix without allowing discovery to fail."""
+    try:
+        matrix = adapter.get_backend_capability_matrix()
+    except Exception:
+        matrix = {}
+    if not isinstance(matrix, Mapping):
+        matrix = {}
+    return {
+        "schema_version": str(matrix.get("schema_version") or "1.0"),
+        "active_backend": str(matrix.get("active_backend") or active_backend),
+        "policy": dict(matrix.get("policy") or {}),
+        "features": dict(matrix.get("features") or {}),
+    }
+
+
+def _backend_feature(
+    matrix: Mapping[str, Any],
+    feature: str,
+    backend: str,
+    *,
+    fallback_state: str,
+    fallback_verification: str,
+) -> tuple[str, str]:
+    record = matrix.get("features", {}).get(feature, {})
+    backend_record = record.get("backends", {}).get(backend, {}) if isinstance(record, Mapping) else {}
+    if not isinstance(backend_record, Mapping):
+        return fallback_state, fallback_verification
+    return (
+        str(backend_record.get("state") or fallback_state),
+        str(backend_record.get("verification") or fallback_verification),
+    )
+
+
+def _active_backend_flag(
+    matrix: Mapping[str, Any], feature: str, backend: str, fallback_verification: str
+) -> Dict[str, Any]:
+    state, verification = _backend_feature(
+        matrix,
+        feature,
+        backend,
+        fallback_state="unknown",
+        fallback_verification=fallback_verification,
+    )
+    return {"state": state, "backend": backend, "backend_verification": verification}
+
+
 def _feature_flags(
     adapter_generation: Optional[int],
     physics_backend: str,
+    backend_matrix: Mapping[str, Any],
     motion_generation_enabled: Optional[bool] = None,
     wheeled_robots_enabled: Optional[bool] = None,
 ) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
-    backend_verification = "verified" if physics_backend == "physx" else "unverified"
-    camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
-    joint_v6_state = "supported" if adapter_generation == 6 else "unsupported"
-    if adapter_generation != 6:
-        drive_config_state = "unsupported"
-        drive_field_state = "unsupported"
-    elif physics_backend == "newton":
-        drive_config_state = "partial"
-        drive_field_state = "unverified"
-    else:
-        drive_config_state = "supported"
-        drive_field_state = "supported"
-    physics_scene_config_state = (
-        "supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported"
+    fallback_verification = "verified" if physics_backend == "physx" else "unverified"
+    camera_backend_state, _camera_verification = _backend_feature(
+        backend_matrix,
+        "sensor.camera",
+        physics_backend,
+        fallback_state="supported",
+        fallback_verification=fallback_verification,
     )
+    camera_v6_state = camera_backend_state if adapter_generation == 6 else "unsupported"
+    lidar_backend_state, _lidar_verification = _backend_feature(
+        backend_matrix,
+        "sensor.lidar",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "partial",
+        fallback_verification=fallback_verification,
+    )
+    sensor_lifecycle_state, _sensor_lifecycle_verification = _backend_feature(
+        backend_matrix,
+        "sensor.lifecycle",
+        physics_backend,
+        fallback_state="supported",
+        fallback_verification=fallback_verification,
+    )
+    joint_v6_state, joint_verification = _backend_feature(
+        backend_matrix,
+        "robot.joint_command",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    joint_state_state, joint_state_verification = _backend_feature(
+        backend_matrix,
+        "robot.joint_state",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "partial",
+        fallback_verification=fallback_verification,
+    )
+    drive_config_state, drive_verification = _backend_feature(
+        backend_matrix,
+        "robot.joint_drive_config",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    max_velocity_state, _ = _backend_feature(
+        backend_matrix,
+        "robot.joint_drive_config.max_velocity",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    physics_time_state, physics_verification = _backend_feature(
+        backend_matrix,
+        "physics.time_step",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    physics_gpu_state, _ = _backend_feature(
+        backend_matrix,
+        "physics.gpu_enabled",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    physics_gravity_state, _ = _backend_feature(
+        backend_matrix,
+        "physics.gravity",
+        physics_backend,
+        fallback_state="supported",
+        fallback_verification=fallback_verification,
+    )
+    motion_backend_state, motion_verification = _backend_feature(
+        backend_matrix,
+        "motion.ik_and_planning",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    gripper_backend_state, gripper_verification = _backend_feature(
+        backend_matrix,
+        "robot.gripper_profiles",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    mobile_backend_state, mobile_verification = _backend_feature(
+        backend_matrix,
+        "robot.mobile_base_profiles",
+        physics_backend,
+        fallback_state="supported" if adapter_generation == 6 else "unsupported",
+        fallback_verification=fallback_verification,
+    )
+    if adapter_generation != 6:
+        drive_field_state = "unsupported"
+    else:
+        drive_field_state = drive_config_state
     return {
         "scene.basic_crud": {"state": "supported"},
         "sensor.lifecycle": {
-            "state": "supported",
+            "state": sensor_lifecycle_state,
             "delete_tool": "delete_sensor",
             "requires_non_playing_timeline": True,
             "post_delete_updates_default": 8,
@@ -175,9 +305,12 @@ def _feature_flags(
             "max_artifact_default_bytes": DEFAULT_MAX_ARTIFACT_BYTES,
             "max_total_default_bytes": DEFAULT_MAX_TOTAL_BYTES,
         },
-        "camera.rgb_file": {"state": "supported", "warmup_required": True},
+        "camera.rgb_file": {
+            "state": camera_backend_state,
+            "warmup_required": True,
+        },
         "camera.rgb_pixels": {
-            "state": "supported",
+            "state": camera_backend_state,
             "return_modes": ["metadata", "artifact", "inline"],
             "default_return_mode": "artifact",
             "inline_default_max_bytes": DEFAULT_INLINE_MAX_BYTES,
@@ -205,7 +338,7 @@ def _feature_flags(
             "adapter_generation": adapter_generation,
         },
         "lidar.point_cloud": {
-            "state": "supported" if adapter_generation == 6 else "partial",
+            "state": lidar_backend_state,
             "adapter_generation": adapter_generation,
             "required_fields": ["points", "range", "azimuth", "elevation"],
             "optional_fields": ["intensity", "object_id", "semantic_id"],
@@ -214,7 +347,7 @@ def _feature_flags(
             "warmup_required": True,
         },
         "lidar.config": {
-            "state": lidar_config_state,
+            "state": lidar_backend_state if adapter_generation == 6 else lidar_config_state,
             "adapter_generation": adapter_generation,
             "preset_configs": True,
             "generic_schema_config": adapter_generation == 6,
@@ -230,9 +363,23 @@ def _feature_flags(
             ],
             "reason": None if adapter_generation == 6 else "Isaac Sim 5.x supports named presets only",
         },
-        "physics.gravity": {"state": "supported", "tool": "set_physics_params", "readback": True},
+        "simulation.timeline": _active_backend_flag(
+            backend_matrix, "simulation.timeline", physics_backend, fallback_verification
+        ),
+        "simulation.step": _active_backend_flag(
+            backend_matrix, "simulation.step", physics_backend, fallback_verification
+        ),
+        "simulation.reset": _active_backend_flag(
+            backend_matrix, "simulation.reset", physics_backend, fallback_verification
+        ),
+        "physics.state": _active_backend_flag(backend_matrix, "physics.state", physics_backend, fallback_verification),
+        "physics.gravity": {
+            "state": physics_gravity_state,
+            "tool": "set_physics_params",
+            "readback": True,
+        },
         "physics.time_step": {
-            "state": physics_scene_config_state,
+            "state": physics_time_state,
             "tool": "set_physics_params",
             "adapter_generation": adapter_generation,
             "backend": physics_backend,
@@ -241,10 +388,10 @@ def _feature_flags(
             "integer_steps_per_second_required": True,
             "synchronizes_stage_time_codes": True,
             "synchronizes_min_frame_rate": True,
-            "usd_and_runtime_readback": adapter_generation == 6 and physics_backend == "physx",
+            "usd_and_runtime_readback": physics_time_state == "supported",
         },
         "physics.gpu_enabled": {
-            "state": physics_scene_config_state,
+            "state": physics_gpu_state,
             "tool": "set_physics_params",
             "adapter_generation": adapter_generation,
             "backend": physics_backend,
@@ -252,13 +399,16 @@ def _feature_flags(
             "true_broadphase": "GPU",
             "false_broadphase": "MBP",
             "changes_physics_gpu_ordinal": False,
-            "usd_and_runtime_readback": adapter_generation == 6 and physics_backend == "physx",
+            "usd_and_runtime_readback": physics_gpu_state == "supported",
         },
         "physics.backend_verification": {
-            "state": backend_verification,
+            "state": physics_verification,
             "backend": physics_backend,
         },
-        "robot.joint_position": {"state": "supported"},
+        "robot.joint_position": {
+            "state": joint_v6_state if adapter_generation == 6 else "supported",
+            "adapter_generation": adapter_generation,
+        },
         "robot.joint_velocity": {"state": joint_v6_state, "adapter_generation": adapter_generation},
         "robot.joint_effort": {
             "state": joint_v6_state,
@@ -266,9 +416,9 @@ def _feature_flags(
             "renew_each_update": True,
         },
         "robot.joint_state": {
-            "state": "supported" if adapter_generation == 6 else "partial",
+            "state": joint_state_state,
             "adapter_generation": adapter_generation,
-            "backend_verification": backend_verification,
+            "backend_verification": joint_state_verification,
             "tool": "get_joint_state",
             "measured_fields": ["position", "velocity", "effort"],
             "target_fields": ["position", "velocity", "effort"],
@@ -277,7 +427,7 @@ def _feature_flags(
         "robot.joint_command": {
             "state": joint_v6_state,
             "adapter_generation": adapter_generation,
-            "backend_verification": backend_verification,
+            "backend_verification": joint_verification,
             "tool": "set_joint_command",
             "modes": ["position", "velocity", "effort"],
             "atomic_validation": True,
@@ -287,16 +437,14 @@ def _feature_flags(
             "state": drive_config_state,
             "adapter_generation": adapter_generation,
             "backend": physics_backend,
-            "backend_verification": backend_verification,
+            "backend_verification": drive_verification,
             "tool": "set_joint_drive_config",
             "read_tool": "get_joint_config",
             "fields": {
                 "stiffness": drive_field_state,
                 "damping": drive_field_state,
                 "max_force": drive_field_state,
-                "max_velocity": (
-                    "supported" if adapter_generation == 6 and physics_backend == "physx" else "unsupported"
-                ),
+                "max_velocity": max_velocity_state,
                 "drive_type": drive_field_state,
             },
             "drive_types": ["force", "acceleration"],
@@ -308,10 +456,15 @@ def _feature_flags(
         },
         "motion.ik_and_planning": {
             "state": (
-                "supported"
-                if adapter_generation == 6 and motion_generation_enabled is True
-                else "unavailable" if adapter_generation == 6 and motion_generation_enabled is False else "unknown"
+                motion_backend_state
+                if motion_backend_state != "supported"
+                else "supported"
+                if motion_generation_enabled is True
+                else "unavailable"
+                if motion_generation_enabled is False
+                else "unknown"
             ),
+            "backend_verification": motion_verification,
             "adapter_generation": adapter_generation,
             "required_extension": "isaacsim.robot_motion.motion_generation",
             "tools": [
@@ -328,26 +481,30 @@ def _feature_flags(
             "ik_collision_check": False,
         },
         "robot.gripper_profiles": {
-            "state": "supported" if adapter_generation == 6 else "unsupported",
+            "state": gripper_backend_state,
+            "backend_verification": gripper_verification,
             "profiles": ["franka_parallel_gripper"],
             "tools": ["set_gripper_width", "open_gripper", "close_gripper"],
             "explicit_profile_required": True,
             "signature_validation": True,
         },
         "robot.mobile_base_profiles": {
-            "state": "supported" if adapter_generation == 6 else "unsupported",
+            "state": mobile_backend_state,
+            "backend_verification": mobile_verification,
             "profiles": ["nvidia_jetbot_differential", "nvidia_kaya_holonomic"],
             "profile_states": {
-                "nvidia_jetbot_differential": "supported" if adapter_generation == 6 else "unsupported",
+                "nvidia_jetbot_differential": mobile_backend_state,
                 "nvidia_kaya_holonomic": (
-                    "supported"
-                    if adapter_generation == 6 and wheeled_robots_enabled is True
-                    else "unavailable" if adapter_generation == 6 and wheeled_robots_enabled is False else "unknown"
+                    mobile_backend_state
+                    if mobile_backend_state != "supported"
+                    else "supported"
+                    if wheeled_robots_enabled is True
+                    else "unavailable"
+                    if wheeled_robots_enabled is False
+                    else "unknown"
                 ),
             },
-            "profile_requirements": {
-                "nvidia_kaya_holonomic": "isaacsim.robot.experimental.wheeled_robots"
-            },
+            "profile_requirements": {"nvidia_kaya_holonomic": "isaacsim.robot.experimental.wheeled_robots"},
             "tools": ["set_mobile_base_velocity", "stop_mobile_base"],
             "explicit_profile_required": True,
             "signature_validation": True,
@@ -427,9 +584,11 @@ def get_capabilities(
     extensions = _extension_states(extension_manager)
     motion_enabled = extensions["isaacsim.robot_motion.motion_generation"]["enabled"]
     wheeled_enabled = extensions["isaacsim.robot.experimental.wheeled_robots"]["enabled"]
+    backend_matrix = _backend_matrix(adapter, runtime["physics_backend"])
     return {
         "status": "success",
         "schema_version": CAPABILITIES_SCHEMA_VERSION,
+        "capability_schema_version": CAPABILITIES_SCHEMA_VERSION,
         "runtime": runtime,
         "extension": {
             "id": EXTENSION_ID,
@@ -438,11 +597,14 @@ def get_capabilities(
             "command_names": commands,
         },
         "extensions": extensions,
+        "backend_matrix": backend_matrix,
         "feature_flags": _feature_flags(
-            runtime["adapter_generation"], runtime["physics_backend"], motion_enabled, wheeled_enabled
+            runtime["adapter_generation"],
+            runtime["physics_backend"],
+            backend_matrix,
+            motion_enabled,
+            wheeled_enabled,
         ),
-        "unsupported_arguments": _unsupported_arguments(
-            runtime["adapter_generation"], runtime["physics_backend"]
-        ),
+        "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"], runtime["physics_backend"]),
         "sensor_warmup": _sensor_warmup(adapter),
     }

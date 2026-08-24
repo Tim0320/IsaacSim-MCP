@@ -87,7 +87,7 @@ def _recompile_scriptnodes_for_file(abs_path: str) -> list:
 
 
 class IsaacAdapterV6(IsaacAdapterBase):
-    """Adapter for Isaac Sim 6.0.0 — backend-neutral (PhysX + Newton)."""
+    """Isaac Sim 6 adapter with explicit per-backend capability guards."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -174,6 +174,132 @@ class IsaacAdapterV6(IsaacAdapterBase):
             return SimulationManager.get_active_physics_engine()
         except Exception:
             return "unknown"
+
+    def get_backend_capability_matrix(self) -> Dict[str, Any]:
+        """Return the audited Isaac Sim 6.0.1 PhysX/Newton matrix.
+
+        PhysX evidence comes from the guarded Task 1.x, 2.x, and 3.1 live
+        acceptance runs.  Newton remains fail-closed until the same feature is
+        exercised under ``isaac-sim.newton``; implementation reuse is not
+        treated as verification.
+        """
+        verified = "Isaac Sim 6.0.1 guarded PhysX live matrix (Tasks 1.x, 2.x, 3.1)"
+        untested = "No Isaac Sim 6.0.1 Newton live acceptance evidence"
+        physx_only = "Implementation depends on PhysX runtime or PhysxSchema"
+        features = {
+            "simulation.timeline": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "simulation.step": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "simulation.reset": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "physics.state": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "physics.gravity": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "physics.time_step": self._backend_capability(
+                physx_supported=True,
+                newton_supported=False,
+                physx_evidence=verified,
+                newton_reason=physx_only,
+            ),
+            "physics.gpu_enabled": self._backend_capability(
+                physx_supported=True,
+                newton_supported=False,
+                physx_evidence=verified,
+                newton_reason=physx_only,
+            ),
+            "sensor.camera": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "sensor.lidar": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "sensor.lifecycle": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "robot.joint_state": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "robot.joint_command": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "robot.joint_drive_config": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "robot.joint_drive_config.max_velocity": self._backend_capability(
+                physx_supported=True,
+                newton_supported=False,
+                physx_evidence=verified,
+                newton_reason="max_velocity is authored through PhysxSchema.PhysxJointAPI",
+            ),
+            "motion.ik_and_planning": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "robot.gripper_profiles": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+            "robot.mobile_base_profiles": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence=verified,
+                newton_reason=untested,
+            ),
+        }
+        return {
+            "schema_version": "1.0",
+            "active_backend": self._engine,
+            "policy": {
+                "supported_requires_live_verification": True,
+                "null_supported_means": "untested",
+                "false_supported_means": "unsupported",
+            },
+            "features": features,
+        }
 
     # ── Scene ──────────────────────────────────────────────
 
@@ -590,13 +716,9 @@ class IsaacAdapterV6(IsaacAdapterBase):
             self._ensure_physics_world()
             art = self._runtime_articulation(prim_path)
             array_kwargs = {"device": art._device} if getattr(art, "_device", None) is not None else {}
-            positions_arr = wp.array(
-                np.asarray([list(positions)], dtype=np.float32), dtype=wp.float32, **array_kwargs
-            )
+            positions_arr = wp.array(np.asarray([list(positions)], dtype=np.float32), dtype=wp.float32, **array_kwargs)
             if joint_indices is not None:
-                idx_arr = wp.array(
-                    np.asarray(joint_indices, dtype=np.int32), dtype=wp.int32, **array_kwargs
-                )
+                idx_arr = wp.array(np.asarray(joint_indices, dtype=np.int32), dtype=wp.int32, **array_kwargs)
                 art.set_dof_position_targets(positions_arr, dof_indices=idx_arr)
             else:
                 art.set_dof_position_targets(positions_arr)
@@ -780,12 +902,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
             raise ValueError("Joint command contains an invalid or duplicate DOF index")
 
         array_kwargs = {"device": art._device} if getattr(art, "_device", None) is not None else {}
-        values_arr = wp.array(
-            np.asarray([list(values)], dtype=np.float32), dtype=wp.float32, **array_kwargs
-        )
-        indices_arr = wp.array(
-            np.asarray(selected, dtype=np.int32), dtype=wp.int32, **array_kwargs
-        )
+        values_arr = wp.array(np.asarray([list(values)], dtype=np.float32), dtype=wp.float32, **array_kwargs)
+        indices_arr = wp.array(np.asarray(selected, dtype=np.int32), dtype=wp.int32, **array_kwargs)
         if mode == "position":
             art.set_dof_position_targets(values_arr, dof_indices=indices_arr)
         elif mode == "velocity":
@@ -871,8 +989,12 @@ class IsaacAdapterV6(IsaacAdapterBase):
         target = np.asarray(target_position, dtype=np.float64)
         position_error = float(np.linalg.norm(achieved_position - target))
         result: Dict[str, Any] = {
-            "status": "success" if success and elapsed_ms <= timeout_ms else ("timeout" if elapsed_ms > timeout_ms else "error"),
-            "code": "IK_SOLVED" if success and elapsed_ms <= timeout_ms else ("IK_TIMEOUT" if elapsed_ms > timeout_ms else "IK_NO_SOLUTION"),
+            "status": "success"
+            if success and elapsed_ms <= timeout_ms
+            else ("timeout" if elapsed_ms > timeout_ms else "error"),
+            "code": "IK_SOLVED"
+            if success and elapsed_ms <= timeout_ms
+            else ("IK_TIMEOUT" if elapsed_ms > timeout_ms else "IK_NO_SOLUTION"),
             "message": "Inverse kinematics solved" if success else "Inverse kinematics did not converge",
             "prim_path": prim_path,
             "robot_model": robot_model,
@@ -1279,8 +1401,8 @@ class IsaacAdapterV6(IsaacAdapterBase):
         state = self.get_simulation_state()
         if str(state.get("timeline_state", "unknown")).lower() != "stopped":
             raise RuntimeError("Drive configuration requires a stopped timeline")
-        if self._engine == "newton" and "max_velocity" in config:
-            raise NotImplementedError("max_velocity uses PhysxJointAPI and is unavailable under Newton")
+        if "max_velocity" in config:
+            self.require_backend_capability("robot.joint_drive_config.max_velocity")
 
         art = self._drive_config_articulation(prim_path)
         count = len(list(art.dof_names or []))
@@ -1621,10 +1743,10 @@ class IsaacAdapterV6(IsaacAdapterBase):
     ) -> Dict[str, Any]:
         """Atomically author and read back Isaac Sim 6 PhysX scene parameters."""
         if self._engine != "physx":
-            if time_step is not None or gpu_enabled is not None:
-                raise NotImplementedError(
-                    f"time_step and gpu_enabled are not verified for physics backend {self._engine!r}"
-                )
+            if time_step is not None:
+                self.require_backend_capability("physics.time_step")
+            if gpu_enabled is not None:
+                self.require_backend_capability("physics.gpu_enabled")
             return super().configure_physics(gravity=gravity)
 
         state = self.get_simulation_state()
@@ -1636,9 +1758,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
         from pxr import PhysxSchema, UsdPhysics
 
         stage = self.get_stage()
-        scene_paths = [
-            prim.GetPath().pathString for prim in stage.Traverse() if prim.GetTypeName() == "PhysicsScene"
-        ]
+        scene_paths = [prim.GetPath().pathString for prim in stage.Traverse() if prim.GetTypeName() == "PhysicsScene"]
         if len(scene_paths) > 1:
             raise RuntimeError(f"Multiple PhysicsScene prims are unsupported: {scene_paths}")
 

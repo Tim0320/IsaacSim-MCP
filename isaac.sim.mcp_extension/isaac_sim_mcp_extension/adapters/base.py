@@ -68,6 +68,70 @@ class IsaacAdapterBase(ABC):
     Each supported Isaac Sim version provides a concrete implementation.
     """
 
+    def get_backend_capability_matrix(self) -> Dict[str, Any]:
+        """Return conservative per-backend support owned by this adapter.
+
+        Concrete adapters override this when support has been audited.  An
+        empty matrix is intentional: adapter generation alone must never be
+        used as proof that a physics backend passed live verification.
+        """
+        try:
+            state = self.get_simulation_state()
+            active_backend = str(state.get("engine") or "unknown")
+        except Exception:
+            active_backend = "unknown"
+        return {
+            "schema_version": "1.0",
+            "active_backend": active_backend,
+            "features": {},
+        }
+
+    @staticmethod
+    def _backend_capability(
+        *,
+        physx_supported: bool,
+        newton_supported: Optional[bool],
+        physx_evidence: str,
+        newton_reason: str,
+    ) -> Dict[str, Any]:
+        """Build one normalized PhysX/Newton capability record.
+
+        ``None`` means support is deliberately unclaimed until a Newton live
+        run passes.  ``False`` is reserved for a known backend incompatibility,
+        such as a path that authors ``PhysxSchema``.
+        """
+        newton_state = (
+            "supported" if newton_supported is True else "unsupported" if newton_supported is False else "untested"
+        )
+        return {
+            "physx_supported": physx_supported,
+            "newton_supported": newton_supported,
+            "untested": ["newton"] if newton_supported is None else [],
+            "backends": {
+                "physx": {
+                    "state": "supported" if physx_supported else "unsupported",
+                    "verification": "verified" if physx_supported else "not_verified",
+                    "evidence": physx_evidence,
+                },
+                "newton": {
+                    "state": newton_state,
+                    "verification": "verified" if newton_supported is True else "untested",
+                    "reason": newton_reason,
+                },
+            },
+        }
+
+    def require_backend_capability(self, feature: str) -> Dict[str, Any]:
+        """Fail closed unless ``feature`` is supported by the active backend."""
+        matrix = self.get_backend_capability_matrix()
+        backend = str(matrix.get("active_backend") or "unknown")
+        record = matrix.get("features", {}).get(feature)
+        backend_record = record.get("backends", {}).get(backend) if isinstance(record, dict) else None
+        if not isinstance(backend_record, dict) or backend_record.get("state") != "supported":
+            state = backend_record.get("state", "unlisted") if isinstance(backend_record, dict) else "unlisted"
+            raise NotImplementedError(f"Backend capability {feature!r} is {state} for active backend {backend!r}")
+        return backend_record
+
     # ── Scene ──────────────────────────────────────────────
 
     @abstractmethod

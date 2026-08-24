@@ -185,7 +185,7 @@ get_scene_info
 ```
 
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
-`get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。完整 schema 請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md)。
+`get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
 全部 68 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
@@ -301,6 +301,7 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 - `create_lidar` 可選 named preset，或直接指定 FOV、角解析度、rotation rate 與 range；`get_lidar_config` 會讀回實際 USD Core schema。兩種模式與限制見 [`docs/LIDAR_CONFIG.md`](docs/LIDAR_CONFIG.md)。
 - `get_lidar_point_cloud` 支援 `metadata|artifact|inline`；預設回傳包含 typed `.npy` fields 的 `.npz` artifact。完整契約見 [`docs/LIDAR_POINT_CLOUD.md`](docs/LIDAR_POINT_CLOUD.md)。
 - V6 PhysX `set_physics_params` 支援 `gravity`、`time_step` 與 `gpu_enabled`，要求 stopped timeline，並回傳 USD/runtime 雙重 read-back；完整 mapping、原子 rollback 與 Stage timing side effects 見 [`docs/PHYSICS_PARAMS.md`](docs/PHYSICS_PARAMS.md)。
+- V6 不等於 Newton 已驗證。`get_capabilities.data.backend_matrix` 的 `newton_supported=null` 代表尚未 live 驗證，`false` 代表已知 PhysX-only；兩者都必須 fail closed。
 - `edit_action_graph` 可修改一般 attribute 與新增連線；修改 inline `ScriptNode.inputs:script` 在 6.0.1 仍有限制。
 - 載入含 non-manifold collision 的資產可能使 PhysX native plugin 崩潰。先在乾淨 Stage 驗證資產與碰撞設定。
 - Isaac Sim 6.0.1 多 GPU 環境必須讓 PhysX 使用明確 GPU ordinal；launcher 會依當下主要顯示 GPU 決定，不可移除這項防護或改回未警告的 `-1`。

@@ -1,4 +1,4 @@
-# `get_capabilities` schema 1.0
+# `get_capabilities` schema 1.1
 
 `get_capabilities` 是 read-only named tool，用來確認目前 MCP server 與 live Isaac Sim extension 真正能做什麼。
 它不需要 USD stage 已完成建立，因此可作為 MCP 工作流程的第一個呼叫。
@@ -7,11 +7,13 @@
 
 | 欄位 | 用途 |
 |---|---|
-| `schema_version` | capability response 的版本，目前為 `1.0` |
+| outer `schema_version` | 共用 response envelope 版本，目前為 `1.0` |
+| `capability_schema_version` | capability data 版本，目前為 `1.1` |
 | `mcp_server` | MCP package 版本、`stdio_to_tcp` transport 與 live control port |
 | `runtime` | Isaac Sim 版本、adapter、adapter generation、active physics backend、stage 是否存在 |
 | `extension` | `isaac.sim.mcp_extension` 版本與目前 command names/count |
 | `extensions` | Camera、RTX LiDAR、Replicator、IRA、ROS 2、motion generation、Newton 等 extension 的 enabled state |
+| `backend_matrix` | adapter-owned PhysX/Newton 逐功能支援、驗證與 fail-closed 狀態 |
 | `feature_flags` | named MCP 能力的實際支援狀態與限制原因 |
 | `unsupported_arguments` | schema 已接受，但目前 handler/adapter 無法套用的參數 |
 | `sensor_warmup` | Camera/LiDAR 是否需要暖機、cached sensor 數量與目前可判定狀態 |
@@ -23,6 +25,7 @@
 | `supported` | 已有 named tool 與實作路徑 |
 | `partial` | 僅完成部分 lifecycle 或操作 |
 | `unsupported` | 目前沒有正式 named MCP 支援 |
+| `untested` | 有共用或候選路徑，但目前 backend 尚未通過 live matrix；不得自動執行 |
 | `accepted_not_applied` | 參數可送入 schema，但目前 adapter 不會套用 |
 | `verified` | 已在目前 backend 完成既有實測 |
 | `unverified` | 有程式路徑，但尚無目前 backend 的完整 live matrix |
@@ -43,7 +46,7 @@
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
-- Newton 只有實際通過 live matrix 的項目才能標為 verified。
+- PhysX/Newton 分流、`null`/`false` 支援語意與 17 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
 
 ## 呼叫範例
 
@@ -51,8 +54,8 @@
 get_capabilities()
 ```
 
-client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`extensions` 與 `feature_flags` 決定後續操作。
-遇到 `unknown`、`unsupported`、`accepted_not_applied` 或 `unverified` 時，應停止自動寫入並回報限制。
+client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再依 `runtime.physics_backend`、`backend_matrix`、`extensions` 與 `feature_flags` 決定後續操作。
+遇到 `unknown`、`untested`、`unsupported`、`accepted_not_applied` 或 `unverified` 時，應停止自動寫入並回報限制。
 
 ## Isaac Sim 6.0.1 live 驗證
 
@@ -164,6 +167,15 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - atomicity：`0.007 s` 無法對應整數 steps/sec 時回 `INVALID_PHYSICS_PARAMS`；playing timeline 回 `TIMELINE_NOT_STOPPED`；兩者完整 snapshot 不變
 - lifecycle：修正 `_ensure_physics_world()` 原本固定重設 60 Hz；verifier 以 timeline state postcondition 等待 queued Stop，最後還原 PhysicsScene attrs、Stage `60 Hz`、min-frame-rate `30` 與 default scene `None`
 - health：Kit PID `38160`／TCP `8766` 存活，新增 native dump `0`；Stop 造成四筆已知 tensor SimulationView invalidation warning，沒有 CUDA/device-lost/native crash signature
+
+2026-08-24 完成 PhysX/Newton capability matrix read-only live 驗收：
+
+- schema：outer response envelope `1.0`、capability data `1.1`、backend matrix `1.0`
+- runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、active backend PhysX、`cudaDevice=0`
+- PhysX：17/17 backend-sensitive rows 為 `physx_supported=true`、`supported/verified`
+- Newton：0 supported；14 rows 為 `newton_supported=null` / `untested`，3 個 PhysX-only rows 為 `false` / `unsupported`
+- read-only gate：Stage info 與 simulation state 在 capability query 前後完全一致
+- health：Kit PID `38160`／TCP `8766` 存活，近 15 分鐘新增 native dump `0`
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

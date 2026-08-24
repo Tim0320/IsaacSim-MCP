@@ -207,11 +207,17 @@
   > live 驗收（2026-08-24）：乾淨重啟、Isaac Sim `6.0.1-rc.7`／PhysX、`/physics/cudaDevice=0`（唯一 display-active GPU）完成。120 Hz USD/runtime/manager read-back一致；初始化 warm-up 後 12 steps 的 physics clock 精確增加 `0.1 s`。invalid `0.007 s` 與 playing timeline request 均保持 snapshot 不變；GPU/GPU broadphase 與 CPU/MBP mapping 通過。
   > cleanup／health：verifier 對 Isaac baseline `/PhysicsScene` 做完整 snapshot/restore，不刪除既有 scene；attributes、Stage `60 Hz`、min-frame-rate `30`、default scene `None` 全部恢復，timeline stopped，Kit PID `38160`／TCP `8766` 存活，新增 native dump `0`。Stop 有四筆既有 tensor SimulationView invalidation warning，但無 CUDA/device-lost/native crash signature。契約：`docs/PHYSICS_PARAMS.md`。
 
-- [ ] 12. PhysX 與 Newton 能力分流
+- [x] 12. PhysX 與 Newton 能力分流
   > 現況：adapter 介面宣稱 backend-neutral，但 reset/step、articulation、sensor 等路徑尚無完整 Newton live matrix。
   > 缺漏位置：`adapters/base.py`、`adapters/v6.py`、simulation/robot integration tests。
   > 實作：每項功能標示 `physx_supported`、`newton_supported`、`untested`；backend-specific code 由 adapter 封裝。
   > 驗收：PhysX 全矩陣通過；Newton 只把真正 live 通過的項目標成 supported，其餘保持明確 untested/unsupported。
+  > 已實作：capability schema 升為 `1.1`，新增 adapter-owned `backend_matrix`。17 個 backend-sensitive rows 都分開回傳 `physx_supported`、nullable `newton_supported`、`untested` list，以及 PhysX/Newton 各自的 state、verification 與 evidence/reason；active-backend `feature_flags` 由同一 matrix 投影，不再因 V6 共用程式路徑把 Newton 誤報為 supported。
+  > fail-closed：`newton_supported=null` 代表尚未 live 驗證，`false` 代表已知 PhysX-only；兩者都不能執行自動寫入。`require_backend_capability()` 統一封裝 runtime guard，已套用 `physics.time_step`、`physics.gpu_enabled` 與 `robot.joint_drive_config.max_velocity`。unknown/unlisted backend 同樣拒絕。
+  > Newton 邊界：目前沒有任何 Newton row 宣稱 supported。Camera、LiDAR、sensor lifecycle、timeline/step/reset、physics state/gravity、joint state/command/drive、motion 與 controller profiles 共 14 項維持 `untested`；time step、GPU dynamics 與 PhysXJointAPI max velocity 共 3 項為 `unsupported`。本輪沒有以 shared code 或 import success 代替 Newton live evidence。
+  > offline 驗收：capability contract、active-backend projection、nullable/false 語意與 adapter guard tests 均通過；完整離線 suite `286 passed, 1 deselected`，Ruff lint 通過。本輪檔案 format check 與 `git diff --check` 通過；repository-wide format check 另有 15 個本輪開始前既存的未格式化檔案，未納入 3.2 的跨功能重寫。
+  > live 驗收（2026-08-24）：TCP `8766` read-only verifier 在 Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、`cudaDevice=0` 讀回 capability schema `1.1` 與 matrix schema `1.0`；17/17 PhysX rows 為 supported/verified，Newton 為 0 supported、14 untested、3 unsupported。Stage info 與 simulation state 查詢前後完全一致；Kit PID `38160`／port 存活，近 15 分鐘新增 native dump `0`。
+  > 契約與 verifier：`docs/BACKEND_CAPABILITY_MATRIX.md`、`scripts/verify_backend_capability_matrix_live.py`。
 
 - [ ] 13. Rigid body、collider、mass 與 joint authoring
   > 現況：基礎物件操作可建立 prim，但完整 physics schema authoring 仍常需 `execute_script`。

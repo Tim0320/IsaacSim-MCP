@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import tomllib
 from isaac_sim_mcp_extension import __version__ as extension_version
+from isaac_sim_mcp_extension.adapters.base import IsaacAdapterBase
+from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
 from isaac_sim_mcp_extension.handlers.capabilities import get_capabilities
 
 from isaac_mcp import __version__ as server_version
@@ -14,6 +17,8 @@ from isaac_mcp.tools.capabilities import register_tools
 
 
 class _AdapterV6:
+    _backend_capability = staticmethod(IsaacAdapterBase._backend_capability)
+
     def __init__(self) -> None:
         self._camera_sensors = {"/World/Camera": object()}
         self._lidar_sensors = {}
@@ -23,6 +28,13 @@ class _AdapterV6:
 
     def get_stage(self):
         return None
+
+    @property
+    def _engine(self):
+        return self.get_simulation_state()["engine"]
+
+    def get_backend_capability_matrix(self):
+        return IsaacAdapterV6.get_backend_capability_matrix(self)
 
 
 class _ExtensionManager:
@@ -44,7 +56,8 @@ def test_handler_returns_stable_runtime_capability_contract():
     result = get_capabilities(_AdapterV6(), registry, extension_manager=_ExtensionManager())
 
     assert result["status"] == "success"
-    assert result["schema_version"] == "1.0"
+    assert result["schema_version"] == "1.1"
+    assert result["capability_schema_version"] == "1.1"
     assert result["runtime"] == {
         "isaac_sim_version": "6.0.1-rc.7",
         "adapter": "_AdapterV6",
@@ -56,6 +69,16 @@ def test_handler_returns_stable_runtime_capability_contract():
     assert result["extension"]["command_names"] == ["scene.get_info", "system.get_capabilities"]
     assert result["extensions"]["isaac.sim.mcp_extension"]["state"] == "enabled"
     assert result["extensions"]["isaacsim.ros2.bridge"]["state"] == "disabled"
+    matrix = result["backend_matrix"]
+    assert matrix["schema_version"] == "1.0"
+    assert matrix["active_backend"] == "physx"
+    assert matrix["policy"]["supported_requires_live_verification"] is True
+    assert all(record["physx_supported"] is True for record in matrix["features"].values())
+    assert all(record["backends"]["physx"]["verification"] == "verified" for record in matrix["features"].values())
+    assert matrix["features"]["sensor.camera"]["newton_supported"] is None
+    assert matrix["features"]["sensor.camera"]["untested"] == ["newton"]
+    assert matrix["features"]["physics.time_step"]["newton_supported"] is False
+    assert matrix["features"]["physics.time_step"]["backends"]["newton"]["state"] == "unsupported"
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",
         "delete_tool": "delete_sensor",
@@ -235,7 +258,7 @@ def test_v5_reports_physx_and_supported_lidar_config():
     assert result["unsupported_arguments"]["create_lidar"]["horizontal_fov_deg"]["state"] == "unsupported"
 
 
-def test_newton_reports_physx_only_max_velocity_and_unverified_drive_fields():
+def test_newton_reports_physx_only_fields_and_keeps_unverified_paths_untested():
     class _AdapterV6Newton(_AdapterV6):
         def get_simulation_state(self):
             return {"engine": "newton", "isaacsim_version": "6.0.1-rc.7"}
@@ -247,16 +270,39 @@ def test_newton_reports_physx_only_max_velocity_and_unverified_drive_fields():
     assert result["feature_flags"]["physics.gpu_enabled"]["state"] == "unsupported"
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
 
-    assert feature["state"] == "partial"
+    assert result["backend_matrix"]["active_backend"] == "newton"
+    assert feature["state"] == "untested"
     assert feature["backend"] == "newton"
-    assert feature["backend_verification"] == "unverified"
+    assert feature["backend_verification"] == "untested"
     assert feature["fields"] == {
-        "stiffness": "unverified",
-        "damping": "unverified",
-        "max_force": "unverified",
+        "stiffness": "untested",
+        "damping": "untested",
+        "max_force": "untested",
         "max_velocity": "unsupported",
-        "drive_type": "unverified",
+        "drive_type": "untested",
     }
+    assert result["feature_flags"]["camera.rgb_pixels"]["state"] == "untested"
+    assert result["feature_flags"]["lidar.point_cloud"]["state"] == "untested"
+    assert result["feature_flags"]["robot.joint_position"]["state"] == "untested"
+    assert result["feature_flags"]["robot.joint_command"]["state"] == "untested"
+    assert all(record["newton_supported"] is not True for record in result["backend_matrix"]["features"].values())
+
+
+def test_adapter_backend_guard_allows_verified_physx_and_rejects_newton_states():
+    physx = _AdapterV6()
+    accepted = IsaacAdapterBase.require_backend_capability(physx, "physics.time_step")
+    assert accepted["state"] == "supported"
+    assert accepted["verification"] == "verified"
+
+    class _Newton(_AdapterV6):
+        def get_simulation_state(self):
+            return {"engine": "newton", "isaacsim_version": "6.0.1-rc.7"}
+
+    newton = _Newton()
+    with pytest.raises(NotImplementedError, match="physics.time_step.*unsupported.*newton"):
+        IsaacAdapterBase.require_backend_capability(newton, "physics.time_step")
+    with pytest.raises(NotImplementedError, match="sensor.camera.*untested.*newton"):
+        IsaacAdapterBase.require_backend_capability(newton, "sensor.camera")
 
 
 def test_tool_adds_mcp_server_metadata_and_uses_system_command():

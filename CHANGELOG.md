@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — audited PhysX/Newton capability split
+
+- Added capability schema `1.1` with an adapter-owned 17-row backend matrix.
+  Every row reports `physx_supported`, `newton_supported`, the untested backend
+  list, and independent support/verification evidence.
+- Projected active-backend state into simulation, physics, sensor, articulation,
+  motion, gripper, and mobile-base feature flags. V6 code reuse no longer makes
+  untested Newton paths appear supported.
+- Added a shared adapter guard and applied it to PhysX scene time/GPU settings
+  and `PhysxJointAPI` maximum velocity. Untested, unsupported, unknown, and
+  unlisted backend paths fail before apply.
+- Added a read-only live verifier for all 17 PhysX rows, fourteen Newton
+  `untested` rows, three Newton `unsupported` rows, and unchanged scene/runtime
+  state.
+
 ### Added — atomic V6 PhysX scene parameters
 
 - Completed `set_physics_params` for gravity, integer-rate physics dt, GPU

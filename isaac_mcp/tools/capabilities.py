@@ -23,9 +23,9 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         """Discover the live Isaac Sim MCP runtime and its explicit limitations.
 
         Returns the Isaac Sim version, selected adapter, active physics backend,
-        extension states, sensor warm-up policy, feature flags, and unsupported
-        arguments. This query is read-only and works while the USD stage is
-        still starting.
+        adapter-owned PhysX/Newton matrix, extension states, sensor warm-up
+        policy, feature flags, and unsupported arguments. This query is
+        read-only and works while the USD stage is still starting.
         """
         try:
             conn = get_connection()
