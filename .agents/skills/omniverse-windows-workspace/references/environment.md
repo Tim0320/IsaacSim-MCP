@@ -6,7 +6,7 @@ Recheck all values before acting because paths, versions, and branches can chang
 
 | Component | Resolution order | Windows fallback |
 | --- | --- | --- |
-| MCP repository | `-RepositoryRoot`, `ISAACSIM_MCP_REPO`, upward discovery, fallback | `D:\Dev\isaacsim-mcp-server` when present |
+| MCP repository | `-RepositoryRoot`, `ISAACSIM_MCP_REPO`, upward discovery, canonical fallback, legacy fallback | `D:\Dev\IsaacSim-MCP`; older port: `D:\Dev\isaacsim-mcp-server` |
 | Isaac Sim | `-IsaacSimRoot`, `ISAACSIM_ROOT`, fallback | `C:\isaacsim` |
 | Isaac Lab | `-IsaacLabRoot`, `ISAACLAB_ROOT`, fallback | `D:\IsaacLab` |
 | Extension socket port | `ISAAC_MCP_PORT`, fallback | `8766` |
@@ -15,6 +15,8 @@ Recheck all values before acting because paths, versions, and branches can chang
 Use `scripts\check-environment.ps1 -AsJson` when another agent needs structured evidence.
 
 Set `ISAACSIM_MCP_REPO` on machines where the skill is installed globally and the repository uses a different location.
+
+On the maintained Windows research machine, `D:\Dev\IsaacSim-MCP` is the canonical GitHub checkout. The similarly named `D:\Dev\isaacsim-mcp-server` is an older port and must not be selected when the canonical checkout exists.
 
 ## Python/runtime rule
 

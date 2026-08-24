@@ -19,6 +19,24 @@
 - 執行或重新載入 Isaac Sim Python script
 - 建立 10 個工作區、3 台 AGV、機器手臂、輸送帶與人物的工廠範例
 
+## IsaacSim-MCP 1.x 感測能力基準
+
+研究工作中的 `1.1～1.6` 已完成，對應 task 文件 Phase 1 的六個 Camera、LiDAR、artifact 與 lifecycle 項目。這個編號是研究項目標籤，不是 Python package 版本。
+
+| 項目 | 已完成能力 | 主要 tools | 契約與 live verifier |
+|---|---|---|---|
+| 1.1 | Camera RGB metadata、受控 PNG artifact、有限制的 inline PNG | `create_camera`, `capture_image` | [`CAMERA_RGB.md`](docs/CAMERA_RGB.md)／[`verify_camera_rgb_live.py`](scripts/verify_camera_rgb_live.py) |
+| 1.2 | depth、distance、三種 segmentation、normals、motion vectors、calibration | `capture_camera_output`, `get_camera_calibration` | [`CAMERA_OUTPUTS.md`](docs/CAMERA_OUTPUTS.md)／[`verify_camera_outputs_live.py`](scripts/verify_camera_outputs_live.py) |
+| 1.3 | Cartesian RTX LiDAR point cloud、range、角度、intensity 與 object ID | `get_lidar_point_cloud` | [`LIDAR_POINT_CLOUD.md`](docs/LIDAR_POINT_CLOUD.md)／[`verify_lidar_point_cloud_live.py`](scripts/verify_lidar_point_cloud_live.py) |
+| 1.4 | named preset 或 generic FOV／解析度／rate／range，並讀回有效 USD 設定 | `create_lidar`, `get_lidar_config` | [`LIDAR_CONFIG.md`](docs/LIDAR_CONFIG.md)／[`verify_lidar_config_live.py`](scripts/verify_lidar_config_live.py) |
+| 1.5 | Camera/LiDAR 共用 artifact handle、chunk、SHA-256、TTL、容量與 cleanup | `get_artifact_info`, `read_artifact`, `delete_artifact`, `cleanup_artifacts` | [`ARTIFACT_TRANSPORT.md`](docs/ARTIFACT_TRANSPORT.md)／[`verify_artifact_transport_live.py`](scripts/verify_artifact_transport_live.py) |
+| 1.6 | 完整 sensor teardown、刪除後 read-back、同路徑重建與重複 pipeline 防護 | `delete_sensor`、sensor-aware `delete_object` | [`SENSOR_LIFECYCLE.md`](docs/SENSOR_LIFECYCLE.md)／[`verify_sensor_lifecycle_live.py`](scripts/verify_sensor_lifecycle_live.py) |
+
+完整研究現況、缺漏位置、限制與歷史驗收證據請讀 [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)。後續 agent 應先讀專案 skill 的 [`isaacsim-mcp-1x.md`](.agents/skills/omniverse-windows-workspace/references/isaacsim-mcp-1x.md)，再讀對應契約與 verifier。
+
+> [!IMPORTANT]
+> 2026-08-23 的 Isaac Sim `6.0.1-rc.7` live 結果是已完成的歷史基準。要宣稱目前仍可用，必須重新核對 Git HEAD、`get_capabilities`、adapter/backend、TCP `8766`、physics GPU ordinal、scratch stage、read-back、cleanup 與 log/native-dump 證據。`9904` 文件 MCP、static tests 或 artifact hash 都不能單獨證明 live stage 控制成功。
+
 ## 系統需求
 
 | 項目 | 需求 |
@@ -307,6 +325,7 @@ uv run ruff format --check .
 
 ```text
 IsaacSim-MCP/
+├─ .agents/                   專案 skill 與 1.x 後續 agent 閱讀索引
 ├─ isaac_mcp/                 Python MCP Server 與 54 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本

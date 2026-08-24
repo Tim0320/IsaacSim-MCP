@@ -12,7 +12,8 @@ Use the installed Windows baseline and choose the correct execution path before 
 1. Run `scripts/check-environment.ps1` from this skill directory.
 2. Read [references/mcp-routing.md](references/mcp-routing.md) before choosing an MCP server or launcher.
 3. Read [references/environment.md](references/environment.md) when paths, versions, Python runtimes, or installation portability matter.
-4. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
+4. Read [references/isaacsim-mcp-1x.md](references/isaacsim-mcp-1x.md) when the request involves Camera, LiDAR, artifacts, sensor deletion, tasks 1.1 through 1.6, or the completed IsaacSim-MCP 1.x research baseline.
+5. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
 
 Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely because a process is stopped or a tool is unavailable. Diagnose the existing installation first.
 
@@ -23,6 +24,12 @@ Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely 
 - For repository code, launchers, adapters, or MCP defects, resolve the repository root from the skill location and preserve unrelated uncommitted changes.
 - For Isaac Lab environments, training, managers, tasks, or wrappers, resolve `ISAACLAB_ROOT` and verify its current version and Git state before editing.
 - For `import omni`, `pxr`, or `isaacsim`, use the Isaac Sim `python.bat` or a Kit application runtime. Do not test those imports with a generic system Python.
+
+## IsaacSim-MCP 1.x baseline
+
+Tasks 1.1 through 1.6 are the completed Camera, LiDAR, artifact transport, and sensor lifecycle baseline for Isaac Sim 6.0.1. Use the 1.x reference as the navigation index, then read the linked contract and verifier for the requested capability. Do not rely on a short summary when changing a response schema, runtime lifecycle, transfer limit, or live verification rule.
+
+Treat the recorded 2026-08-23 live results as historical evidence. Recheck the current Git checkout, `get_capabilities`, Isaac Sim version, extension command count, live port, physics GPU selection, and scratch stage before claiming current verification.
 
 ## Live scene workflow
 
@@ -41,6 +48,7 @@ Never claim a scene edit succeeded from code generation alone. Verify through an
 - Inspect `git status` before editing the MCP repository or Isaac Lab; never discard unrelated changes.
 - Do not use a documentation MCP response as evidence that a live stage was modified.
 - Treat a successful Python import as runtime evidence only. It does not prove the Isaac Sim stage or extension is ready.
+- Keep 1.x live tests inside their dedicated scratch namespaces. Refuse or isolate a stage containing unrelated user prims before destructive verification.
 - Obtain explicit authorization before publishing, deleting, or overwriting external or material data.
 
 ## Finish with evidence

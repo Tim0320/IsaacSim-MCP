@@ -52,8 +52,13 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
         $RepositoryRoot = Find-McpRepository -StartPath $skillRoot
     }
 }
-if ([string]::IsNullOrWhiteSpace($RepositoryRoot) -and (Test-Path -LiteralPath 'D:\Dev\isaacsim-mcp-server' -PathType Container)) {
-    $RepositoryRoot = 'D:\Dev\isaacsim-mcp-server'
+if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
+    foreach ($fallbackRoot in @('D:\Dev\IsaacSim-MCP', 'D:\Dev\isaacsim-mcp-server')) {
+        if (Test-Path -LiteralPath $fallbackRoot -PathType Container) {
+            $RepositoryRoot = $fallbackRoot
+            break
+        }
+    }
 }
 if ([string]::IsNullOrWhiteSpace($IsaacSimRoot)) {
     $IsaacSimRoot = if ([string]::IsNullOrWhiteSpace($env:ISAACSIM_ROOT)) { 'C:\isaacsim' } else { $env:ISAACSIM_ROOT }
