@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import math
 import traceback
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -121,6 +122,8 @@ def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["robots.get_info"] = lambda **p: get_info(adapter, **p)
     registry["robots.set_joints"] = lambda **p: set_joints(adapter, **p)
     registry["robots.get_joints"] = lambda **p: get_joints(adapter, **p)
+    registry["robots.get_joint_state"] = lambda **p: get_joint_state(adapter, **p)
+    registry["robots.set_joint_command"] = lambda **p: set_joint_command(adapter, **p)
 
 
 def create(
@@ -228,3 +231,212 @@ def get_joints(adapter: IsaacAdapterBase, prim_path: Optional[str] = None) -> Di
         return {"status": "success", "joint_positions": positions}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+_COMMAND_MODES = {"position", "velocity", "effort"}
+
+
+def _error(code: str, message: str, *, applied: bool = False) -> Dict[str, Any]:
+    return {"status": "error", "code": code, "message": message, "applied": applied}
+
+
+def _resolve_joint_indices(
+    joint_names_available: Sequence[str],
+    *,
+    joint_names: Optional[Sequence[str]],
+    joint_indices: Optional[Sequence[int]],
+) -> tuple[Optional[List[int]], Optional[Dict[str, Any]]]:
+    if joint_names is not None and joint_indices is not None:
+        return None, _error("JOINT_SELECTOR_CONFLICT", "joint_names and joint_indices are mutually exclusive")
+
+    count = len(joint_names_available)
+    if joint_names is not None:
+        requested = list(joint_names)
+        if not requested:
+            return None, _error("EMPTY_JOINT_SELECTOR", "joint_names must not be empty")
+        if len(set(requested)) != len(requested):
+            return None, _error("DUPLICATE_JOINT_SELECTOR", "joint_names contains duplicates")
+        index_by_name = {name: index for index, name in enumerate(joint_names_available)}
+        missing = [name for name in requested if name not in index_by_name]
+        if missing:
+            return None, _error(
+                "JOINT_NOT_FOUND",
+                f"Unknown joint name(s): {missing}. Available joints: {list(joint_names_available)}",
+            )
+        return [index_by_name[name] for name in requested], None
+
+    if joint_indices is not None:
+        requested_indices = list(joint_indices)
+        if not requested_indices:
+            return None, _error("EMPTY_JOINT_SELECTOR", "joint_indices must not be empty")
+        if any(isinstance(index, bool) or not isinstance(index, int) for index in requested_indices):
+            return None, _error("INVALID_JOINT_INDEX", "joint_indices must contain integers")
+        if len(set(requested_indices)) != len(requested_indices):
+            return None, _error("DUPLICATE_JOINT_SELECTOR", "joint_indices contains duplicates")
+        invalid = [index for index in requested_indices if index < 0 or index >= count]
+        if invalid:
+            return None, _error(
+                "JOINT_INDEX_OUT_OF_RANGE", f"Joint index out of range: {invalid}; valid range is 0..{count - 1}"
+            )
+        return requested_indices, None
+
+    return list(range(count)), None
+
+
+def _joint_units(joint_type: str) -> Dict[str, str]:
+    if joint_type == "prismatic":
+        return {"position": "meters", "velocity": "meters_per_second", "effort": "newtons"}
+    if joint_type == "revolute":
+        return {"position": "radians", "velocity": "radians_per_second", "effort": "newton_meters"}
+    return {"position": "unknown", "velocity": "unknown", "effort": "unknown"}
+
+
+def _selected_joint_state(
+    raw_state: Dict[str, Any],
+    selected_indices: Sequence[int],
+) -> Dict[str, Any]:
+    names = list(raw_state.get("joint_names") or [])
+    types = list(raw_state.get("joint_types") or ["unknown"] * len(names))
+    fields = {
+        "position": raw_state.get("positions"),
+        "velocity": raw_state.get("velocities"),
+        "effort": raw_state.get("efforts"),
+        "position_target": raw_state.get("position_targets"),
+        "velocity_target": raw_state.get("velocity_targets"),
+        "effort_target": raw_state.get("effort_targets"),
+    }
+    for field_name, values in fields.items():
+        if values is not None and len(values) != len(names):
+            raise ValueError(f"Adapter returned {len(values)} {field_name} values for {len(names)} joints")
+
+    joints = []
+    for index in selected_indices:
+        joint_type = types[index] if index < len(types) else "unknown"
+        joints.append(
+            {
+                "index": index,
+                "name": names[index],
+                "type": joint_type,
+                "position": None if fields["position"] is None else fields["position"][index],
+                "velocity": None if fields["velocity"] is None else fields["velocity"][index],
+                "effort": None if fields["effort"] is None else fields["effort"][index],
+                "targets": {
+                    "position": None if fields["position_target"] is None else fields["position_target"][index],
+                    "velocity": None if fields["velocity_target"] is None else fields["velocity_target"][index],
+                    "effort": None if fields["effort_target"] is None else fields["effort_target"][index],
+                },
+                "units": _joint_units(joint_type),
+            }
+        )
+    return {
+        "prim_path": raw_state.get("prim_path"),
+        "joint_count": len(names),
+        "selection_count": len(joints),
+        "joints": joints,
+    }
+
+
+def get_joint_state(
+    adapter: IsaacAdapterBase,
+    prim_path: Optional[str] = None,
+    joint_names: Optional[Sequence[str]] = None,
+    joint_indices: Optional[Sequence[int]] = None,
+) -> Dict[str, Any]:
+    if not prim_path:
+        return _error("INVALID_ARGUMENT", "prim_path is required")
+    try:
+        raw_state = adapter.get_joint_state(prim_path)
+        names = list(raw_state.get("joint_names") or [])
+        if not names:
+            return _error("JOINT_STATE_UNAVAILABLE", f"No articulation DOFs found at {prim_path}")
+        selected, error = _resolve_joint_indices(names, joint_names=joint_names, joint_indices=joint_indices)
+        if error:
+            return error
+        return {"status": "success", **_selected_joint_state(raw_state, selected or [])}
+    except NotImplementedError as exc:
+        return {"status": "unsupported", "code": "JOINT_STATE_UNSUPPORTED", "message": str(exc)}
+    except Exception as exc:
+        return _error("JOINT_STATE_UNAVAILABLE", str(exc))
+
+
+def set_joint_command(
+    adapter: IsaacAdapterBase,
+    prim_path: Optional[str] = None,
+    mode: Optional[str] = None,
+    values: Optional[Sequence[float]] = None,
+    joint_names: Optional[Sequence[str]] = None,
+    joint_indices: Optional[Sequence[int]] = None,
+) -> Dict[str, Any]:
+    if not prim_path:
+        return _error("INVALID_ARGUMENT", "prim_path is required")
+    normalized_mode = str(mode or "").strip().lower()
+    if normalized_mode not in _COMMAND_MODES:
+        return _error(
+            "INVALID_JOINT_COMMAND_MODE",
+            f"mode must be one of {sorted(_COMMAND_MODES)}",
+        )
+    if values is None or isinstance(values, (str, bytes)):
+        return _error("INVALID_ARGUMENT", "values must not be empty")
+    try:
+        raw_values = list(values)
+        if not raw_values:
+            return _error("INVALID_ARGUMENT", "values must not be empty")
+        if any(isinstance(value, bool) for value in raw_values):
+            return _error("INVALID_JOINT_VALUE", "values must contain finite numbers, not booleans")
+        normalized_values = [float(value) for value in raw_values]
+    except (TypeError, ValueError):
+        return _error("INVALID_JOINT_VALUE", "values must contain finite numbers")
+    if any(not math.isfinite(value) for value in normalized_values):
+        return _error("INVALID_JOINT_VALUE", "values must contain finite numbers")
+
+    try:
+        info = adapter.get_robot_joint_info(prim_path)
+        available_names = list(info.get("joint_names") or [])
+        if not available_names:
+            return _error("JOINT_STATE_UNAVAILABLE", f"No articulation DOFs found at {prim_path}")
+        selected, error = _resolve_joint_indices(available_names, joint_names=joint_names, joint_indices=joint_indices)
+        if error:
+            return error
+        assert selected is not None
+        if len(normalized_values) != len(selected):
+            return _error(
+                "JOINT_VALUE_COUNT_MISMATCH",
+                f"Received {len(normalized_values)} values for {len(selected)} selected joints",
+            )
+
+        adapter.set_joint_command(prim_path, normalized_mode, normalized_values, selected)
+        try:
+            raw_state = adapter.get_joint_state(prim_path)
+            readback = _selected_joint_state(raw_state, selected)
+        except Exception as exc:
+            return {
+                "status": "partial",
+                "code": "JOINT_COMMAND_READBACK_FAILED",
+                "message": f"Joint command was applied, but read-back failed: {exc}",
+                "applied": True,
+                "prim_path": prim_path,
+                "mode": normalized_mode,
+                "values": normalized_values,
+                "joint_indices": selected,
+                "joint_names": [available_names[index] for index in selected],
+            }
+        return {
+            "status": "success",
+            "message": f"Applied {normalized_mode} command to {len(selected)} joint(s) on {prim_path}",
+            "applied": True,
+            "prim_path": prim_path,
+            "mode": normalized_mode,
+            "values": normalized_values,
+            "joint_indices": selected,
+            "joint_names": [available_names[index] for index in selected],
+            "readback": readback,
+        }
+    except NotImplementedError as exc:
+        return {
+            "status": "unsupported",
+            "code": "JOINT_COMMAND_UNSUPPORTED",
+            "message": str(exc),
+            "applied": False,
+        }
+    except Exception as exc:
+        return _error("JOINT_COMMAND_FAILED", str(exc))

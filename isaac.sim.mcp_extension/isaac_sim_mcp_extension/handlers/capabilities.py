@@ -131,6 +131,7 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     backend_verification = "verified" if physics_backend == "physx" else "unverified"
     camera_v6_state = "supported" if adapter_generation == 6 else "unsupported"
+    joint_v6_state = "supported" if adapter_generation == 6 else "unsupported"
     return {
         "scene.basic_crud": {"state": "supported"},
         "sensor.lifecycle": {
@@ -219,8 +220,30 @@ def _feature_flags(adapter_generation: Optional[int], physics_backend: str) -> D
             "backend": physics_backend,
         },
         "robot.joint_position": {"state": "supported"},
-        "robot.joint_velocity": {"state": "unsupported"},
-        "robot.joint_effort": {"state": "unsupported"},
+        "robot.joint_velocity": {"state": joint_v6_state, "adapter_generation": adapter_generation},
+        "robot.joint_effort": {
+            "state": joint_v6_state,
+            "adapter_generation": adapter_generation,
+            "renew_each_update": True,
+        },
+        "robot.joint_state": {
+            "state": "supported" if adapter_generation == 6 else "partial",
+            "adapter_generation": adapter_generation,
+            "backend_verification": backend_verification,
+            "tool": "get_joint_state",
+            "measured_fields": ["position", "velocity", "effort"],
+            "target_fields": ["position", "velocity", "effort"],
+            "subset_selectors": ["joint_names", "joint_indices"],
+        },
+        "robot.joint_command": {
+            "state": joint_v6_state,
+            "adapter_generation": adapter_generation,
+            "backend_verification": backend_verification,
+            "tool": "set_joint_command",
+            "modes": ["position", "velocity", "effort"],
+            "atomic_validation": True,
+            "readback": True,
+        },
         "motion.ik_and_planning": {"state": "unsupported"},
         "omnigraph.create_edit": {"state": "partial"},
         "omnigraph.lifecycle": {"state": "unsupported"},

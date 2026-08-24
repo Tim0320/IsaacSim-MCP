@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — complete V6 joint state and command modes
+
+- Added `get_joint_state` for joint name/index mapping, measured position,
+  velocity, projected effort, all three active targets, joint types, and units.
+- Added atomic `set_joint_command` modes for position, velocity, and effort with
+  name/index subsets, finite-value checks, immediate read-back, and stable
+  validation errors. Unknown joints and invalid selectors apply nothing.
+- Fixed V6 subset position commands to pass `dof_indices` to the experimental
+  Articulation API instead of treating DOF indices as articulation-view rows.
+- Added an isolated Franka live verifier for all modes, stepped measured-state
+  read-back, invalid-name atomicity, and scratch cleanup.
+- The Isaac Sim 6.0.1 PhysX live run passed all three command modes on a 9-DOF
+  Franka, atomic invalid-name rejection, stale tensor-wrapper rebinding,
+  Stop-first cleanup, process/port survival, log review, and native-dump review.
+
 ### Added — deterministic Camera and LiDAR lifecycle
 
 - Added `delete_sensor`, with sensor-aware `delete_object` routing, to release

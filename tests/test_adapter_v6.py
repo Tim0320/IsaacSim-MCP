@@ -199,9 +199,9 @@ def test_v6_set_joint_positions_calls_set_dof_position_targets(monkeypatch):
         def is_physics_tensor_entity_initialized(self):
             return True
 
-        def set_dof_position_targets(self, positions, indices=None):
+        def set_dof_position_targets(self, positions, dof_indices=None):
             captured["positions"] = positions
-            captured["indices"] = indices
+            captured["dof_indices"] = dof_indices
 
         def get_dof_indices(self, names):
             captured["dof_indices_names"] = names
@@ -242,6 +242,134 @@ def test_v6_set_joint_positions_calls_set_dof_position_targets(monkeypatch):
     adapter.set_joint_positions("/World/Franka", [0.1, 0.2, 0.3])
     assert captured["paths"] == ["/World/Franka"]
     assert list(captured["positions"][0]) == [0.1, 0.2, 0.3]
+
+
+def test_v6_joint_command_uses_dof_subset_for_all_modes(monkeypatch):
+    calls = []
+
+    class _Articulation:
+        dof_names = ["j0", "j1", "j2"]
+
+        def is_physics_tensor_entity_valid(self):
+            return True
+
+        def set_dof_position_targets(self, values, dof_indices=None):
+            calls.append(("position", values, dof_indices))
+
+        def set_dof_velocity_targets(self, values, dof_indices=None):
+            calls.append(("velocity", values, dof_indices))
+
+        def set_dof_efforts(self, values, dof_indices=None):
+            calls.append(("effort", values, dof_indices))
+
+    fake_warp_mod = types.ModuleType("warp")
+    fake_warp_mod.array = lambda data, dtype=None: list(data)
+    fake_warp_mod.float32 = "float32"
+    fake_warp_mod.int32 = "int32"
+    monkeypatch.setitem(sys.modules, "warp", fake_warp_mod)
+
+    from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+
+    adapter = object.__new__(IsaacAdapterV6)
+    adapter._ensure_physics_world = lambda: None
+    adapter._new_articulation = lambda _path: _Articulation()
+
+    for mode in ("position", "velocity", "effort"):
+        adapter.set_joint_command("/World/Robot", mode, [1.0, 2.0], [0, 2])
+
+    assert [call[0] for call in calls] == ["position", "velocity", "effort"]
+    assert all(list(call[1][0]) == [1.0, 2.0] for call in calls)
+    assert all(list(call[2]) == [0, 2] for call in calls)
+
+
+def test_v6_joint_state_reads_measured_and_target_arrays():
+    class _DofType:
+        def __init__(self, name):
+            self.name = name
+
+        def __str__(self):
+            return f"DofType.{self.name}"
+
+    class _Articulation:
+        dof_names = ["shoulder", "finger"]
+        dof_types = [_DofType("Rotation"), _DofType("Translation")]
+
+        def is_physics_tensor_entity_valid(self):
+            return True
+
+        def get_dof_positions(self):
+            return [[0.1, 0.02]]
+
+        def get_dof_velocities(self):
+            return [[0.2, 0.03]]
+
+        def get_dof_projected_joint_forces(self):
+            return [[1.5, 2.5]]
+
+        def get_dof_position_targets(self):
+            return [[0.15, 0.025]]
+
+        def get_dof_velocity_targets(self):
+            return [[0.25, 0.035]]
+
+        def get_dof_efforts(self):
+            return [[1.0, 2.0]]
+
+    from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+
+    adapter = object.__new__(IsaacAdapterV6)
+    adapter._ensure_physics_world = lambda: None
+    adapter._new_articulation = lambda _path: _Articulation()
+
+    state = adapter.get_joint_state("/World/Robot")
+
+    assert state == {
+        "prim_path": "/World/Robot",
+        "joint_names": ["shoulder", "finger"],
+        "joint_types": ["revolute", "prismatic"],
+        "positions": [0.1, 0.02],
+        "velocities": [0.2, 0.03],
+        "efforts": [1.5, 2.5],
+        "position_targets": [0.15, 0.025],
+        "velocity_targets": [0.25, 0.035],
+        "effort_targets": [1.0, 2.0],
+    }
+
+
+def test_v6_runtime_articulation_rebinds_stale_preplay_cache(monkeypatch):
+    created = []
+
+    class _Articulation:
+        def __init__(self, paths):
+            self.paths = paths
+            self.sequence = len(created)
+            created.append(self)
+
+        def is_physics_tensor_entity_valid(self):
+            return self.sequence > 0
+
+    fake_prims_mod = types.ModuleType("isaacsim.core.experimental.prims")
+    fake_prims_mod.Articulation = _Articulation
+    monkeypatch.setitem(sys.modules, "isaacsim.core.experimental", types.ModuleType("isaacsim.core.experimental"))
+    monkeypatch.setitem(sys.modules, "isaacsim.core.experimental.prims", fake_prims_mod)
+
+    from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+
+    adapter = object.__new__(IsaacAdapterV6)
+    adapter._articulations = {}
+    stale = adapter._new_articulation("/World/Robot")
+
+    rebound = adapter._runtime_articulation("/World/Robot")
+
+    assert rebound is not stale
+    assert rebound.sequence == 1
+    assert adapter._articulations["/World/Robot"] is rebound
+
+
+def test_v6_unknown_dof_type_is_not_mislabeled_as_revolute():
+    from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+
+    assert IsaacAdapterV6._joint_type_name("DofType.Invalid") == "unknown"
 
 
 def test_v6_get_simulation_state_includes_engine_and_version(monkeypatch):

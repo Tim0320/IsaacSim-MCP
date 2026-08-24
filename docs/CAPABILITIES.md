@@ -39,7 +39,7 @@
 - V6 `create_lidar` 支援 named preset，或以 FOV、角解析度、rotation rate 與 range 建立 generic RTX LiDAR；兩種模式不可混用。`get_lidar_config` 會從 USD Core schema 讀回有效值與 raw attributes。契約見 [`LIDAR_CONFIG.md`](LIDAR_CONFIG.md)。
 - `delete_sensor` 會完整 teardown Camera/LiDAR runtime，刪除 prim，等待 Kit updates，再驗證 prim、RenderProduct、cache 與 LiDAR metadata 均不存在。timeline 必須處於 Pause 或 Stop；`delete_object` 遇到 managed sensor 會走相同流程。契約見 [`SENSOR_LIFECYCLE.md`](SENSOR_LIFECYCLE.md)。
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
-- Robot named tools 支援 joint position；velocity、effort、IK 與 trajectory 尚未支援。
+- Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。V5 僅保留 position，IK 與 trajectory 尚未支援。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md)。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
 - Newton 只有實際通過 live matrix 的項目才能標為 verified。
 
@@ -116,6 +116,15 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - read-back：每次刪除等待 32 Kit updates；prim、LiDAR actual prim、RenderProduct、Camera/LiDAR cache 與 LiDAR authoring metadata 全部 absent
 - recreate：第二輪建立成功，沒有重複 pipeline，`duplicate_pipeline_detected=false`
 - runtime：PID 與 TCP `8766` 持續存活；log 無 teardown failure、invalid-prim access、`EXCEPTION_ACCESS_VIOLATION` 或 `PhysXGpu_64.dll` crash signature；scratch cleanup 通過
+
+2026-08-24 完成 Robot joint state／command mode live 驗證：
+
+- registry：56 extension commands；`get_joint_state`、`set_joint_command` 已註冊且 capability 為 supported
+- fixture：`/World/MCP_Task_2_1_Robot` Franka，9 DOF；選定 `panda_joint1` 以 name subset 控制
+- modes：position、velocity、effort requested target 都由 immediate read-back 在浮點容差內確認；physics updates 後 measured position、velocity、projected effort 均為有限值
+- atomicity：不存在的 joint name 回 `JOINT_NOT_FOUND`、`applied=false`，命令前後三種 targets 完全一致
+- lifecycle：Play 前 stale tensor wrapper 會重綁目前 SimulationView；cleanup 先 Stop 再刪 articulation，scratch prim read-back absent
+- runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；Kit PID/TCP `8766` 存活，fixed physics GPU 對應 active display GPU，run-scoped log 無 warning/error，新增 native dump `0`
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

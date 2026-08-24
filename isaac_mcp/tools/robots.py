@@ -153,3 +153,68 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("get_joint_state")
+    def get_joint_state(
+        prim_path: str,
+        joint_names: Optional[List[str]] = None,
+        joint_indices: Optional[List[int]] = None,
+    ) -> str:
+        """Read measured joint state and active command targets.
+
+        Returns position, velocity, measured effort, position/velocity/effort
+        targets, joint name/index mapping, joint type, and explicit units.
+        Use either joint_names or joint_indices for a subset; the selectors are
+        mutually exclusive. Revolute units are radians, radians_per_second, and
+        newton_meters. Prismatic units are meters, meters_per_second, and newtons.
+
+        Args:
+            prim_path: USD path of the articulation root.
+            joint_names: Optional exact, case-sensitive joint names in requested order.
+            joint_indices: Optional DOF indices in requested order.
+        """
+        try:
+            conn = get_connection()
+            params = {"prim_path": prim_path}
+            if joint_names is not None:
+                params["joint_names"] = joint_names
+            if joint_indices is not None:
+                params["joint_indices"] = joint_indices
+            result = conn.send_command("robots.get_joint_state", params)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("set_joint_command")
+    def set_joint_command(
+        prim_path: str,
+        mode: str,
+        values: List[float],
+        joint_names: Optional[List[str]] = None,
+        joint_indices: Optional[List[int]] = None,
+    ) -> str:
+        """Apply an atomic position, velocity, or effort joint command.
+
+        All selectors and values are validated before the adapter is called, so
+        an unknown name, invalid index, duplicate selector, non-finite value, or
+        length mismatch applies nothing. Effort commands must be renewed every
+        simulation update; this tool applies one update's effort command.
+
+        Args:
+            prim_path: USD path of the articulation root.
+            mode: One of position, velocity, or effort.
+            values: Command values ordered by the selected joints.
+            joint_names: Optional exact, case-sensitive joint subset.
+            joint_indices: Optional DOF-index subset; mutually exclusive with joint_names.
+        """
+        try:
+            conn = get_connection()
+            params = {"prim_path": prim_path, "mode": mode, "values": values}
+            if joint_names is not None:
+                params["joint_names"] = joint_names
+            if joint_indices is not None:
+                params["joint_indices"] = joint_indices
+            result = conn.send_command("robots.set_joint_command", params)
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})

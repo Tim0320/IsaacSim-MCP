@@ -419,6 +419,24 @@ class IsaacAdapterV6(IsaacAdapterBase):
         self._articulations[prim_path] = art
         return art
 
+    def _runtime_articulation(self, prim_path: str) -> Any:
+        """Return an articulation bound to the current physics tensor view.
+
+        Robot discovery can create and cache a USD-backed wrapper before the
+        first Play. Once physics starts, that wrapper may remain USD-valid but
+        have no valid tensor entity. Runtime state and command calls must evict
+        it and bind a fresh wrapper to the active SimulationView.
+        """
+        art = self._new_articulation(prim_path)
+        try:
+            tensor_valid = bool(art.is_physics_tensor_entity_valid())
+        except Exception:
+            tensor_valid = False
+        if tensor_valid:
+            return art
+        self._articulations.pop(prim_path, None)
+        return self._new_articulation(prim_path)
+
     def discover_robots(self) -> Dict[str, Dict[str, str]]:
         """Scan the Isaac Sim asset server for all available robot USD files."""
         import omni.client
@@ -512,7 +530,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
         num_dof = 0
         try:
             self._ensure_physics_world()
-            art = self._new_articulation(prim_path)
+            art = self._runtime_articulation(prim_path)
             joint_names = list(art.dof_names) if art.dof_names else []
             num_dof = int(art.num_dofs) if art.num_dofs else 0
         except Exception as e:
@@ -564,11 +582,11 @@ class IsaacAdapterV6(IsaacAdapterBase):
 
         try:
             self._ensure_physics_world()
-            art = self._new_articulation(prim_path)
+            art = self._runtime_articulation(prim_path)
             positions_arr = wp.array(np.asarray([list(positions)], dtype=np.float32), dtype=wp.float32)
             if joint_indices is not None:
                 idx_arr = wp.array(np.asarray(joint_indices, dtype=np.int32), dtype=wp.int32)
-                art.set_dof_position_targets(positions_arr, indices=idx_arr)
+                art.set_dof_position_targets(positions_arr, dof_indices=idx_arr)
             else:
                 art.set_dof_position_targets(positions_arr)
             return
@@ -635,7 +653,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
     def get_joint_positions(self, prim_path: str) -> List[float]:
         try:
             self._ensure_physics_world()
-            art = self._new_articulation(prim_path)
+            art = self._runtime_articulation(prim_path)
             positions = art.get_dof_positions()
             if positions is not None:
                 # batched (1, num_dofs) wp.array → flat list
@@ -669,6 +687,97 @@ class IsaacAdapterV6(IsaacAdapterBase):
             else:
                 positions_list.append(0.0)
         return positions_list
+
+    @staticmethod
+    def _flatten_joint_values(values: Any) -> List[float]:
+        if values is None:
+            return []
+        if hasattr(values, "numpy"):
+            values = values.numpy()
+        if hasattr(values, "reshape"):
+            reshaped = values.reshape(-1)
+            if hasattr(reshaped, "tolist"):
+                return [float(value) for value in reshaped.tolist()]
+        if isinstance(values, (list, tuple)):
+            flattened: List[float] = []
+            for value in values:
+                if isinstance(value, (list, tuple)):
+                    flattened.extend(float(item) for item in value)
+                else:
+                    flattened.append(float(value))
+            return flattened
+        return [float(value) for value in values]
+
+    @staticmethod
+    def _joint_type_name(value: Any) -> str:
+        normalized = str(value).lower()
+        if "translation" in normalized:
+            return "prismatic"
+        if "rotation" in normalized:
+            return "revolute"
+        return "unknown"
+
+    def get_joint_state(self, prim_path: str) -> Dict[str, Any]:
+        """Read tensor-backed measured state and all active command targets."""
+        self._ensure_physics_world()
+        art = self._runtime_articulation(prim_path)
+        names = list(art.dof_names or [])
+        if not names:
+            raise ValueError(f"No articulation DOFs found at {prim_path}")
+
+        state = {
+            "prim_path": prim_path,
+            "joint_names": names,
+            "joint_types": [self._joint_type_name(value) for value in list(art.dof_types or [])],
+            "positions": self._flatten_joint_values(art.get_dof_positions()),
+            "velocities": self._flatten_joint_values(art.get_dof_velocities()),
+            "efforts": self._flatten_joint_values(art.get_dof_projected_joint_forces()),
+            "position_targets": self._flatten_joint_values(art.get_dof_position_targets()),
+            "velocity_targets": self._flatten_joint_values(art.get_dof_velocity_targets()),
+            "effort_targets": self._flatten_joint_values(art.get_dof_efforts()),
+        }
+        for key in (
+            "joint_types",
+            "positions",
+            "velocities",
+            "efforts",
+            "position_targets",
+            "velocity_targets",
+            "effort_targets",
+        ):
+            if len(state[key]) != len(names):
+                raise RuntimeError(f"Articulation returned {len(state[key])} {key} entries for {len(names)} joints")
+        return state
+
+    def set_joint_command(
+        self,
+        prim_path: str,
+        mode: str,
+        values: Sequence[float],
+        joint_indices: Optional[List[int]] = None,
+    ) -> None:
+        """Apply one V6 Articulation command using DOF subset semantics."""
+        import warp as wp
+
+        self._ensure_physics_world()
+        art = self._runtime_articulation(prim_path)
+        count = len(list(art.dof_names or []))
+        selected = list(range(count)) if joint_indices is None else list(joint_indices)
+        if not selected or len(values) != len(selected):
+            raise ValueError("Joint command value count must match the selected DOFs")
+        if len(set(selected)) != len(selected) or any(index < 0 or index >= count for index in selected):
+            raise ValueError("Joint command contains an invalid or duplicate DOF index")
+
+        values_arr = wp.array(np.asarray([list(values)], dtype=np.float32), dtype=wp.float32)
+        indices_arr = wp.array(np.asarray(selected, dtype=np.int32), dtype=wp.int32)
+        if mode == "position":
+            art.set_dof_position_targets(values_arr, dof_indices=indices_arr)
+        elif mode == "velocity":
+            art.set_dof_velocity_targets(values_arr, dof_indices=indices_arr)
+        elif mode == "effort":
+            art.set_dof_efforts(values_arr, dof_indices=indices_arr)
+        else:
+            raise ValueError(f"Unsupported joint command mode: {mode}")
 
     def get_joint_config(self, prim_path: str) -> Dict[str, Any]:
         from pxr import Usd, UsdPhysics

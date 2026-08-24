@@ -13,7 +13,8 @@ Use the installed Windows baseline and choose the correct execution path before 
 2. Read [references/mcp-routing.md](references/mcp-routing.md) before choosing an MCP server or launcher.
 3. Read [references/environment.md](references/environment.md) when paths, versions, Python runtimes, or installation portability matter.
 4. Read [references/isaacsim-mcp-1x.md](references/isaacsim-mcp-1x.md) when the request involves Camera, LiDAR, artifacts, sensor deletion, tasks 1.1 through 1.6, or the completed IsaacSim-MCP 1.x research baseline.
-5. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
+5. Read [references/isaacsim-mcp-2x.md](references/isaacsim-mcp-2x.md) when the request involves Robot joint state, position/velocity/effort command modes, or task 2.1 and later Phase 2 work.
+6. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
 
 Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely because a process is stopped or a tool is unavailable. Diagnose the existing installation first.
 

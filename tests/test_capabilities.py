@@ -133,6 +133,25 @@ def test_handler_returns_stable_runtime_capability_contract():
         ],
         "reason": None,
     }
+    assert result["feature_flags"]["robot.joint_state"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+        "backend_verification": "verified",
+        "tool": "get_joint_state",
+        "measured_fields": ["position", "velocity", "effort"],
+        "target_fields": ["position", "velocity", "effort"],
+        "subset_selectors": ["joint_names", "joint_indices"],
+    }
+    assert result["feature_flags"]["robot.joint_command"] == {
+        "state": "supported",
+        "adapter_generation": 6,
+        "backend_verification": "verified",
+        "tool": "set_joint_command",
+        "modes": ["position", "velocity", "effort"],
+        "atomic_validation": True,
+        "readback": True,
+    }
+    assert result["feature_flags"]["robot.joint_effort"]["renew_each_update"] is True
     assert "create_lidar" not in result["unsupported_arguments"]
     assert result["unsupported_arguments"]["set_physics_params"]["time_step"]["state"] == "unsupported"
     assert result["sensor_warmup"]["camera"]["state"] == "per_sensor_unknown"
@@ -168,6 +187,8 @@ def test_v5_reports_physx_and_supported_lidar_config():
     assert result["feature_flags"]["lidar.config"]["state"] == "partial"
     assert result["feature_flags"]["lidar.config"]["preset_configs"] is True
     assert result["feature_flags"]["lidar.config"]["generic_schema_config"] is False
+    assert result["feature_flags"]["robot.joint_state"]["state"] == "partial"
+    assert result["feature_flags"]["robot.joint_command"]["state"] == "unsupported"
     assert result["unsupported_arguments"]["create_lidar"]["horizontal_fov_deg"]["state"] == "unsupported"
 
 

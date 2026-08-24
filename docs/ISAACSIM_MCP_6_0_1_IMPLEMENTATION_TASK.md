@@ -10,7 +10,7 @@
 - 固定執行環境：`C:\isaacsim`，Isaac Sim `6.0.1-rc.7+release.42383.32955d8d.gl`
 - Live 控制路由：Isaac Sim extension TCP `8766`
 - `isaac-sim-mcp` 的 `9904` 僅供文件查詢，不視為 live stage 控制驗證
-- 目前 MCP 共註冊 54 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
+- 目前 MCP 共註冊 56 個 named tools；既有 42-tool 歷史報告為參考，新增工具仍需統一重跑
 - 建立本文件時 `8766` 未啟動，因此本次只整理程式碼與既有測試證據，沒有修改 live stage
 - 備份根目錄：`E:\碩士論文\backups\isaacsim-mcp`
 
@@ -147,11 +147,15 @@
 
 ## Phase 2：Robot 控制
 
-- [ ] 7. 完整 joint state 與 command mode
+- [x] 7. 完整 joint state 與 command mode
   > 現況：named tools 主要提供 joint position target 與基本 read-back，缺 velocity、effort、measured state 與 command mode。
   > 缺漏位置：`tools/robots.py`、`handlers/robots.py`、V6 articulation adapter。
   > 實作：提供 joint names/index mapping、position/velocity/effort state，以及 position/velocity/effort target；支援 subset 與明確 units。
   > 驗收：每種 mode 在 scratch articulation 執行，step 後讀回 target 與 measured state；錯誤 joint name 不得部分套用。
+  > 已實作：新增 `get_joint_state`、`set_joint_command`，V6 讀取 DOF position/velocity、projected joint force、三種 target；name/index selector 與所有 values 先完整驗證再一次套用。也修正 V6 subset position 將 DOF indices 誤傳成 articulation indices 的既有錯誤。
+  > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、56 commands。Franka fixture 讀回 9 DOF，對 `panda_joint1` 依序套用 position、velocity、effort；三種 immediate target 均在浮點容差內等於 requested value，physics updates 後 position/velocity/projected effort measured state 全為有限值。錯誤 joint name 回 `JOINT_NOT_FOUND`、`applied=false`，前後三種 targets 完全相同。
+  > lifecycle／安全證據：Play 前快取的 stale tensor wrapper 會自動淘汰並重綁目前 SimulationView；cleanup 必須先 Stop 再刪 articulation，避免 Pause 中刪除使 PhysX tensor view 失效。scratch robot read-back 為 absent，timeline=`stopped`，Kit PID `2008`／TCP `8766` 存活，`/physics/cudaDevice=0` 對應唯一 active display GPU，當次 run-scoped log 無 warning/error，新增 native dump `0`。
+  > 驗證腳本與契約：`scripts/verify_robot_joint_control_live.py`、`docs/ROBOT_JOINT_CONTROL.md`。
 
 - [ ] 8. Drive gains、limits 與控制器參數寫入
   > 現況：joint/drive 設定讀取能力高於寫入能力，缺 stiffness、damping、max force、velocity、drive type 的 typed setter。
@@ -264,11 +268,11 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
 
-- [ ] 25. 目前 54 個 tools 的統一 Isaac Sim 6.0.1 live 報告
-  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config、artifact transport 與 sensor lifecycle 工具未納入同一輪 54-tool live matrix。
+- [ ] 25. 目前 56 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+  > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config、artifact transport、sensor lifecycle 與 Robot joint control 工具未納入同一輪 56-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
-  > 驗收：54 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 驗收：56 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
 
 - [ ] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。

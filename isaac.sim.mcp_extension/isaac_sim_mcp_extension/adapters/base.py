@@ -166,6 +166,44 @@ class IsaacAdapterBase(ABC):
         """Read current joint positions from a robot articulation."""
         ...
 
+    def get_joint_state(self, prim_path: str) -> Dict[str, Any]:
+        """Read complete measured state and command targets for an articulation.
+
+        The legacy default preserves position-only support. Isaac Sim 6.x
+        overrides this with tensor-backed velocity, effort, and target data.
+        """
+        info = self.get_robot_joint_info(prim_path)
+        names = list(info.get("joint_names", []))
+        joint_types = [str(item.get("type", "unknown")) for item in info.get("joint_limits", [])]
+        return {
+            "prim_path": prim_path,
+            "joint_names": names,
+            "joint_types": joint_types,
+            "positions": self.get_joint_positions(prim_path),
+            "velocities": None,
+            "efforts": None,
+            "position_targets": None,
+            "velocity_targets": None,
+            "effort_targets": None,
+        }
+
+    def set_joint_command(
+        self,
+        prim_path: str,
+        mode: str,
+        values: Sequence[float],
+        joint_indices: Optional[List[int]] = None,
+    ) -> None:
+        """Apply one validated joint command.
+
+        Legacy adapters retain their existing position target path. Velocity
+        and effort require the Isaac Sim 6.x adapter.
+        """
+        if mode == "position":
+            self.set_joint_positions(prim_path, values, joint_indices)
+            return
+        raise NotImplementedError(f"Joint command mode '{mode}' requires the Isaac Sim 6.x adapter")
+
     @abstractmethod
     def get_joint_config(self, prim_path: str) -> Dict[str, Any]:
         """Return joint drive configuration: stiffness, damping, limits, target vs actual positions."""
