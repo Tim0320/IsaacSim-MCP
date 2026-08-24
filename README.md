@@ -79,7 +79,17 @@ README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版
 | 3.4 | PBR/physics material、friction/restitution、physics-purpose binding 與 rollback | `create_material`, `get_material`, `apply_material`, `get_material_binding` | [`PHYSICS_MATERIALS.md`](docs/PHYSICS_MATERIALS.md)／[`verify_physics_material_live.py`](scripts/verify_physics_material_live.py) |
 | 3.5 | scratch-guarded Stage lifecycle、layer/composition、variant、LabelsAPI、typed attribute、atomic batch | `new_stage`, `open_stage`, `save_stage_as`, `get_stage_composition`, `edit_sublayer`, `edit_composition_arc`, `set_variant_selection`, `get_semantic_labels`, `set_semantic_labels`, `get_typed_attribute`, `set_typed_attribute`, `apply_stage_batch` | [`STAGE_COMPOSITION.md`](docs/STAGE_COMPOSITION.md)／[`verify_stage_composition_live.py`](scripts/verify_stage_composition_live.py) |
 
-2026-08-25 已在 Isaac Sim `6.0.1-rc.7`／PhysX 完成 3.5 scratch live 驗收：88-command registry，subLayer/reference/payload/variant/LabelsAPI/typed attributes read-back、成功 batch、失敗 batch rollback、save/reopen composition 比對、原 Stage `15→15` restore、scratch absence、PID/TCP、log 與 native-dump gate 全數通過。
+後續 agent 處理 3.x 時，依序讀取：
+
+1. 專案 skill 的 [`SKILL.md`](.agents/skills/omniverse-windows-workspace/SKILL.md)，確認 repository、Isaac runtime、live route 與資料保護規則。
+2. [`isaacsim-mcp-3x.md`](.agents/skills/omniverse-windows-workspace/references/isaacsim-mcp-3x.md)，確認 3.1～3.5 編號、跨項 invariants、Newton fail-closed 邊界、歷史驗收與 destructive-integration 警告。
+3. 表格連結的 capability contract，確認 schema、units、prerequisites、rollback 與 stable errors。
+4. 對應 live verifier，確認 read-only guard、owned namespace、snapshot/restore、read-back、cleanup 與 health gate。
+5. [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)，確認完整 Phase 3 研究紀錄與後續 Phase 邊界。
+
+歷史驗收基準：2026-08-24 的 3.1 驗證 120 Hz 與 12 steps=`0.1 s`；3.2 目前 matrix 為 PhysX 21/21 supported/verified、Newton 0 supported／18 untested／3 unsupported；3.3 驗證 body/collider/mass/group/三種 joint、rollback 與 120 steps；3.4 以 181 steps 驗證摩擦滑行及 restitution 回彈差異。2026-08-25 的 3.5 驗證 88-command registry、composition/variant/LabelsAPI/typed attributes、batch rollback、save/reopen 與原 Stage `15→15` restore。
+
+這些結果只能當歷史基準。宣稱目前仍可用前，必須重新核對 checkout、`get_capabilities`、backend、physics GPU、stopped timeline、scratch guard、read-back/rollback、cleanup、Kit/TCP、run log 與 native dump。Newton 的 `null`/untested 或 `false`/unsupported 不得因共用 V6 code、USD schema 或 import 成功而升級。live `8766` 開啟時，不可把 destructive `tests/test_integration.py` 混入離線 regression suite；3.5 必須使用專用 verifier。
 
 ## 系統需求
 
@@ -378,7 +388,7 @@ uv run ruff format --check .
 
 ```text
 IsaacSim-MCP/
-├─ .agents/                   專案 skill 與 1.x 後續 agent 閱讀索引
+├─ .agents/                   專案 skill 與 1.x／2.x／3.x 後續 agent 閱讀索引
 ├─ isaac_mcp/                 Python MCP Server 與 88 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
