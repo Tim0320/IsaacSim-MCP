@@ -212,18 +212,22 @@
   > 缺漏位置：`adapters/base.py`、`adapters/v6.py`、simulation/robot integration tests。
   > 實作：每項功能標示 `physx_supported`、`newton_supported`、`untested`；backend-specific code 由 adapter 封裝。
   > 驗收：PhysX 全矩陣通過；Newton 只把真正 live 通過的項目標成 supported，其餘保持明確 untested/unsupported。
-  > 已實作：capability schema 升為 `1.1`，新增 adapter-owned `backend_matrix`。17 個 backend-sensitive rows 都分開回傳 `physx_supported`、nullable `newton_supported`、`untested` list，以及 PhysX/Newton 各自的 state、verification 與 evidence/reason；active-backend `feature_flags` 由同一 matrix 投影，不再因 V6 共用程式路徑把 Newton 誤報為 supported。
+  > 已實作：capability schema 升為 `1.1`，新增 adapter-owned `backend_matrix`。Task 3.3 擴充後的 20 個 backend-sensitive rows 都分開回傳 `physx_supported`、nullable `newton_supported`、`untested` list，以及 PhysX/Newton 各自的 state、verification 與 evidence/reason；active-backend `feature_flags` 由同一 matrix 投影，不再因 V6 共用程式路徑把 Newton 誤報為 supported。
   > fail-closed：`newton_supported=null` 代表尚未 live 驗證，`false` 代表已知 PhysX-only；兩者都不能執行自動寫入。`require_backend_capability()` 統一封裝 runtime guard，已套用 `physics.time_step`、`physics.gpu_enabled` 與 `robot.joint_drive_config.max_velocity`。unknown/unlisted backend 同樣拒絕。
-  > Newton 邊界：目前沒有任何 Newton row 宣稱 supported。Camera、LiDAR、sensor lifecycle、timeline/step/reset、physics state/gravity、joint state/command/drive、motion 與 controller profiles 共 14 項維持 `untested`；time step、GPU dynamics 與 PhysXJointAPI max velocity 共 3 項為 `unsupported`。本輪沒有以 shared code 或 import success 代替 Newton live evidence。
+  > Newton 邊界：目前沒有任何 Newton row 宣稱 supported。Task 3.3 擴充後共 17 項維持 `untested`；time step、GPU dynamics 與 PhysXJointAPI max velocity 共 3 項為 `unsupported`。本輪沒有以 shared code 或 import success 代替 Newton live evidence。
   > offline 驗收：capability contract、active-backend projection、nullable/false 語意與 adapter guard tests 均通過；完整離線 suite `286 passed, 1 deselected`，Ruff lint 通過。本輪檔案 format check 與 `git diff --check` 通過；repository-wide format check 另有 15 個本輪開始前既存的未格式化檔案，未納入 3.2 的跨功能重寫。
-  > live 驗收（2026-08-24）：TCP `8766` read-only verifier 在 Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、`cudaDevice=0` 讀回 capability schema `1.1` 與 matrix schema `1.0`；17/17 PhysX rows 為 supported/verified，Newton 為 0 supported、14 untested、3 unsupported。Stage info 與 simulation state 查詢前後完全一致；Kit PID `38160`／port 存活，近 15 分鐘新增 native dump `0`。
+  > live 驗收（2026-08-24）：TCP `8766` read-only verifier 在 Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、`cudaDevice=0` 讀回 capability schema `1.1` 與 matrix schema `1.0`；Task 3.3 擴充後為 20/20 PhysX rows supported/verified，Newton 為 0 supported、17 untested、3 unsupported。Stage info 與 simulation state查詢前後完全一致；Kit PID `38160`／port 存活，近 15 分鐘新增 native dump `0`。
   > 契約與 verifier：`docs/BACKEND_CAPABILITY_MATRIX.md`、`scripts/verify_backend_capability_matrix_live.py`。
 
-- [ ] 13. Rigid body、collider、mass 與 joint authoring
+- [x] 13. Rigid body、collider、mass 與 joint authoring
   > 現況：基礎物件操作可建立 prim，但完整 physics schema authoring 仍常需 `execute_script`。
   > 缺漏位置：objects/simulation tools、handlers 與 adapter physics authoring API。
   > 實作：typed tools 支援 rigid/static body、collider approximation、mass/density、collision group，以及 fixed/revolute/prismatic joint 建立與查詢。
   > 驗收：輸入 schema、units、axis、limits 可讀回；step 後以可預期的運動/約束結果驗證。
+  > 已實作：新增 `configure_physics_body`、`get_physics_body`、`create_collision_group`、`get_collision_group`、`create_physics_joint`、`get_physics_joint` 六個 named tools，registry 由 68 增至 74。body 支援 dynamic/kinematic/static、六種 Mesh approximation、kg mass 與 kg/m³ density；joint 支援 fixed/revolute/prismatic、world anchor、local frames、XYZ axis 與成對 limits。
+  > validation／atomicity：所有 write 要求 stopped timeline；mass/density 互斥、static 禁止 mass/density、axis/limit/frame/quaternion 皆先驗證。body apply/read-back 失敗會還原 managed APIs/attributes；新 group/joint 失敗會刪除新 prim。本輪 live 以 Cube 要求 Mesh-only `convex_hull` 製造中途失敗，read-back 證明回復 static、RigidBodyAPI 不殘留且 collider 保留。
+  > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`／PhysX／TCP `8766`，scratch `/World/MCP_Task_3_3` 讀回 `convex_hull`、mass `2.5 kg`、density `850 kg/m³`、collision group targets/filter/invert/merge，以及三種 joint bodies、frames、axis、limits 與 units。dynamic+mass 轉 static 後 `MassAPI`/`RigidBodyAPI` 均移除；停用 Mesh collider 後 approximation 清除。120 exact steps 後 fixed body 保持 `[5,0,3]`；invalid joint 未建立，scratch root cleanup 後確認不存在。
+  > backend 邊界：capability matrix 現為 20 rows；PhysX 20/20 supported/verified，Newton 0 supported、17 untested、3 unsupported。契約與 verifier：`docs/PHYSICS_AUTHORING.md`、`scripts/verify_physics_authoring_live.py`。
 
 - [ ] 14. 補齊 physics material MCP schema
   > 現況（已確認）：handler/adapter 已接受 `static_friction`、`dynamic_friction`、`restitution`，MCP tool 介面沒有完整暴露這些參數。

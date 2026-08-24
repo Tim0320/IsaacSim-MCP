@@ -229,6 +229,24 @@ class IsaacAdapterV6(IsaacAdapterBase):
                 physx_evidence=verified,
                 newton_reason=physx_only,
             ),
+            "physics.body_authoring": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence="Isaac Sim 6.0.1 guarded PhysX live acceptance (Task 3.3)",
+                newton_reason=untested,
+            ),
+            "physics.collision_groups": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence="Isaac Sim 6.0.1 guarded PhysX live acceptance (Task 3.3)",
+                newton_reason=untested,
+            ),
+            "physics.joint_authoring": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence="Isaac Sim 6.0.1 guarded PhysX live acceptance (Task 3.3)",
+                newton_reason=untested,
+            ),
             "sensor.camera": self._backend_capability(
                 physx_supported=True,
                 newton_supported=None,
@@ -1952,6 +1970,252 @@ class IsaacAdapterV6(IsaacAdapterBase):
             except Exception:
                 rollback_succeeded = False
             raise PhysicsParamsApplyError(str(exc), rollback_succeeded=rollback_succeeded) from exc
+
+    def configure_physics_body(
+        self,
+        prim_path: str,
+        body_type: str,
+        collider_enabled: bool,
+        approximation: Optional[str] = None,
+        mass_kg: Optional[float] = None,
+        density_kg_m3: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        from pxr import UsdPhysics
+
+        stage = self.get_stage()
+        prim = stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+
+        api_types = [UsdPhysics.RigidBodyAPI, UsdPhysics.CollisionAPI, UsdPhysics.MeshCollisionAPI, UsdPhysics.MassAPI]
+        attributes = [
+            "physics:rigidBodyEnabled", "physics:kinematicEnabled", "physics:collisionEnabled",
+            "physics:approximation", "physics:mass", "physics:density",
+        ]
+        had_api = {api: prim.HasAPI(api) for api in api_types}
+        snapshots = {}
+        for name in attributes:
+            attr = prim.GetAttribute(name)
+            snapshots[name] = (bool(attr and attr.HasAuthoredValueOpinion()), attr.Get() if attr and attr.HasAuthoredValueOpinion() else None)
+
+        approximation_tokens = {
+            "none": "none", "convex_hull": "convexHull", "convex_decomposition": "convexDecomposition",
+            "mesh_simplification": "meshSimplification", "bounding_cube": "boundingCube",
+            "bounding_sphere": "boundingSphere",
+        }
+        try:
+            collision = UsdPhysics.CollisionAPI.Apply(prim) if collider_enabled else UsdPhysics.CollisionAPI(prim)
+            if collider_enabled:
+                collision.CreateCollisionEnabledAttr().Set(True)
+            else:
+                if prim.HasAPI(UsdPhysics.MeshCollisionAPI):
+                    prim.RemoveAPI(UsdPhysics.MeshCollisionAPI)
+                if prim.HasAPI(UsdPhysics.CollisionAPI):
+                    prim.RemoveAPI(UsdPhysics.CollisionAPI)
+
+            if body_type in {"dynamic", "kinematic"}:
+                rigid = UsdPhysics.RigidBodyAPI.Apply(prim)
+                rigid.CreateRigidBodyEnabledAttr().Set(True)
+                rigid.CreateKinematicEnabledAttr().Set(body_type == "kinematic")
+            else:
+                if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                    prim.RemoveAPI(UsdPhysics.RigidBodyAPI)
+                if prim.HasAPI(UsdPhysics.MassAPI):
+                    prim.RemoveAPI(UsdPhysics.MassAPI)
+
+            if approximation is not None:
+                if not collider_enabled:
+                    raise ValueError("approximation requires collider_enabled=true")
+                if prim.GetTypeName() != "Mesh":
+                    raise ValueError("collider approximation can only be authored on Mesh prims")
+                mesh_collision = UsdPhysics.MeshCollisionAPI.Apply(prim)
+                mesh_collision.CreateApproximationAttr().Set(approximation_tokens[approximation])
+
+            if mass_kg is not None or density_kg_m3 is not None:
+                mass = UsdPhysics.MassAPI.Apply(prim)
+                if mass_kg is not None:
+                    mass.CreateMassAttr().Set(float(mass_kg))
+                    mass.GetDensityAttr().Clear()
+                else:
+                    mass.CreateDensityAttr().Set(float(density_kg_m3))
+                    mass.GetMassAttr().Clear()
+
+            readback = self.get_physics_body(prim_path)
+            if readback["body_type"] != body_type or readback["collider_enabled"] != collider_enabled:
+                raise RuntimeError("physics body read-back did not match requested state")
+            return readback
+        except Exception:
+            for api in api_types:
+                if had_api[api] and not prim.HasAPI(api):
+                    api.Apply(prim)
+            for name, (authored, value) in snapshots.items():
+                attr = prim.GetAttribute(name)
+                if attr:
+                    if authored:
+                        attr.Set(value)
+                    else:
+                        attr.Clear()
+            for api in reversed(api_types):
+                if not had_api[api] and prim.HasAPI(api):
+                    prim.RemoveAPI(api)
+            raise
+
+    def get_physics_body(self, prim_path: str) -> Dict[str, Any]:
+        from pxr import UsdPhysics
+
+        prim = self.get_stage().GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+        has_rigid = prim.HasAPI(UsdPhysics.RigidBodyAPI)
+        has_collision = prim.HasAPI(UsdPhysics.CollisionAPI)
+        rigid = UsdPhysics.RigidBodyAPI(prim) if has_rigid else None
+        collision = UsdPhysics.CollisionAPI(prim) if has_collision else None
+        kinematic = bool(rigid.GetKinematicEnabledAttr().Get()) if rigid else False
+        mass_api = UsdPhysics.MassAPI(prim) if prim.HasAPI(UsdPhysics.MassAPI) else None
+        mesh_api = UsdPhysics.MeshCollisionAPI(prim) if prim.HasAPI(UsdPhysics.MeshCollisionAPI) else None
+
+        def authored(attr: Any) -> Any:
+            return attr.Get() if attr and attr.HasAuthoredValueOpinion() else None
+
+        token_to_name = {
+            "none": "none", "convexHull": "convex_hull", "convexDecomposition": "convex_decomposition",
+            "meshSimplification": "mesh_simplification", "boundingCube": "bounding_cube",
+            "boundingSphere": "bounding_sphere",
+        }
+        approximation = authored(mesh_api.GetApproximationAttr()) if mesh_api else None
+        return {
+            "prim_path": prim_path,
+            "body_type": "kinematic" if kinematic else ("dynamic" if has_rigid else "static"),
+            "has_rigid_body_api": has_rigid,
+            "rigid_body_enabled": bool(rigid.GetRigidBodyEnabledAttr().Get()) if rigid else False,
+            "kinematic_enabled": kinematic,
+            "collider_enabled": bool(collision.GetCollisionEnabledAttr().Get()) if collision else False,
+            "approximation": token_to_name.get(str(approximation), str(approximation)) if approximation is not None else None,
+            "mass_kg": authored(mass_api.GetMassAttr()) if mass_api else None,
+            "density_kg_m3": authored(mass_api.GetDensityAttr()) if mass_api else None,
+            "units": {"mass": "kg", "density": "kg/m^3"},
+        }
+
+    def create_collision_group(
+        self, group_path: str, collider_paths: Sequence[str], filtered_group_paths: Sequence[str],
+        invert_filtered_groups: bool = False, merge_group_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        from pxr import Sdf, UsdPhysics
+
+        stage = self.get_stage()
+        if stage.GetPrimAtPath(group_path).IsValid():
+            raise ValueError(f"Prim already exists: {group_path}")
+        for path in collider_paths:
+            prim = stage.GetPrimAtPath(path)
+            if not prim.IsValid() or not prim.HasAPI(UsdPhysics.CollisionAPI):
+                raise ValueError(f"Collider prim is missing CollisionAPI: {path}")
+        for path in filtered_group_paths:
+            prim = stage.GetPrimAtPath(path)
+            if not prim.IsValid() or not prim.IsA(UsdPhysics.CollisionGroup):
+                raise ValueError(f"Filtered collision group not found: {path}")
+        try:
+            group = UsdPhysics.CollisionGroup.Define(stage, group_path)
+            group.GetCollidersCollectionAPI().CreateIncludesRel().SetTargets([Sdf.Path(path) for path in collider_paths])
+            group.CreateFilteredGroupsRel().SetTargets([Sdf.Path(path) for path in filtered_group_paths])
+            group.CreateInvertFilteredGroupsAttr().Set(bool(invert_filtered_groups))
+            if merge_group_name is not None:
+                group.CreateMergeGroupNameAttr().Set(str(merge_group_name))
+            return self.get_collision_group(group_path)
+        except Exception:
+            stage.RemovePrim(group_path)
+            raise
+
+    def get_collision_group(self, group_path: str) -> Dict[str, Any]:
+        from pxr import UsdPhysics
+
+        prim = self.get_stage().GetPrimAtPath(group_path)
+        if not prim.IsValid() or not prim.IsA(UsdPhysics.CollisionGroup):
+            raise ValueError(f"Collision group not found: {group_path}")
+        group = UsdPhysics.CollisionGroup(prim)
+        return {
+            "group_path": group_path,
+            "collider_paths": [str(path) for path in group.GetCollidersCollectionAPI().GetIncludesRel().GetTargets()],
+            "filtered_group_paths": [str(path) for path in group.GetFilteredGroupsRel().GetTargets()],
+            "invert_filtered_groups": bool(group.GetInvertFilteredGroupsAttr().Get()),
+            "merge_group_name": group.GetMergeGroupNameAttr().Get() or None,
+        }
+
+    def create_physics_joint(
+        self, joint_path: str, joint_type: str, body1: str, body0: Optional[str] = None,
+        axis: Optional[str] = None, lower_limit: Optional[float] = None, upper_limit: Optional[float] = None,
+        local_position0: Optional[Sequence[float]] = None, local_rotation0: Optional[Sequence[float]] = None,
+        local_position1: Optional[Sequence[float]] = None, local_rotation1: Optional[Sequence[float]] = None,
+        collision_enabled: bool = False,
+    ) -> Dict[str, Any]:
+        from pxr import Gf, Sdf, UsdPhysics
+
+        stage = self.get_stage()
+        if stage.GetPrimAtPath(joint_path).IsValid():
+            raise ValueError(f"Prim already exists: {joint_path}")
+        for label, path in (("body0", body0), ("body1", body1)):
+            if path and not stage.GetPrimAtPath(path).IsValid():
+                raise ValueError(f"{label} prim not found: {path}")
+        schema = {"fixed": UsdPhysics.FixedJoint, "revolute": UsdPhysics.RevoluteJoint, "prismatic": UsdPhysics.PrismaticJoint}[joint_type]
+        try:
+            joint = schema.Define(stage, joint_path)
+            if body0:
+                joint.CreateBody0Rel().SetTargets([Sdf.Path(body0)])
+            joint.CreateBody1Rel().SetTargets([Sdf.Path(body1)])
+            joint.CreateCollisionEnabledAttr().Set(bool(collision_enabled))
+            for index, position, rotation in ((0, local_position0, local_rotation0), (1, local_position1, local_rotation1)):
+                if position is not None:
+                    getattr(joint, f"CreateLocalPos{index}Attr")().Set(Gf.Vec3f(*position))
+                if rotation is not None:
+                    norm = math.sqrt(sum(float(value) ** 2 for value in rotation))
+                    quat = [float(value) / norm for value in rotation]
+                    getattr(joint, f"CreateLocalRot{index}Attr")().Set(Gf.Quatf(quat[0], Gf.Vec3f(*quat[1:])))
+            if joint_type != "fixed":
+                joint.CreateAxisAttr().Set(axis)
+                if lower_limit is not None:
+                    joint.CreateLowerLimitAttr().Set(float(lower_limit))
+                    joint.CreateUpperLimitAttr().Set(float(upper_limit))
+            return self.get_physics_joint(joint_path)
+        except Exception:
+            stage.RemovePrim(joint_path)
+            raise
+
+    def get_physics_joint(self, joint_path: str) -> Dict[str, Any]:
+        from pxr import UsdPhysics
+
+        prim = self.get_stage().GetPrimAtPath(joint_path)
+        types = (("fixed", UsdPhysics.FixedJoint), ("revolute", UsdPhysics.RevoluteJoint), ("prismatic", UsdPhysics.PrismaticJoint))
+        joint_type = next((name for name, schema in types if prim.IsValid() and prim.IsA(schema)), None)
+        if joint_type is None:
+            raise ValueError(f"Physics joint not found: {joint_path}")
+        joint = dict(types)[joint_type](prim)
+
+        def value(attr: Any) -> Any:
+            item = attr.Get() if attr else None
+            if item is None:
+                return None
+            if hasattr(item, "GetReal"):
+                imaginary = item.GetImaginary()
+                return [float(item.GetReal()), *[float(v) for v in imaginary]]
+            if hasattr(item, "__len__") and not isinstance(item, str):
+                return [float(v) for v in item]
+            return item
+
+        result = {
+            "joint_path": joint_path, "joint_type": joint_type,
+            "body0": [str(path) for path in joint.GetBody0Rel().GetTargets()],
+            "body1": [str(path) for path in joint.GetBody1Rel().GetTargets()],
+            "collision_enabled": bool(joint.GetCollisionEnabledAttr().Get()),
+            "local_position0": value(joint.GetLocalPos0Attr()), "local_rotation0": value(joint.GetLocalRot0Attr()),
+            "local_position1": value(joint.GetLocalPos1Attr()), "local_rotation1": value(joint.GetLocalRot1Attr()),
+            "axis": None, "lower_limit": None, "upper_limit": None,
+            "units": {"position": "m", "rotation": "quaternion_wxyz", "limit": None},
+        }
+        if joint_type != "fixed":
+            result["axis"] = str(joint.GetAxisAttr().Get())
+            result["lower_limit"] = value(joint.GetLowerLimitAttr())
+            result["upper_limit"] = value(joint.GetUpperLimitAttr())
+            result["units"]["limit"] = "degrees" if joint_type == "revolute" else "m"
+        return result
 
     def get_physics_state(self, prim_path: str) -> Dict[str, Any]:
         from pxr import UsdPhysics

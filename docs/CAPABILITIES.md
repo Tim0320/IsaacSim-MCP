@@ -46,7 +46,7 @@
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
-- PhysX/Newton 分流、`null`/`false` 支援語意與 17 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
+- PhysX/Newton 分流、`null`/`false` 支援語意與 20 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
 
 ## 呼叫範例
 
@@ -172,8 +172,16 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 
 - schema：outer response envelope `1.0`、capability data `1.1`、backend matrix `1.0`
 - runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、active backend PhysX、`cudaDevice=0`
-- PhysX：17/17 backend-sensitive rows 為 `physx_supported=true`、`supported/verified`
-- Newton：0 supported；14 rows 為 `newton_supported=null` / `untested`，3 個 PhysX-only rows 為 `false` / `unsupported`
+- PhysX：20/20 backend-sensitive rows 為 `physx_supported=true`、`supported/verified`
+- Newton：0 supported；17 rows 為 `newton_supported=null` / `untested`，3 個 PhysX-only rows 為 `false` / `unsupported`
+
+2026-08-24 完成 Task 3.3 typed physics authoring scratch live 驗收：
+
+- registry：74 extension commands；新增 body、collision group 與 joint create/query 六個 named tools
+- body：dynamic/kinematic/static、Mesh `convex_hull`、`2.5 kg` mass 與 `850 kg/m^3` density 全部由 USD schema 讀回
+- joint：fixed/revolute/prismatic 的 bodies、frames、axis、degrees/metres limits 讀回一致
+- atomicity：在 Cube 要求 Mesh-only approximation 會失敗並還原為 static、保留 collider、不殘留 RigidBodyAPI
+- step：120 個精確 physics steps 後 fixed body 維持 `[5, 0, 3]`；scratch root 刪除並確認不存在
 - read-only gate：Stage info 與 simulation state 在 capability query 前後完全一致
 - health：Kit PID `38160`／TCP `8766` 存活，近 15 分鐘新增 native dump `0`
 

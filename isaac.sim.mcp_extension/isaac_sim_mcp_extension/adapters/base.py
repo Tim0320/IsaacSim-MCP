@@ -377,6 +377,30 @@ class IsaacAdapterBase(ABC):
         """Return physics state for a prim: rigid body, mass, velocities, contacts."""
         ...
 
+    def configure_physics_body(self, **kwargs: Any) -> Dict[str, Any]:
+        """Atomically author rigid body, collider and mass schemas."""
+        raise NotImplementedError("Typed physics body authoring requires the Isaac Sim 6.x adapter")
+
+    def get_physics_body(self, prim_path: str) -> Dict[str, Any]:
+        """Return authored rigid body, collider and mass schema state."""
+        raise NotImplementedError("Typed physics body read-back requires the Isaac Sim 6.x adapter")
+
+    def create_collision_group(self, **kwargs: Any) -> Dict[str, Any]:
+        """Create one collision group and return relationship read-back."""
+        raise NotImplementedError("Collision group authoring requires the Isaac Sim 6.x adapter")
+
+    def get_collision_group(self, group_path: str) -> Dict[str, Any]:
+        """Return collision group members and filters."""
+        raise NotImplementedError("Collision group read-back requires the Isaac Sim 6.x adapter")
+
+    def create_physics_joint(self, **kwargs: Any) -> Dict[str, Any]:
+        """Create one fixed, revolute, or prismatic joint."""
+        raise NotImplementedError("Typed physics joint authoring requires the Isaac Sim 6.x adapter")
+
+    def get_physics_joint(self, joint_path: str) -> Dict[str, Any]:
+        """Return joint relationships, frames, axis and limits."""
+        raise NotImplementedError("Typed physics joint read-back requires the Isaac Sim 6.x adapter")
+
     # ── Sensor lifecycle ───────────────────────────────────
 
     def release_sensor(self, prim_path: str, *, evict_metadata: bool = True) -> Dict[str, Any]:

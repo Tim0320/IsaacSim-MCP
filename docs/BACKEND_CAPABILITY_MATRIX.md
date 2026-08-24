@@ -58,6 +58,9 @@ path does not upgrade an item to `supported`.
 | `physics.gravity` | supported / verified | untested |
 | `physics.time_step` | supported / verified | unsupported, PhysX runtime/schema path |
 | `physics.gpu_enabled` | supported / verified | unsupported, PhysX runtime/schema path |
+| `physics.body_authoring` | supported / verified | untested |
+| `physics.collision_groups` | supported / verified | untested |
+| `physics.joint_authoring` | supported / verified | untested |
 | `sensor.camera` | supported / verified | untested |
 | `sensor.lidar` | supported / verified | untested |
 | `sensor.lifecycle` | supported / verified | untested |
@@ -74,7 +77,7 @@ live runs. Feature-specific fixtures, read-back, cleanup, process, GPU, log, and
 native-dump evidence remain in their individual contract documents.
 
 No Newton feature is marked supported in this matrix. The three explicit
-unsupported rows are implementation facts; the other fourteen rows remain
+unsupported rows are implementation facts; the other seventeen rows remain
 untested and may only be promoted after a dedicated Newton scratch live run.
 
 ## Runtime guard
@@ -99,5 +102,5 @@ uv run python scripts/verify_backend_capability_matrix_live.py
 ```
 
 The verifier is read-only. It checks the capability and matrix schema versions,
-all 17 rows, active PhysX projection, Newton fail-closed states, and unchanged
+all 20 rows, active PhysX projection, Newton fail-closed states, and unchanged
 scene/simulation snapshots.

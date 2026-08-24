@@ -72,6 +72,7 @@ def test_handler_returns_stable_runtime_capability_contract():
     matrix = result["backend_matrix"]
     assert matrix["schema_version"] == "1.0"
     assert matrix["active_backend"] == "physx"
+    assert len(matrix["features"]) == 20
     assert matrix["policy"]["supported_requires_live_verification"] is True
     assert all(record["physx_supported"] is True for record in matrix["features"].values())
     assert all(record["backends"]["physx"]["verification"] == "verified" for record in matrix["features"].values())
@@ -79,6 +80,12 @@ def test_handler_returns_stable_runtime_capability_contract():
     assert matrix["features"]["sensor.camera"]["untested"] == ["newton"]
     assert matrix["features"]["physics.time_step"]["newton_supported"] is False
     assert matrix["features"]["physics.time_step"]["backends"]["newton"]["state"] == "unsupported"
+    assert matrix["features"]["physics.body_authoring"]["newton_supported"] is None
+    assert result["feature_flags"]["physics.body_authoring"]["tools"] == [
+        "configure_physics_body",
+        "get_physics_body",
+    ]
+    assert result["feature_flags"]["physics.joint_authoring"]["revolute_limit_unit"] == "degrees"
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",
         "delete_tool": "delete_sensor",

@@ -2,7 +2,7 @@
 
 用 Model Context Protocol（MCP）控制 NVIDIA Isaac Sim。AI 助理可以建立工廠場景、載入 NVIDIA 資產、操作機器人與人物、讀取感測器、控制模擬，以及建立 Action Graph。
 
-此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 68 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
+此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 74 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
 
 > 本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。原始作者與後續貢獻者資訊保留於 `LICENSE` 及原始檔案標頭。
 
@@ -54,7 +54,7 @@
 4. 對應 live verifier，確認 fixture namespace、guard、read-back、cleanup 與 health gate 的實際執行方式。
 5. [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)，確認整體 Phase 2 狀態與後續 task 邊界。
 
-README 與 skill 中的 2026-08-24 結果是歷史驗收基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 68-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、空白 scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
+README 與 skill 中的 2026-08-24 結果是歷史驗收基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 74-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、空白 scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
 
 `effort` 是每個 update 必須重送的 command。連續控制由後續 controller lifecycle 負責；目前 tool 會套用一次並立即 read-back。
 
@@ -187,7 +187,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
-全部 68 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 74 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -195,7 +195,7 @@ get_scene_info
 
 ## MCP Tools
 
-目前共 68 個 tools：
+目前共 74 個 tools：
 
 | 類別 | Tools |
 |---|---|
@@ -203,6 +203,7 @@ get_scene_info
 | Artifact | `get_artifact_info`, `read_artifact`, `delete_artifact`, `cleanup_artifacts` |
 | 場景 | `get_scene_info`, `create_physics_scene`, `clear_scene`, `list_prims`, `get_prim_info`, `list_environments`, `load_environment` |
 | 物件 | `create_object`, `delete_object`, `transform_object`, `clone_object` |
+| Physics authoring | `configure_physics_body`, `get_physics_body`, `create_collision_group`, `get_collision_group`, `create_physics_joint`, `get_physics_joint` |
 | 燈光 | `create_light`, `modify_light` |
 | 材質 | `create_material`, `apply_material` |
 | 機器人 | `create_robot`, `list_available_robots`, `refresh_robot_library`, `get_robot_info`, `set_joint_positions`, `get_joint_positions`, `get_joint_state`, `set_joint_command`, `set_joint_drive_config` |
@@ -360,7 +361,7 @@ uv run ruff format --check .
 ```text
 IsaacSim-MCP/
 ├─ .agents/                   專案 skill 與 1.x 後續 agent 閱讀索引
-├─ isaac_mcp/                 Python MCP Server 與 68 個 tool 定義
+├─ isaac_mcp/                 Python MCP Server 與 74 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
 ├─ demo/                      機器人控制範例

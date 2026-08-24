@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — typed physics body, collision group, and joint authoring
+
+- Added six named tools for atomic dynamic/kinematic/static body setup,
+  collider approximation, mass/density, collision groups, and fixed/revolute/
+  prismatic joint create/query with explicit units and read-back.
+- Added stopped-timeline validation, body schema snapshot rollback, and
+  remove-on-failure group/joint transactions.
+- Verified all schemas plus a fixed constraint across 120 exact PhysX steps in
+  a disposable scratch namespace. The backend matrix now contains 20 rows;
+  Newton remains fail-closed and untested for the three new rows.
+
 ### Added — audited PhysX/Newton capability split
 
-- Added capability schema `1.1` with an adapter-owned 17-row backend matrix.
+- Added capability schema `1.1` with an adapter-owned 20-row backend matrix.
   Every row reports `physx_supported`, `newton_supported`, the untested backend
   list, and independent support/verification evidence.
 - Projected active-backend state into simulation, physics, sensor, articulation,
@@ -18,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a shared adapter guard and applied it to PhysX scene time/GPU settings
   and `PhysxJointAPI` maximum velocity. Untested, unsupported, unknown, and
   unlisted backend paths fail before apply.
-- Added a read-only live verifier for all 17 PhysX rows, fourteen Newton
+- Added a read-only live verifier for all 20 PhysX rows, seventeen Newton
   `untested` rows, three Newton `unsupported` rows, and unchanged scene/runtime
   state.
 

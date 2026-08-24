@@ -401,6 +401,37 @@ def _feature_flags(
             "changes_physics_gpu_ordinal": False,
             "usd_and_runtime_readback": physics_gpu_state == "supported",
         },
+        "physics.body_authoring": {
+            **_active_backend_flag(
+                backend_matrix, "physics.body_authoring", physics_backend, fallback_verification
+            ),
+            "tools": ["configure_physics_body", "get_physics_body"],
+            "requires_stopped_timeline": True,
+            "body_types": ["dynamic", "kinematic", "static"],
+            "mass_unit": "kg",
+            "density_unit": "kg/m^3",
+            "atomic": True,
+        },
+        "physics.collision_groups": {
+            **_active_backend_flag(
+                backend_matrix, "physics.collision_groups", physics_backend, fallback_verification
+            ),
+            "tools": ["create_collision_group", "get_collision_group"],
+            "requires_stopped_timeline": True,
+            "readback": True,
+        },
+        "physics.joint_authoring": {
+            **_active_backend_flag(
+                backend_matrix, "physics.joint_authoring", physics_backend, fallback_verification
+            ),
+            "tools": ["create_physics_joint", "get_physics_joint"],
+            "requires_stopped_timeline": True,
+            "joint_types": ["fixed", "revolute", "prismatic"],
+            "axes": ["X", "Y", "Z"],
+            "position_unit": "m",
+            "revolute_limit_unit": "degrees",
+            "prismatic_limit_unit": "m",
+        },
         "physics.backend_verification": {
             "state": physics_verification,
             "backend": physics_backend,

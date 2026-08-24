@@ -34,6 +34,7 @@ EXPECTED_MODULES = [
     "artifacts.py",
     "scene.py",
     "objects.py",
+    "physics.py",
     "humans.py",
     "lighting.py",
     "robots.py",
@@ -69,6 +70,7 @@ def test_init_imports_all_modules():
         "artifacts",
         "scene",
         "objects",
+        "physics",
         "humans",
         "lighting",
         "robots",
@@ -80,7 +82,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_68_unique_names():
+def test_named_tool_inventory_has_74_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -97,7 +99,7 @@ def test_named_tool_inventory_has_68_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 68
+    assert len(names) == 74
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
     assert {
@@ -119,3 +121,7 @@ def test_named_tool_inventory_has_68_unique_names():
     assert "delete_sensor" in names
     assert {"get_joint_state", "set_joint_command", "set_joint_drive_config"} <= set(names)
     assert {"get_artifact_info", "read_artifact", "delete_artifact", "cleanup_artifacts"} <= set(names)
+    assert {
+        "configure_physics_body", "get_physics_body", "create_collision_group",
+        "get_collision_group", "create_physics_joint", "get_physics_joint",
+    } <= set(names)

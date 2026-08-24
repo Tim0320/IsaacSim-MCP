@@ -26,6 +26,7 @@ import isaac_sim_mcp_extension.handlers.lighting as lighting_mod
 import isaac_sim_mcp_extension.handlers.materials as materials_mod
 import isaac_sim_mcp_extension.handlers.motion as motion_mod
 import isaac_sim_mcp_extension.handlers.objects as objects_mod
+import isaac_sim_mcp_extension.handlers.physics as physics_mod
 import isaac_sim_mcp_extension.handlers.robots as robots_mod
 import isaac_sim_mcp_extension.handlers.scene as scene_mod
 import isaac_sim_mcp_extension.handlers.sensors as sensors_mod
@@ -45,6 +46,7 @@ for module in (
     materials_mod,
     motion_mod,
     objects_mod,
+    physics_mod,
     robots_mod,
     scene_mod,
     sensors_mod,
