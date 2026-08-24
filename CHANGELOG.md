@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — guarded Stage, layer, composition, and semantic authoring
+
+- Added twelve named tools for scratch-guarded new/open/save-as, scoped Stage
+  composition inspection, subLayers, reference/payload arcs and payload load
+  rules, variant selection, Isaac Sim 6.0.1 `UsdSemantics.LabelsAPI`, typed
+  attributes, and atomic batch transactions.
+- Lifecycle writes default to preview, require a stopped timeline and explicit
+  scratch root, reject source overwrite, and restore root/session layer state
+  when an open/new operation fails. Save-as validates a temporary USD before
+  atomic replacement.
+- Layer, arc, semantic, and attribute writes use exact read-back and rollback.
+  Batch transactions snapshot root/session layers plus payload load rules and
+  restore them when any of at most 100 operations fails.
+
 ### Added — typed physics material schema and behavioral read-back
 
 - Exposed static/dynamic friction and restitution in `create_material`, and

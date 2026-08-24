@@ -2,13 +2,14 @@
 
 用 Model Context Protocol（MCP）控制 NVIDIA Isaac Sim。AI 助理可以建立工廠場景、載入 NVIDIA 資產、操作機器人與人物、讀取感測器、控制模擬，以及建立 Action Graph。
 
-此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 76 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
+此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 88 個 MCP tools、NVIDIA Replicator Agent 人物支援、NVIDIA 資產目錄，以及工廠配置與互動範例。
 
 > 本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。原始作者與後續貢獻者資訊保留於 `LICENSE` 及原始檔案標頭。
 
 ## 功能
 
 - 建立、查詢與清除 USD 場景
+- 以 scratch guard 管理 Stage new/open/save-as、layer、reference/payload、variant、semantics、typed attribute 與 atomic batch
 - 建立基本物件、燈光、PBR 材質與 physics material
 - 載入 USD、匯入 URDF、搜尋及生成 3D 資產
 - 建立機器人並讀寫 articulation joint
@@ -54,7 +55,7 @@
 4. 對應 live verifier，確認 fixture namespace、guard、read-back、cleanup 與 health gate 的實際執行方式。
 5. [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)，確認整體 Phase 2 狀態與後續 task 邊界。
 
-README 與 skill 中的 2026-08-24 結果是歷史驗收基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 76-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、空白 scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
+README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 88-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
 
 `effort` 是每個 update 必須重送的 command。連續控制由後續 controller lifecycle 負責；目前 tool 會套用一次並立即 read-back。
 
@@ -67,6 +68,18 @@ README 與 skill 中的 2026-08-24 結果是歷史驗收基準。後續要宣稱
 2026-08-24 已完成 2.4 PhysX scratch live 驗收：Franka gripper open/set-width/close target、profile mismatch atomicity、Jetbot differential 與 Kaya holonomic wheel target/measured-state read-back，以及兩種 base 的 zero-target stop 全數通過。Kaya 使用 wheeled-robots extension `0.2.11` 的 USD geometry，未在 MCP 層寫死 holonomic geometry。
 
 同日首次 scratch 重跑修正了 verifier target-only atomicity、owned physics cleanup，以及雙 GPU session 中 Warp command arrays 必須跟隨 Articulation physics device 的問題。原本失效 session 的 RTX CUDA external-memory failure、GPU page fault 與 `ERROR_DEVICE_LOST` 僅保留為診斷歷史；最終 2.4→2.3 驗收使用乾淨重啟、active-display physics GPU guard 的新 session，並通過 fixture cleanup、PID/TCP、run log 與 native-dump gate。
+
+## IsaacSim-MCP 3.x Physics 與 USD authoring
+
+| 研究項目 | 能力 | Named tools | 契約／驗證 |
+|---|---|---|---|
+| 3.1 | gravity、integer-rate time step、GPU dynamics 與 GPU/MBP broadphase，含 USD/runtime atomic rollback | `set_physics_params` | [`PHYSICS_PARAMS.md`](docs/PHYSICS_PARAMS.md)／[`verify_physics_params_live.py`](scripts/verify_physics_params_live.py) |
+| 3.2 | Adapter-owned PhysX/Newton 逐功能 matrix 與 fail-closed backend guard | `get_capabilities` | [`BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)／[`verify_backend_capability_matrix_live.py`](scripts/verify_backend_capability_matrix_live.py) |
+| 3.3 | dynamic/kinematic/static body、collider、mass/density、collision group、fixed/revolute/prismatic joint | `configure_physics_body`, `get_physics_body`, `create_collision_group`, `get_collision_group`, `create_physics_joint`, `get_physics_joint` | [`PHYSICS_AUTHORING.md`](docs/PHYSICS_AUTHORING.md)／[`verify_physics_authoring_live.py`](scripts/verify_physics_authoring_live.py) |
+| 3.4 | PBR/physics material、friction/restitution、physics-purpose binding 與 rollback | `create_material`, `get_material`, `apply_material`, `get_material_binding` | [`PHYSICS_MATERIALS.md`](docs/PHYSICS_MATERIALS.md)／[`verify_physics_material_live.py`](scripts/verify_physics_material_live.py) |
+| 3.5 | scratch-guarded Stage lifecycle、layer/composition、variant、LabelsAPI、typed attribute、atomic batch | `new_stage`, `open_stage`, `save_stage_as`, `get_stage_composition`, `edit_sublayer`, `edit_composition_arc`, `set_variant_selection`, `get_semantic_labels`, `set_semantic_labels`, `get_typed_attribute`, `set_typed_attribute`, `apply_stage_batch` | [`STAGE_COMPOSITION.md`](docs/STAGE_COMPOSITION.md)／[`verify_stage_composition_live.py`](scripts/verify_stage_composition_live.py) |
+
+2026-08-25 已在 Isaac Sim `6.0.1-rc.7`／PhysX 完成 3.5 scratch live 驗收：88-command registry，subLayer/reference/payload/variant/LabelsAPI/typed attributes read-back、成功 batch、失敗 batch rollback、save/reopen composition 比對、原 Stage `15→15` restore、scratch absence、PID/TCP、log 與 native-dump gate 全數通過。
 
 ## 系統需求
 
@@ -187,7 +200,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
-全部 76 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 88 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -195,15 +208,18 @@ get_scene_info
 
 Physics material 支援 static/dynamic friction、restitution、`material:binding:physics` purpose 與 binding read-back；完整範圍、單位、rollback 和 live fixture 見 [`docs/PHYSICS_MATERIALS.md`](docs/PHYSICS_MATERIALS.md)。
 
+Stage composition 支援 scratch-guarded new/open/save-as、subLayer、reference/payload load/unload、variant、Isaac Sim 6.0.1 `UsdSemantics.LabelsAPI`、typed attribute 與 atomic batch rollback；契約與 live fixture 見 [`docs/STAGE_COMPOSITION.md`](docs/STAGE_COMPOSITION.md)。
+
 ## MCP Tools
 
-目前共 76 個 tools：
+目前共 88 個 tools：
 
 | 類別 | Tools |
 |---|---|
 | 系統能力 | `get_capabilities` |
 | Artifact | `get_artifact_info`, `read_artifact`, `delete_artifact`, `cleanup_artifacts` |
 | 場景 | `get_scene_info`, `create_physics_scene`, `clear_scene`, `list_prims`, `get_prim_info`, `list_environments`, `load_environment` |
+| Stage composition | `new_stage`, `open_stage`, `save_stage_as`, `get_stage_composition`, `edit_sublayer`, `edit_composition_arc`, `set_variant_selection`, `get_semantic_labels`, `set_semantic_labels`, `get_typed_attribute`, `set_typed_attribute`, `apply_stage_batch` |
 | 物件 | `create_object`, `delete_object`, `transform_object`, `clone_object` |
 | Physics authoring | `configure_physics_body`, `get_physics_body`, `create_collision_group`, `get_collision_group`, `create_physics_joint`, `get_physics_joint` |
 | 燈光 | `create_light`, `modify_light` |
@@ -363,7 +379,7 @@ uv run ruff format --check .
 ```text
 IsaacSim-MCP/
 ├─ .agents/                   專案 skill 與 1.x 後續 agent 閱讀索引
-├─ isaac_mcp/                 Python MCP Server 與 76 個 tool 定義
+├─ isaac_mcp/                 Python MCP Server 與 88 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
 ├─ demo/                      機器人控制範例

@@ -42,6 +42,7 @@
 - V6 `create_lidar` 支援 named preset，或以 FOV、角解析度、rotation rate 與 range 建立 generic RTX LiDAR；兩種模式不可混用。`get_lidar_config` 會從 USD Core schema 讀回有效值與 raw attributes。契約見 [`LIDAR_CONFIG.md`](LIDAR_CONFIG.md)。
 - `delete_sensor` 會完整 teardown Camera/LiDAR runtime，刪除 prim，等待 Kit updates，再驗證 prim、RenderProduct、cache 與 LiDAR metadata 均不存在。timeline 必須處於 Pause 或 Stop；`delete_object` 遇到 managed sensor 會走相同流程。契約見 [`SENSOR_LIFECYCLE.md`](SENSOR_LIFECYCLE.md)。
 - V6 PhysX `set_physics_params` 支援 `gravity`、整數 steps/sec 對應的 `time_step`，以及 GPU dynamics + GPU/MBP broadphase mapping。timeline 必須 stopped，成功需 USD、runtime wrapper、SimulationManager、Stage time codes 與 min-frame-rate read-back 一致；V5/Newton 仍明確 unsupported。契約見 [`PHYSICS_PARAMS.md`](PHYSICS_PARAMS.md)。
+- Stage composition 提供 12 個 named tools。Lifecycle 預設 preview 並受 scratch root 防護；subLayer、reference/payload、variant、`UsdSemantics.LabelsAPI`、typed attribute 與最多 100 項 batch 都要求 stopped timeline、read-back 及 rollback。契約見 [`STAGE_COMPOSITION.md`](STAGE_COMPOSITION.md)。
 - Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。Drive config 可在 stopped timeline 原子寫入 gains、max force/velocity 與 force/acceleration type，並 rollback 失敗寫入。V5 不支援 typed drive setter；Newton 的 max velocity 明確不支援，其餘 drive 欄位維持 unverified。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md) 與 [`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md)。
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
@@ -192,6 +193,16 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 - parameters：低材質 `0/0/0`；高材質 static/dynamic/restitution=`1.0/0.8/0.9`，float32 read-back 使用明確容差
 - behavior：181 exact steps 後低摩擦比高摩擦多滑行 `2.558789 m`；高 restitution 碰撞後最高回彈 `3.065565 m`，低 restitution 無回彈
 - safety：dynamic friction 大於 static friction 在建立 prim 前回 `INVALID_MATERIAL`；scratch root cleanup 後不存在
+
+2026-08-25 完成 Task 3.5 Stage/layer/composition scratch live 驗收：
+
+- registry：88 extension commands；12 個 Stage composition named tools 與 `feature_flags.stage.composition` 已註冊
+- lifecycle guard：new/open/save-as 預設 preview；缺少 scratch guard、path escape 與來源 overwrite 都在寫入前拒絕
+- composition：subLayer、reference、payload unload/load、variant `cube→sphere`、`UsdSemantics.LabelsAPI`、`float3` 與 `double[]` attribute 全部 read-back 一致
+- batch：兩項成功 transaction 通過；第二項 invalid variant 觸發 `BATCH_ROLLED_BACK`，先前 authored rollback probe 確認不存在
+- save/reopen：scoped prim count `5→5`，layer stack、composition arcs、variant、metadata、semantics 與 prim count 比對一致
+- restore/health：乾淨重啟後原 anonymous Stage root/session layer 完整還原，prim count `15→15`；scratch root absent、timeline stopped、Kit PID `29892`／TCP `8766` 存活、當次 log 關鍵 crash signature `0`、該 session 新增 native dump `0`
+- 驗證邊界：離線 suite 必須排除 `tests/test_integration.py`；它在 live `8766` 開啟時會建立未 teardown Camera/LiDAR/robots，後續 `simulation.play` 曾在 Replicator `reset_scenario()` 觸發 native crash。此廣泛 integration run 不屬於 3.5 verifier，也未納入驗收
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

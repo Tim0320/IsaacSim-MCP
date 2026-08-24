@@ -239,12 +239,19 @@
   > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`／PhysX／TCP `8766`，scratch `/World/MCP_Task_3_4` 建立低材質 `0/0/0` 與高材質 `1.0/0.8/0.9`，8 個 physics-purpose bindings 的 direct/resolved path 與 relationship 全部讀回。181 exact steps 後低摩擦物件比高摩擦多滑行 `2.558789 m`；高 restitution 球碰撞後回彈最高 `3.065565 m`，低 restitution 球沒有回彈。invalid friction pair 未建立 prim，scratch root cleanup 後確認不存在。
   > backend 邊界：capability matrix 現為 21 rows；PhysX 21/21 supported/verified，Newton 0 supported、18 untested、3 unsupported。契約與 verifier：`docs/PHYSICS_MATERIALS.md`、`scripts/verify_physics_material_live.py`。
 
-- [ ] 15. Stage、layer、USD composition 與語意資料
+- [x] 15. Stage、layer、USD composition 與語意資料
   > 現況：scene tools 著重列舉、查詢、export/clear 等基本操作，缺少完整 open/new/save、layer、reference/payload、variant、semantic label 與 arbitrary attr 契約。
   > 缺漏位置：`tools/scene.py`、scene handler、V6 stage/USD adapter。
   > 實作：分批加入 new/open/save-as、subLayer、reference/payload load/unload、variant selection、semantic labels、typed attr get/set、batch transaction。
   > 安全限制：任何 destructive stage 操作需要 scratch-stage guard、預覽與 read-back；不得默認覆寫來源 USD。
   > 驗收：另存新檔後重開，比對 layer stack、composition arcs、variant、metadata 與 prim count。
+  > 已實作：新增 12 個 named tools，registry 由 76 增至 88。Lifecycle tools 是 `new_stage`、`open_stage`、`save_stage_as`，預設 `preview=true`，實際寫入要求 `scratch_stage=true`、canonical `scratch_root` 與 stopped timeline；來源檔永遠禁止被 save-as 覆寫。Save-as 先寫同資料夾 temporary USD、重開驗證，再 atomic replace。
+  > composition/metadata：`get_stage_composition` 支援 scoped `root_path`，仍完整回 root layer、layer stack、references/payloads 與 load state、variants、Stage metadata、semantic labels 與 prim count。`edit_sublayer`、`edit_composition_arc`、`set_variant_selection` 均 validate/apply/read-back，失敗時還原 layer、selection 或 payload load rules。
+  > semantic/attribute：Isaac Sim 6.0.1 不提供舊 `pxr.Semantics`；本項使用實際存在的 `pxr.UsdSemantics.LabelsAPI`，以 taxonomy 管理 labels，也能讀 legacy SemanticsAPI。Typed attribute 支援 14 個 scalar/tuple 與 8 個 array type，拒絕非有限數值、隱式 type change 與未授權 overwrite，回傳 JSON-safe value。
+  > batch transaction：最多 100 個 subLayer/arc/variant/semantic/attribute operations。Preview 逐項驗證；apply 前保存 root/session layer 與 payload load rules，任一步失敗回 `BATCH_ROLLED_BACK` 並整批還原。Stage lifecycle 與外部檔案 side effect 不允許放入 batch。
+  > live 驗收（2026-08-25）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、TCP `8766`，88-command registry。`/World/MCP_Task_3_5` scratch Stage 通過 subLayer、reference、payload unload/load、variant `cube→sphere`、LabelsAPI `class=[fixture,obstacle]`、`float3` 與 `double[]` read-back；兩項成功 batch 後，以第二項 invalid variant 觸發 `BATCH_ROLLED_BACK`，第一項 `mcp:rollbackProbe` 確認不存在。
+  > save/reopen/restore：乾淨重啟後 save-as 與 reopen 的 scoped prim count 均為 `5`，layer stack、composition arcs、variant、metadata、semantics 與 prim count 完全一致；來源 overwrite 被拒絕。Verifier 保存並還原原 anonymous root/session layer，prim count `15→15`，scratch root absent、timeline stopped、Kit PID `29892`／TCP `8766` 存活；當次 log 無 PhysX GPU/CUDA/device-lost/access-violation/crash signature，該乾淨 session 新增 native dump `0`。
+  > 離線驗收：Ruff lint、`git diff --check` 通過；排除固定 Windows Bash launcher 問題與 destructive live integration 的 suite 為 `311 passed`。不可在 `8766` 開啟時把 `tests/test_integration.py` 當離線 suite 執行：一次後續廣泛 pytest 依序建立未 teardown 的 Camera/LiDAR/robots，再於 `TestSimulationTools::test_play` 進入 Replicator `reset_scenario()` 時造成 native crash；該 run 不納入 3.5 驗收。dump ID=`c70a7057-a692-4ec4-9615-f6190711630e`、當時 SHA-256=`784A1AAE6AF730ED090A29C4CE8B42DD08A71121DDFA818CF1D3D4E113B23877`；NVIDIA crash reporter 結束後刪除 zip/TOML，目前只保留同 ID `.py.txt` stack。契約與 verifier：`docs/STAGE_COMPOSITION.md`、`scripts/verify_stage_composition_live.py`。
 
 ## Phase 4：OmniGraph、ROS 2、Replicator 與 Humans
 

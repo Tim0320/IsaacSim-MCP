@@ -282,6 +282,28 @@ def _feature_flags(
         drive_field_state = drive_config_state
     return {
         "scene.basic_crud": {"state": "supported"},
+        "stage.composition": {
+            "state": "supported",
+            "tools": [
+                "new_stage",
+                "open_stage",
+                "save_stage_as",
+                "get_stage_composition",
+                "edit_sublayer",
+                "edit_composition_arc",
+                "set_variant_selection",
+                "get_semantic_labels",
+                "set_semantic_labels",
+                "get_typed_attribute",
+                "set_typed_attribute",
+                "apply_stage_batch",
+            ],
+            "requires_stopped_timeline": True,
+            "scratch_guarded_lifecycle": True,
+            "preview_default": True,
+            "source_overwrite_default": False,
+            "atomic_batch_rollback": True,
+        },
         "sensor.lifecycle": {
             "state": sensor_lifecycle_state,
             "delete_tool": "delete_sensor",
@@ -402,9 +424,7 @@ def _feature_flags(
             "usd_and_runtime_readback": physics_gpu_state == "supported",
         },
         "physics.body_authoring": {
-            **_active_backend_flag(
-                backend_matrix, "physics.body_authoring", physics_backend, fallback_verification
-            ),
+            **_active_backend_flag(backend_matrix, "physics.body_authoring", physics_backend, fallback_verification),
             "tools": ["configure_physics_body", "get_physics_body"],
             "requires_stopped_timeline": True,
             "body_types": ["dynamic", "kinematic", "static"],
@@ -413,17 +433,13 @@ def _feature_flags(
             "atomic": True,
         },
         "physics.collision_groups": {
-            **_active_backend_flag(
-                backend_matrix, "physics.collision_groups", physics_backend, fallback_verification
-            ),
+            **_active_backend_flag(backend_matrix, "physics.collision_groups", physics_backend, fallback_verification),
             "tools": ["create_collision_group", "get_collision_group"],
             "requires_stopped_timeline": True,
             "readback": True,
         },
         "physics.joint_authoring": {
-            **_active_backend_flag(
-                backend_matrix, "physics.joint_authoring", physics_backend, fallback_verification
-            ),
+            **_active_backend_flag(backend_matrix, "physics.joint_authoring", physics_backend, fallback_verification),
             "tools": ["create_physics_joint", "get_physics_joint"],
             "requires_stopped_timeline": True,
             "joint_types": ["fixed", "revolute", "prismatic"],
@@ -433,9 +449,7 @@ def _feature_flags(
             "prismatic_limit_unit": "m",
         },
         "physics.materials": {
-            **_active_backend_flag(
-                backend_matrix, "physics.materials", physics_backend, fallback_verification
-            ),
+            **_active_backend_flag(backend_matrix, "physics.materials", physics_backend, fallback_verification),
             "tools": ["create_material", "get_material", "apply_material", "get_material_binding"],
             "requires_stopped_timeline": True,
             "physics_binding_purpose": "physics",

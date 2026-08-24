@@ -88,6 +88,28 @@ def test_handler_returns_stable_runtime_capability_contract():
     ]
     assert result["feature_flags"]["physics.joint_authoring"]["revolute_limit_unit"] == "degrees"
     assert result["feature_flags"]["physics.materials"]["physics_binding_purpose"] == "physics"
+    assert result["feature_flags"]["stage.composition"] == {
+        "state": "supported",
+        "tools": [
+            "new_stage",
+            "open_stage",
+            "save_stage_as",
+            "get_stage_composition",
+            "edit_sublayer",
+            "edit_composition_arc",
+            "set_variant_selection",
+            "get_semantic_labels",
+            "set_semantic_labels",
+            "get_typed_attribute",
+            "set_typed_attribute",
+            "apply_stage_batch",
+        ],
+        "requires_stopped_timeline": True,
+        "scratch_guarded_lifecycle": True,
+        "preview_default": True,
+        "source_overwrite_default": False,
+        "atomic_batch_rollback": True,
+    }
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",
         "delete_tool": "delete_sensor",

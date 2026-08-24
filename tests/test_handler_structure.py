@@ -124,6 +124,7 @@ def test_all_handler_modules_have_register():
         "capabilities.py",
         "artifacts.py",
         "scene.py",
+        "stage_composition.py",
         "objects.py",
         "physics.py",
         "humans.py",

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "isaacsim-mcp-server"
 dynamic = ["version"]
-description = "Control NVIDIA Isaac Sim 5.1.0 - 6.0.1 (PhysX + Newton) through MCP -- 57 tools for scene management, robot and human control, sensors, assets, and simulation"
+description = "Control NVIDIA Isaac Sim 5.1.0 - 6.0.1 (PhysX + Newton) through MCP -- 88 tools for scene management, robot and human control, sensors, assets, and simulation"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

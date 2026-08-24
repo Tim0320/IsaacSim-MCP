@@ -53,6 +53,7 @@ def register_all_handlers(registry: Dict[str, Any], adapter: IsaacAdapterBase) -
         scene,
         sensors,
         simulation,
+        stage_composition,
     )
 
     for module in [
@@ -60,6 +61,7 @@ def register_all_handlers(registry: Dict[str, Any], adapter: IsaacAdapterBase) -
         controllers,
         artifacts,
         scene,
+        stage_composition,
         objects,
         physics,
         humans,

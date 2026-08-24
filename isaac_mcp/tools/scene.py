@@ -34,6 +34,13 @@ if TYPE_CHECKING:
 
 def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]") -> None:
 
+    def send(command: str, params: Optional[Dict[str, Any]] = None) -> str:
+        try:
+            result = get_connection().send_command(command, params or {})
+            return json.dumps(result, indent=2)
+        except Exception as exc:
+            return json.dumps({"status": "error", "message": str(exc)})
+
     @mcp.tool("get_scene_info")
     def get_scene_info() -> str:
         """Ping the Isaac Sim extension server and return scene information including stage path, assets root, and prim count."""
@@ -161,3 +168,154 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("new_stage")
+    def new_stage(scratch_stage: bool = False, scratch_root: Optional[str] = None, preview: bool = True) -> str:
+        """Preview or create a new empty stage. Requires scratch_stage=true, a scratch_root, stopped timeline, and defaults to preview-only."""
+        return send("stage.new", {"scratch_stage": scratch_stage, "scratch_root": scratch_root, "preview": preview})
+
+    @mcp.tool("open_stage")
+    def open_stage(
+        path: str,
+        scratch_stage: bool = False,
+        scratch_root: Optional[str] = None,
+        preview: bool = True,
+        readback_root_path: str = "/",
+    ) -> str:
+        """Preview or open a local USD stage inside scratch_root. Destructive stage replacement requires explicit scratch_stage=true."""
+        return send(
+            "stage.open",
+            {
+                "path": path,
+                "scratch_stage": scratch_stage,
+                "scratch_root": scratch_root,
+                "preview": preview,
+                "readback_root_path": readback_root_path,
+            },
+        )
+
+    @mcp.tool("save_stage_as")
+    def save_stage_as(
+        path: str,
+        scratch_stage: bool = False,
+        scratch_root: Optional[str] = None,
+        overwrite: bool = False,
+        preview: bool = True,
+        readback_root_path: str = "/",
+    ) -> str:
+        """Preview or export the current stage to a different local USD file inside scratch_root. Source overwrite is always rejected."""
+        return send(
+            "stage.save_as",
+            {
+                "path": path,
+                "scratch_stage": scratch_stage,
+                "scratch_root": scratch_root,
+                "overwrite": overwrite,
+                "preview": preview,
+                "readback_root_path": readback_root_path,
+            },
+        )
+
+    @mcp.tool("get_stage_composition")
+    def get_stage_composition(root_path: str = "/") -> str:
+        """Read the root layer, full layer stack, prim count, references/payloads, variant selections, semantics, and stage metadata."""
+        return send("stage.get_composition", {"root_path": root_path})
+
+    @mcp.tool("edit_sublayer")
+    def edit_sublayer(action: str, layer_path: str, index: int = -1, preview: bool = True) -> str:
+        """Preview or add/remove a root-layer subLayer path with stopped-timeline and exact read-back checks."""
+        return send(
+            "stage.edit_sublayer", {"action": action, "layer_path": layer_path, "index": index, "preview": preview}
+        )
+
+    @mcp.tool("edit_composition_arc")
+    def edit_composition_arc(
+        prim_path: str,
+        arc_type: str,
+        action: str,
+        asset_path: Optional[str] = None,
+        target_prim_path: Optional[str] = None,
+        preview: bool = True,
+    ) -> str:
+        """Preview or edit a reference/payload arc. Payloads also support load/unload; every mutation is read back and rolled back on failure."""
+        return send(
+            "stage.edit_composition_arc",
+            {
+                "prim_path": prim_path,
+                "arc_type": arc_type,
+                "action": action,
+                "asset_path": asset_path,
+                "target_prim_path": target_prim_path,
+                "preview": preview,
+            },
+        )
+
+    @mcp.tool("set_variant_selection")
+    def set_variant_selection(prim_path: str, variant_set: str, selection: str, preview: bool = True) -> str:
+        """Preview or select an existing USD variant after validating the set and available names."""
+        return send(
+            "stage.set_variant",
+            {"prim_path": prim_path, "variant_set": variant_set, "selection": selection, "preview": preview},
+        )
+
+    @mcp.tool("get_semantic_labels")
+    def get_semantic_labels(prim_path: str) -> str:
+        """Read Isaac Sim 6.0.1 LabelsAPI taxonomies and labels, plus any legacy semantic labels."""
+        return send("stage.get_semantics", {"prim_path": prim_path})
+
+    @mcp.tool("set_semantic_labels")
+    def set_semantic_labels(
+        prim_path: str,
+        taxonomy: str,
+        labels: List[str],
+        overwrite: bool = False,
+        preview: bool = True,
+    ) -> str:
+        """Preview or apply Isaac Sim 6.0.1 UsdSemantics LabelsAPI labels under one taxonomy with read-back."""
+        return send(
+            "stage.set_semantics",
+            {
+                "prim_path": prim_path,
+                "taxonomy": taxonomy,
+                "labels": labels,
+                "overwrite": overwrite,
+                "preview": preview,
+            },
+        )
+
+    @mcp.tool("get_typed_attribute")
+    def get_typed_attribute(prim_path: str, attribute: str) -> str:
+        """Read a USD attribute value, declared type, and authored-value state in JSON-safe form."""
+        return send("stage.get_attribute", {"prim_path": prim_path, "attribute": attribute})
+
+    @mcp.tool("set_typed_attribute")
+    def set_typed_attribute(
+        prim_path: str,
+        attribute: str,
+        type_name: str,
+        value: Any,
+        custom: bool = True,
+        overwrite: bool = False,
+        preview: bool = True,
+    ) -> str:
+        """Preview or set a finite, explicitly typed USD attribute. Existing attributes require overwrite=true and cannot change type."""
+        return send(
+            "stage.set_attribute",
+            {
+                "prim_path": prim_path,
+                "attribute": attribute,
+                "type_name": type_name,
+                "value": value,
+                "custom": custom,
+                "overwrite": overwrite,
+                "preview": preview,
+            },
+        )
+
+    @mcp.tool("apply_stage_batch")
+    def apply_stage_batch(operations: List[Dict[str, Any]], preview: bool = True, readback_root_path: str = "/") -> str:
+        """Preview or atomically apply up to 100 layer/arc/variant/semantic/attribute edits. Any failed operation restores the stage snapshot."""
+        return send(
+            "stage.apply_batch",
+            {"operations": operations, "preview": preview, "readback_root_path": readback_root_path},
+        )
