@@ -432,6 +432,17 @@ def _feature_flags(
             "revolute_limit_unit": "degrees",
             "prismatic_limit_unit": "m",
         },
+        "physics.materials": {
+            **_active_backend_flag(
+                backend_matrix, "physics.materials", physics_backend, fallback_verification
+            ),
+            "tools": ["create_material", "get_material", "apply_material", "get_material_binding"],
+            "requires_stopped_timeline": True,
+            "physics_binding_purpose": "physics",
+            "friction_unit": "dimensionless",
+            "restitution_unit": "dimensionless",
+            "atomic_create_and_bind": True,
+        },
         "physics.backend_verification": {
             "state": physics_verification,
             "backend": physics_backend,

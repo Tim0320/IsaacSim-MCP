@@ -18,6 +18,7 @@ EXPECTED_FEATURES = {
     "physics.body_authoring",
     "physics.collision_groups",
     "physics.joint_authoring",
+    "physics.materials",
     "sensor.camera",
     "sensor.lidar",
     "sensor.lifecycle",
@@ -88,6 +89,7 @@ def main() -> int:
     assert flags["physics.body_authoring"]["state"] == "supported"
     assert flags["physics.collision_groups"]["state"] == "supported"
     assert flags["physics.joint_authoring"]["state"] == "supported"
+    assert flags["physics.materials"]["state"] == "supported"
     assert flags["camera.rgb_pixels"]["state"] == "supported"
     assert flags["lidar.point_cloud"]["state"] == "supported"
     assert flags["robot.joint_command"]["state"] == "supported"

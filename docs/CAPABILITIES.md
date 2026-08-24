@@ -46,7 +46,7 @@
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
 - V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
-- PhysX/Newton 分流、`null`/`false` 支援語意與 20 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
+- PhysX/Newton 分流、`null`/`false` 支援語意與 21 項 matrix 見 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。Newton 只有實際通過 live matrix 的項目才能標為 `supported/verified`。
 
 ## 呼叫範例
 
@@ -172,8 +172,8 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 
 - schema：outer response envelope `1.0`、capability data `1.1`、backend matrix `1.0`
 - runtime：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、active backend PhysX、`cudaDevice=0`
-- PhysX：20/20 backend-sensitive rows 為 `physx_supported=true`、`supported/verified`
-- Newton：0 supported；17 rows 為 `newton_supported=null` / `untested`，3 個 PhysX-only rows 為 `false` / `unsupported`
+- PhysX：21/21 backend-sensitive rows 為 `physx_supported=true`、`supported/verified`
+- Newton：0 supported；18 rows 為 `newton_supported=null` / `untested`，3 個 PhysX-only rows 為 `false` / `unsupported`
 
 2026-08-24 完成 Task 3.3 typed physics authoring scratch live 驗收：
 
@@ -184,6 +184,14 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 - step：120 個精確 physics steps 後 fixed body 維持 `[5, 0, 3]`；scratch root 刪除並確認不存在
 - read-only gate：Stage info 與 simulation state 在 capability query 前後完全一致
 - health：Kit PID `38160`／TCP `8766` 存活，近 15 分鐘新增 native dump `0`
+
+2026-08-24 完成 item 14 physics material scratch live 驗收：
+
+- registry：76 extension commands；`create_material` 補齊 friction/restitution，新增 `get_material` 與 `get_material_binding`
+- schema：physics material 是 `UsdShade.Material + PhysicsMaterialAPI`；8 個 `material:binding:physics` relationships 全部 query/read-back 一致
+- parameters：低材質 `0/0/0`；高材質 static/dynamic/restitution=`1.0/0.8/0.9`，float32 read-back 使用明確容差
+- behavior：181 exact steps 後低摩擦比高摩擦多滑行 `2.558789 m`；高 restitution 碰撞後最高回彈 `3.065565 m`，低 restitution 無回彈
+- safety：dynamic friction 大於 static friction 在建立 prim 前回 `INVALID_MATERIAL`；scratch root cleanup 後不存在
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

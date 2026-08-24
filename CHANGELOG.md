@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — typed physics material schema and behavioral read-back
+
+- Exposed static/dynamic friction and restitution in `create_material`, and
+  added `get_material` plus `get_material_binding` named tools.
+- Physics materials are now typed `UsdShade.Material` prims with
+  `PhysicsMaterialAPI` and dedicated `material:binding:physics` relationships.
+- Added validation, stopped-timeline guards, float32-aware read-back,
+  create rollback, and binding rollback.
+- A scratch live fixture verified eight bindings, a `2.558789 m` friction
+  travel difference, and a `3.065565 m` high-restitution rebound across 181
+  exact PhysX steps. The backend matrix now contains 21 rows.
+
 ### Added — typed physics body, collision group, and joint authoring
 
 - Added six named tools for atomic dynamic/kinematic/static body setup,

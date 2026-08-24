@@ -608,9 +608,72 @@ class IsaacAdapterBase(ABC):
         ...
 
     @abstractmethod
-    def apply_material(self, material_path: str, target_prim_path: str) -> None:
+    def apply_material(
+        self, material_path: str, target_prim_path: str, material_purpose: str = "auto"
+    ) -> Dict[str, Any]:
         """Bind a material to a prim."""
         ...
+
+    def get_material(self, material_path: str) -> Dict[str, Any]:
+        """Read PBR or physics material parameters with explicit units."""
+        from pxr import UsdPhysics, UsdShade
+
+        prim = self.get_stage().GetPrimAtPath(material_path)
+        if not prim.IsValid() or not prim.IsA(UsdShade.Material):
+            raise ValueError(f"Material not found: {material_path}")
+        if prim.HasAPI(UsdPhysics.MaterialAPI):
+            material = UsdPhysics.MaterialAPI(prim)
+            return {
+                "material_path": material_path,
+                "material_type": "physics",
+                "static_friction": float(material.GetStaticFrictionAttr().Get()),
+                "dynamic_friction": float(material.GetDynamicFrictionAttr().Get()),
+                "restitution": float(material.GetRestitutionAttr().Get()),
+                "units": {"friction": "dimensionless", "restitution": "dimensionless"},
+            }
+
+        shader = UsdShade.Shader(self.get_stage().GetPrimAtPath(f"{material_path}/Shader"))
+
+        def input_value(name: str) -> Any:
+            shader_input = shader.GetInput(name) if shader else None
+            value = shader_input.Get() if shader_input else None
+            if value is not None and hasattr(value, "__len__") and not isinstance(value, str):
+                return [float(component) for component in value]
+            return float(value) if isinstance(value, (int, float)) else value
+
+        return {
+            "material_path": material_path,
+            "material_type": "pbr",
+            "color": input_value("diffuseColor"),
+            "roughness": input_value("roughness"),
+            "metallic": input_value("metallic"),
+            "units": {"color": "normalized_0_1", "roughness": "dimensionless", "metallic": "dimensionless"},
+        }
+
+    def get_material_binding(self, target_prim_path: str, material_purpose: str) -> Dict[str, Any]:
+        """Read the resolved physics or all-purpose visual material binding."""
+        from pxr import UsdShade
+
+        target = self.get_stage().GetPrimAtPath(target_prim_path)
+        if not target.IsValid():
+            raise ValueError(f"Target prim not found: {target_prim_path}")
+        purpose_token = "physics" if material_purpose == "physics" else UsdShade.Tokens.allPurpose
+        binding_api = UsdShade.MaterialBindingAPI(target)
+        material, relationship = binding_api.ComputeBoundMaterial(purpose_token)
+        direct = binding_api.GetDirectBinding(purpose_token)
+        direct_path = str(direct.GetMaterialPath()) if direct else ""
+        strength = None
+        if direct and direct.GetBindingRel():
+            strength = str(UsdShade.MaterialBindingAPI.GetMaterialBindingStrength(direct.GetBindingRel()))
+        return {
+            "target_prim_path": target_prim_path,
+            "material_purpose": material_purpose,
+            "material_path": str(material.GetPath()) if material else None,
+            "direct_material_path": direct_path or None,
+            "relationship": str(relationship.GetPath()) if relationship else None,
+            "binding_strength": strength,
+            "resolved": bool(material),
+        }
 
     # ── Lighting ───────────────────────────────────────────
 

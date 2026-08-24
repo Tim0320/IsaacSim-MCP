@@ -229,11 +229,15 @@
   > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`／PhysX／TCP `8766`，scratch `/World/MCP_Task_3_3` 讀回 `convex_hull`、mass `2.5 kg`、density `850 kg/m³`、collision group targets/filter/invert/merge，以及三種 joint bodies、frames、axis、limits 與 units。dynamic+mass 轉 static 後 `MassAPI`/`RigidBodyAPI` 均移除；停用 Mesh collider 後 approximation 清除。120 exact steps 後 fixed body 保持 `[5,0,3]`；invalid joint 未建立，scratch root cleanup 後確認不存在。
   > backend 邊界：capability matrix 現為 20 rows；PhysX 20/20 supported/verified，Newton 0 supported、17 untested、3 unsupported。契約與 verifier：`docs/PHYSICS_AUTHORING.md`、`scripts/verify_physics_authoring_live.py`。
 
-- [ ] 14. 補齊 physics material MCP schema
+- [x] 14. 補齊 physics material MCP schema
   > 現況（已確認）：handler/adapter 已接受 `static_friction`、`dynamic_friction`、`restitution`，MCP tool 介面沒有完整暴露這些參數。
   > 缺漏位置：`isaac_mcp/tools/materials.py:35`、`handlers/materials.py:45-58`、V6 adapter material API。
   > 實作：在 named tool schema 暴露參數、範圍與 units；增加 material query/read-back。
   > 驗收：建立兩組不同材料並綁定物件，USD attr read-back 一致，再用簡單滑動/彈跳 fixture 驗證行為差異。
+  > 已實作：`create_material` named schema 新增 `static_friction`、`dynamic_friction`、`restitution`；新增 `get_material` 與 `get_material_binding`，registry 由 74 增至 76。physics material 改為正式 `UsdShade.Material + UsdPhysics.MaterialAPI`；`apply_material` 新增 `auto|physics|visual` purpose，physics 使用 `material:binding:physics`。
+  > validation／atomicity：friction 需 finite 且 >=0、dynamic <= static、restitution 在 `[0,1]`；physics create/bind 要求 stopped timeline。create/read-back 失敗刪除新 prim；bind/read-back 失敗還原先前 direct binding 與 strength；float32 read-back 使用 `rel_tol=1e-6`／`abs_tol=1e-7`。
+  > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`／PhysX／TCP `8766`，scratch `/World/MCP_Task_3_4` 建立低材質 `0/0/0` 與高材質 `1.0/0.8/0.9`，8 個 physics-purpose bindings 的 direct/resolved path 與 relationship 全部讀回。181 exact steps 後低摩擦物件比高摩擦多滑行 `2.558789 m`；高 restitution 球碰撞後回彈最高 `3.065565 m`，低 restitution 球沒有回彈。invalid friction pair 未建立 prim，scratch root cleanup 後確認不存在。
+  > backend 邊界：capability matrix 現為 21 rows；PhysX 21/21 supported/verified，Newton 0 supported、18 untested、3 unsupported。契約與 verifier：`docs/PHYSICS_MATERIALS.md`、`scripts/verify_physics_material_live.py`。
 
 - [ ] 15. Stage、layer、USD composition 與語意資料
   > 現況：scene tools 著重列舉、查詢、export/clear 等基本操作，缺少完整 open/new/save、layer、reference/payload、variant、semantic label 與 arbitrary attr 契約。

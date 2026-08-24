@@ -970,22 +970,29 @@ class IsaacAdapterV5(IsaacAdapterBase):
         dynamic_friction: float = 0.5,
         restitution: float = 0.0,
     ) -> Any:
-        from pxr import UsdPhysics
+        from pxr import UsdPhysics, UsdShade
 
         stage = self.get_stage()
-        material = UsdPhysics.MaterialAPI.Apply(stage.DefinePrim(prim_path))
-        material.CreateStaticFrictionAttr(static_friction)
-        material.CreateDynamicFrictionAttr(dynamic_friction)
-        material.CreateRestitutionAttr(restitution)
+        shade_material = UsdShade.Material.Define(stage, prim_path)
+        material = UsdPhysics.MaterialAPI.Apply(shade_material.GetPrim())
+        material.CreateStaticFrictionAttr().Set(float(static_friction))
+        material.CreateDynamicFrictionAttr().Set(float(dynamic_friction))
+        material.CreateRestitutionAttr().Set(float(restitution))
         return material
 
-    def apply_material(self, material_path: str, target_prim_path: str) -> None:
+    def apply_material(
+        self, material_path: str, target_prim_path: str, material_purpose: str = "auto"
+    ) -> Dict[str, Any]:
         from pxr import UsdShade
 
         stage = self.get_stage()
         material = UsdShade.Material(stage.GetPrimAtPath(material_path))
         target = stage.GetPrimAtPath(target_prim_path)
-        UsdShade.MaterialBindingAPI(target).Bind(material)
+        purpose_token = "physics" if material_purpose == "physics" else UsdShade.Tokens.allPurpose
+        UsdShade.MaterialBindingAPI.Apply(target).Bind(
+            material, UsdShade.Tokens.weakerThanDescendants, purpose_token
+        )
+        return self.get_material_binding(target_prim_path, material_purpose)
 
     # ── Lighting ───────────────────────────────────────────
 

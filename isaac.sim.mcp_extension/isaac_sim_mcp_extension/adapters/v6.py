@@ -247,6 +247,12 @@ class IsaacAdapterV6(IsaacAdapterBase):
                 physx_evidence="Isaac Sim 6.0.1 guarded PhysX live acceptance (Task 3.3)",
                 newton_reason=untested,
             ),
+            "physics.materials": self._backend_capability(
+                physx_supported=True,
+                newton_supported=None,
+                physx_evidence="Isaac Sim 6.0.1 guarded PhysX live acceptance (Task 3.4)",
+                newton_reason=untested,
+            ),
             "sensor.camera": self._backend_capability(
                 physx_supported=True,
                 newton_supported=None,
@@ -2824,22 +2830,61 @@ class IsaacAdapterV6(IsaacAdapterBase):
         dynamic_friction: float = 0.5,
         restitution: float = 0.0,
     ) -> Any:
-        from pxr import UsdPhysics
+        from pxr import UsdPhysics, UsdShade
 
         stage = self.get_stage()
-        material = UsdPhysics.MaterialAPI.Apply(stage.DefinePrim(prim_path))
-        material.CreateStaticFrictionAttr(static_friction)
-        material.CreateDynamicFrictionAttr(dynamic_friction)
-        material.CreateRestitutionAttr(restitution)
-        return material
+        if stage.GetPrimAtPath(prim_path).IsValid():
+            raise ValueError(f"Prim already exists: {prim_path}")
+        try:
+            shade_material = UsdShade.Material.Define(stage, prim_path)
+            material = UsdPhysics.MaterialAPI.Apply(shade_material.GetPrim())
+            material.CreateStaticFrictionAttr().Set(float(static_friction))
+            material.CreateDynamicFrictionAttr().Set(float(dynamic_friction))
+            material.CreateRestitutionAttr().Set(float(restitution))
+            readback = self.get_material(prim_path)
+            expected = (float(static_friction), float(dynamic_friction), float(restitution))
+            actual = (readback["static_friction"], readback["dynamic_friction"], readback["restitution"])
+            if not all(math.isclose(requested, observed, rel_tol=1e-6, abs_tol=1e-7) for requested, observed in zip(expected, actual)):
+                raise RuntimeError(f"Physics material read-back mismatch: expected {expected}, got {actual}")
+            return material
+        except Exception:
+            stage.RemovePrim(prim_path)
+            raise
 
-    def apply_material(self, material_path: str, target_prim_path: str) -> None:
+    def apply_material(
+        self, material_path: str, target_prim_path: str, material_purpose: str = "auto"
+    ) -> Dict[str, Any]:
         from pxr import UsdShade
 
         stage = self.get_stage()
         material = UsdShade.Material(stage.GetPrimAtPath(material_path))
         target = stage.GetPrimAtPath(target_prim_path)
-        UsdShade.MaterialBindingAPI(target).Bind(material)
+        if not material or not target.IsValid():
+            raise ValueError("Material and target prim must exist")
+        purpose_token = "physics" if material_purpose == "physics" else UsdShade.Tokens.allPurpose
+        binding_api = UsdShade.MaterialBindingAPI.Apply(target)
+        previous = binding_api.GetDirectBinding(purpose_token)
+        previous_path = str(previous.GetMaterialPath()) if previous else ""
+        previous_rel = previous.GetBindingRel() if previous else None
+        previous_strength = (
+            UsdShade.MaterialBindingAPI.GetMaterialBindingStrength(previous_rel) if previous_rel else None
+        )
+        try:
+            binding_api.Bind(material, UsdShade.Tokens.weakerThanDescendants, purpose_token)
+            readback = self.get_material_binding(target_prim_path, material_purpose)
+            if readback["material_path"] != material_path or readback["direct_material_path"] != material_path:
+                raise RuntimeError("Material binding read-back did not match requested material")
+            return readback
+        except Exception:
+            binding_api.UnbindDirectBinding(purpose_token)
+            if previous_path:
+                previous_material = UsdShade.Material(stage.GetPrimAtPath(previous_path))
+                binding_api.Bind(
+                    previous_material,
+                    previous_strength or UsdShade.Tokens.weakerThanDescendants,
+                    purpose_token,
+                )
+            raise
 
     # ── Lighting ───────────────────────────────────────────
 

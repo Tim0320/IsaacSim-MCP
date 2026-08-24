@@ -82,7 +82,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_74_unique_names():
+def test_named_tool_inventory_has_76_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -99,7 +99,7 @@ def test_named_tool_inventory_has_74_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 74
+    assert len(names) == 76
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
     assert {
@@ -125,3 +125,4 @@ def test_named_tool_inventory_has_74_unique_names():
         "configure_physics_body", "get_physics_body", "create_collision_group",
         "get_collision_group", "create_physics_joint", "get_physics_joint",
     } <= set(names)
+    assert {"create_material", "apply_material", "get_material", "get_material_binding"} <= set(names)

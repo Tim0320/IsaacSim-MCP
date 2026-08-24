@@ -41,6 +41,9 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         color: Optional[List[float]] = None,
         roughness: float = 0.5,
         metallic: float = 0.0,
+        static_friction: float = 0.5,
+        dynamic_friction: float = 0.5,
+        restitution: float = 0.0,
     ) -> str:
         """Create a PBR or physics material.
 
@@ -50,10 +53,20 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             color: [r, g, b] diffuse color (0-1). PBR only.
             roughness: Surface roughness (0-1). PBR only.
             metallic: Metallic value (0-1). PBR only.
+            static_friction: Static friction coefficient (>=0). Physics only.
+            dynamic_friction: Dynamic friction coefficient (>=0 and <= static). Physics only.
+            restitution: Bounciness from 0 to 1. Physics only.
         """
         try:
             conn = get_connection()
-            params = {"material_type": material_type, "roughness": roughness, "metallic": metallic}
+            params = {
+                "material_type": material_type,
+                "roughness": roughness,
+                "metallic": metallic,
+                "static_friction": static_friction,
+                "dynamic_friction": dynamic_friction,
+                "restitution": restitution,
+            }
             if prim_path:
                 params["prim_path"] = prim_path
             if color:
@@ -63,18 +76,45 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
 
+    @mcp.tool("get_material")
+    def get_material(material_path: str) -> str:
+        """Read PBR or physics material parameters and explicit units."""
+        try:
+            result = get_connection().send_command("materials.get", {"material_path": material_path})
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
     @mcp.tool("apply_material")
-    def apply_material(material_path: str, target_prim_path: str) -> str:
+    def apply_material(material_path: str, target_prim_path: str, material_purpose: str = "auto") -> str:
         """Bind a material to an object.
 
         Args:
             material_path: Prim path of the material.
             target_prim_path: Prim path of the object to apply the material to.
+            material_purpose: auto, physics, or visual. Auto selects from the material schema.
         """
         try:
             conn = get_connection()
             result = conn.send_command(
-                "materials.apply", {"material_path": material_path, "target_prim_path": target_prim_path}
+                "materials.apply",
+                {
+                    "material_path": material_path,
+                    "target_prim_path": target_prim_path,
+                    "material_purpose": material_purpose,
+                },
+            )
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("get_material_binding")
+    def get_material_binding(target_prim_path: str, material_purpose: str = "physics") -> str:
+        """Read the resolved physics or visual material binding on a prim."""
+        try:
+            result = get_connection().send_command(
+                "materials.get_binding",
+                {"target_prim_path": target_prim_path, "material_purpose": material_purpose},
             )
             return json.dumps(result, indent=2)
         except Exception as e:
