@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — explicit gripper and mobile-base controller profiles
+
+- Added six named tools for profile discovery, Franka gripper open/close/width,
+  differential or holonomic base velocity, and verified zero-target stop.
+- Profiles bind exact joint names and types before apply; unknown, wrong-kind,
+  mismatched, non-finite, over-limit, and invalid-timeline requests fail closed.
+- Jetbot uses documented differential wheel geometry. Kaya reads holonomic wheel
+  geometry from USD through Isaac Sim 6 experimental wheeled-robot APIs instead
+  of embedding mecanum geometry in the MCP layer.
+- A clean-restart scratch run verified 68 registered commands, three profiles,
+  wheeled robots extension `0.2.11`, Franka width/open/close, mismatch atomicity,
+  Jetbot differential and Kaya holonomic measured-state read-back, and zero-target stops.
+- Bound Warp command arrays to the Articulation physics device instead of the
+  process-current CUDA device, which may differ in a multi-GPU Kit session.
+  The verifier now compares command targets rather than moving measured state,
+  cleans its physics fixtures, and emits flushed phase progress. The prior
+  `ERROR_DEVICE_LOST` session was discarded; the clean replacement passed
+  stopped-timeline, fixture-absence, live PID/TCP, log, and native-dump gates.
+- Normalized Isaac Sim 6 experimental `HolonomicController.forward()` ndarray
+  results while retaining compatibility with action objects exposing
+  `joint_velocities`; setup joint names are explicitly reordered to the profile.
+
 ### Added — bounded V6 motion generation and controller jobs
 
 - Added `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`,
@@ -18,10 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Execution uses Kit update callbacks and returns immediately with a job ID;
   jobs support pause/resume, cancellation, deadline timeout, progress, and one
   active job per articulation.
-- A live Franka namespace produced deterministic IK (`7.36e-7 m` error), RRT
-  collision result, and completed/cancelled/timed-out terminal states. Final
-  scratch-isolated acceptance remains gated because the current Stage contains
-  pre-existing prims and the verifier correctly refuses to clear it.
+- A clean-restart Franka scratch namespace produced deterministic IK
+  (`7.36e-7 m` error), scoped RRT collision result, and completed/cancelled/
+  timed-out terminal states. Cleanup read-back, stopped timeline, PID/TCP,
+  run-log, and native-dump gates passed with the 68-command registry.
 
 ### Added — atomic V6 joint drive configuration
 

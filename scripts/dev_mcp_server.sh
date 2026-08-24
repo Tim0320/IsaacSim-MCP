@@ -110,6 +110,7 @@ import isaac_sim_mcp_extension.handlers.assets as assets_mod
 import isaac_sim_mcp_extension.handlers.simulation as simulation_mod
 import isaac_sim_mcp_extension.handlers.sensors as sensors_mod
 import isaac_sim_mcp_extension.handlers.materials as materials_mod
+import isaac_sim_mcp_extension.handlers.controllers as controllers_mod
 import isaac_sim_mcp_extension.handlers.motion as motion_mod
 import isaac_sim_mcp_extension.handlers.lighting as lighting_mod
 import isaac_sim_mcp_extension.handlers.graphs as graphs_mod
@@ -128,6 +129,7 @@ importlib.reload(assets_mod)
 importlib.reload(simulation_mod)
 importlib.reload(sensors_mod)
 importlib.reload(materials_mod)
+importlib.reload(controllers_mod)
 importlib.reload(motion_mod)
 importlib.reload(lighting_mod)
 importlib.reload(graphs_mod)

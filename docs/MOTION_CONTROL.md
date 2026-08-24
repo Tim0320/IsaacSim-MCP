@@ -33,3 +33,8 @@ IK quaternion 採 `[w, x, y, z]`。位置單位是 meters，revolute joint 是 r
 
 腳本建立並清除 `/World/MCP_Task_2_3_Robot`，驗證 IK end-effector error、相同 seed 的 deterministic
 結果、RRT collision result、non-blocking execute、pause/resume、cancel、timeout，以及 cleanup read-back。
+
+2026-08-24 在乾淨重啟的 Isaac Sim `6.0.1-rc.7`／PhysX 完成最終驗收：registry `68`、motion
+generation `8.2.9`、IK position error `7.363885225415161e-7 m`、seed `17` 重現、RRT
+`checked/path_valid=true`、completed/cancel/1 ms timeout 均通過。cleanup 後 task robot、ground plane 與
+physics scene 全 absent，timeline stopped，Kit/TCP 存活，當次 log 與 native dump gate 通過。

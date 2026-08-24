@@ -21,6 +21,7 @@ keywords = ["mcp", "server", "socket", "simulation", "robotics"]
 # Isaac Sim 6.0.1 still ships the NVIDIA Lula/RRT stack under this extension.
 # Keep it optional so older runtimes load and report motion as unavailable.
 "isaacsim.robot_motion.motion_generation" = { optional = true }
+"isaacsim.robot.experimental.wheeled_robots" = { optional = true }
 "omni.kit.uiapp" = {}
 "isaacsim.gui.components" = {}
 

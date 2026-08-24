@@ -10,7 +10,12 @@ import time
 from isaac_mcp.connection import IsaacConnection
 
 ROBOT_PATH = "/World/MCP_Task_2_3_Robot"
+OWNED_PHYSICS_PATHS = ("/World/groundPlane", "/World/PhysicsScene")
 HOME = [0.0, -0.57, 0.0, -2.81, 0.0, 3.037, 0.741, 0.04, 0.04]
+
+
+def _progress(step: str) -> None:
+    print(json.dumps({"event": "progress", "step": step}), flush=True)
 
 
 def _data(response: dict) -> dict:
@@ -26,7 +31,7 @@ import warp as wp
 from isaac_sim_mcp_extension.extension import MCPExtension
 obj = next(o for o in gc.get_objects() if isinstance(o, MCPExtension))
 art = obj._adapter._runtime_articulation({ROBOT_PATH!r})
-q = wp.array(np.asarray([{HOME!r}], dtype=np.float32), dtype=wp.float32)
+q = wp.array(np.asarray([{HOME!r}], dtype=np.float32), dtype=wp.float32, device=art._device)
 art.set_dof_positions(q)
 art.set_dof_position_targets(q)
 print("initialized")
@@ -58,20 +63,24 @@ print(json.dumps(unexpected))
 def main() -> int:
     connection = IsaacConnection(port=8766)
     report: dict = {}
+    owns_fixtures = False
     try:
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1")
         assert capabilities["runtime"]["physics_backend"] == "physx"
-        assert capabilities["extension"]["command_count"] == 62
+        assert capabilities["extension"]["command_count"] == 68
         assert capabilities["feature_flags"]["motion.ik_and_planning"]["state"] == "supported"
 
-        connection.send_command("simulation.stop")
         _assert_scratch_stage(connection)
+        owns_fixtures = True
+        _progress("prepare_scratch_stage")
+        connection.send_command("simulation.stop")
         if connection.send_command("scene.get_prim_info", {"prim_path": ROBOT_PATH})["status"] == "success":
             _data(connection.send_command("objects.delete", {"prim_path": ROBOT_PATH}))
         _data(connection.send_command("scene.clear", {"keep_environment": False}))
         _data(connection.send_command("scene.create_physics", {"gravity": [0.0, 0.0, -9.81]}))
         _data(connection.send_command("robots.create", {"robot_type": "frankapanda", "prim_path": ROBOT_PATH}))
+        _progress("play_and_initialize_franka")
         _data(connection.send_command("simulation.play"))
         _initialize_runtime_pose(connection)
         initial_state = _data(connection.send_command("robots.get_joint_state", {"prim_path": ROBOT_PATH}))
@@ -79,6 +88,7 @@ def main() -> int:
         assert all(math.isfinite(value) for value in measured), measured
         assert all(math.isclose(value, expected, abs_tol=1e-5) for value, expected in zip(measured, HOME)), measured
 
+        _progress("verify_ik_determinism")
         ik_params = {
             "prim_path": ROBOT_PATH,
             "target_position": [0.45, 0.0, 0.5],
@@ -94,6 +104,7 @@ def main() -> int:
         assert ik_a["joint_positions"] == ik_b["joint_positions"], (ik_a, ik_b)
         assert ik_a["collision_check"]["checked"] is False
 
+        _progress("verify_rrt_plan")
         goal = HOME[:7].copy()
         goal[0] += 0.08
         rrt = _data(
@@ -112,6 +123,7 @@ def main() -> int:
         )
         assert rrt["collision_check"]["checked"] is True, rrt
 
+        _progress("verify_non_blocking_pause_resume")
         _data(connection.send_command("simulation.pause"))
         execution = _data(
             connection.send_command(
@@ -131,6 +143,7 @@ def main() -> int:
             time.sleep(0.02)
         assert status["state"] == "completed", status
 
+        _progress("verify_cancel_and_timeout")
         cancel_plan = _data(
             connection.send_command(
                 "motion.plan_joint_trajectory",
@@ -179,11 +192,16 @@ def main() -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
     finally:
-        try:
-            connection.send_command("simulation.stop")
-            if connection.send_command("scene.get_prim_info", {"prim_path": ROBOT_PATH})["status"] == "success":
-                connection.send_command("objects.delete", {"prim_path": ROBOT_PATH})
-        finally:
+        if owns_fixtures:
+            try:
+                _progress("cleanup_owned_fixtures")
+                connection.send_command("simulation.stop")
+                for path in (ROBOT_PATH, *OWNED_PHYSICS_PATHS):
+                    if connection.send_command("scene.get_prim_info", {"prim_path": path})["status"] == "success":
+                        connection.send_command("objects.delete", {"prim_path": path})
+            finally:
+                connection.disconnect()
+        else:
             connection.disconnect()
 
 

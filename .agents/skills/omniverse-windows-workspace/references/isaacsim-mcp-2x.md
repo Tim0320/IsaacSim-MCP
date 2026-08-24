@@ -10,6 +10,7 @@ Use this reference for Phase 2 Robot control work in
 | 2.1 | Phase 2 item 7 | Complete V6 joint state and atomic position/velocity/effort commands | `get_joint_state`, `set_joint_command` | `docs/ROBOT_JOINT_CONTROL.md` | `scripts/verify_robot_joint_control_live.py` |
 | 2.2 | Phase 2 item 8 | Atomic V6 drive gains, limits, and drive type | `set_joint_drive_config`, `get_joint_config` | `docs/ROBOT_JOINT_DRIVE_CONFIG.md` | `scripts/verify_robot_joint_drive_config_live.py` |
 | 2.3 | Phase 2 item 9 | Lula IK, RRT/C-space trajectories, bounded non-blocking jobs | `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`, `cancel_motion`, `get_motion_status` | `docs/MOTION_CONTROL.md` | `scripts/verify_motion_control_live.py` |
+| 2.4 | Phase 2 item 10 | Explicit-profile gripper and differential/holonomic mobile-base commands | `list_controller_profiles`, `set_gripper_width`, `open_gripper`, `close_gripper`, `set_mobile_base_velocity`, `stop_mobile_base` | `docs/CONTROLLER_PROFILES.md` | `scripts/verify_controller_profiles_live.py` |
 
 ## 2.3 invariants
 
@@ -80,13 +81,68 @@ Kit/TCP survival, active-display GPU selection, zero error-like run logs, and
 zero new native dumps passed. Newton max velocity remains unsupported and its
 other DriveAPI fields remain unverified.
 
-## Recorded 2.3 evidence
+## Recorded final 2.3 acceptance
 
-The 2026-08-24 Isaac Sim `6.0.1-rc.7` PhysX run produced functional evidence for 62 commands and
-motion-generation extension `8.2.9`. Franka IK reached `7.363885225415161e-7 m`
-position error and repeated exactly with warm start and seed 17. RRT returned a
-collision-checked valid path. The non-blocking job passed pause/resume to
-completion, explicit cancellation, and a 1 ms deadline timeout, followed by
-fixture-namespace cleanup. A later guard found pre-existing non-task prims and
-refused to clear or write the Stage. This is not scratch-isolated final evidence;
-rerun on a user-provided empty Stage before checking task 2.3 complete.
+The clean-restart 2026-08-24 Isaac Sim `6.0.1-rc.7` PhysX run verified 68 commands
+and motion-generation extension `8.2.9`. Franka IK reached
+`7.363885225415161e-7 m` position error and repeated exactly with warm start and
+seed 17. RRT returned a scoped collision-checked valid path with zero registered
+scene obstacles. The non-blocking job passed pause/resume to completion,
+explicit cancellation, and a 1 ms deadline timeout. Task/physics fixtures were
+absent after cleanup; timeline, Kit/TCP, run-log, and native-dump gates passed.
+
+## Task 2.4 controller profile invariants
+
+- High-level gripper and mobile-base writes always require an explicit profile;
+  never infer a controller from a prim name or partial joint-name match.
+- Bind every required joint name and type before apply. A mismatch must return
+  `applied=false` without changing any target.
+- Gripper width is total finger separation in meters. Mobile commands use m/s
+  and rad/s; non-zero commands require a playing timeline and persist until an
+  explicit stop or replacement command.
+- `stop_mobile_base` must read every profiled wheel velocity target back as
+  zero. This proves the command target, not that physical inertia is zero.
+- Jetbot differential geometry is explicit. Kaya holonomic geometry must be
+  read from USD through `HolonomicRobotUsdSetup`; do not hardcode wheel axes or
+  roller angles.
+- Run `scripts/verify_controller_profiles_live.py` only on an empty scratch
+  Stage. Its guard must execute before Stop, clear, create, or target writes.
+
+## Recorded 2.4 read-only guard evidence
+
+On 2026-08-24, live Isaac Sim `6.0.1-rc.7` reported 68 commands, three explicit
+controller profiles, and enabled `isaacsim.robot.experimental.wheeled_robots`
+version `0.2.11`. The Stage contained pre-existing non-task prims, so the guard
+refused all timeline and Stage writes. Gripper/base mutation, joint/base
+read-back, mismatch atomicity, and stop postconditions were intentionally deferred
+until the later empty-Stage run below.
+
+## Recorded 2.4 failed scratch rerun
+
+The 2026-08-24 scratch rerun found and corrected three harness/runtime issues:
+mismatch atomicity must compare command targets rather than moving measured
+state; owned physics scene/ground prims must be deleted; and Warp command arrays
+must be allocated on the Articulation physics device rather than process-current
+CUDA device. In the same long-lived Kit session, RTX began reporting CUDA
+external-memory failures before the latest fixtures were created, then produced
+a GPU page fault and `ERROR_DEVICE_LOST`. Do not accept 2.4 or rerun 2.3 in that
+runtime. Restart Isaac Sim with the active-display physics GPU guard, then rerun
+2.4 from an empty Stage before 2.3.
+
+## Recorded final 2.4 acceptance
+
+The replacement 2026-08-24 runtime used the active-display physics GPU guard and
+an empty scratch Stage. Franka open/set-width/close mapped total widths
+`0.08/0.03/0.0 m` to exact finger targets; a mismatched profile preserved all
+command targets. Jetbot targets were `[2.9583333, 3.7083333] rad/s`; Kaya targets
+were `[-9.304024, -6.6114283, -9.497344] rad/s`. Both produced finite measured
+wheel velocities and immediate all-zero stop target read-back. Isaac Sim 6 may
+return a raw ndarray from experimental `HolonomicController.forward()`, so the
+adapter normalizes either ndarray or action-object results and reorders values
+from USD setup joint names to profile order. All owned robot/physics fixtures
+were absent after cleanup; timeline, Kit/TCP, log, and native-dump gates passed.
+
+When an allocation lands on the wrong CUDA device or the run reports external-
+memory/device-lost errors, discard that runtime. Keep Warp arrays on
+`art._device`, restart with the active-display physics GPU guard, and rerun 2.4
+before 2.3; never promote evidence from the contaminated session.

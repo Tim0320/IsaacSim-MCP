@@ -41,6 +41,7 @@
 - `set_physics_params` 支援 `gravity`；`time_step` 與 `gpu_enabled` 會明確拒絕。
 - Isaac Sim 6.x Robot named tools 可讀 position、velocity、projected effort 與三種 target，並以 name/index subset 原子套用 position、velocity 或 effort；effort 必須每個 update 重送。Drive config 可在 stopped timeline 原子寫入 gains、max force/velocity 與 force/acceleration type，並 rollback 失敗寫入。V5 不支援 typed drive setter；Newton 的 max velocity 明確不支援，其餘 drive 欄位維持 unverified。契約見 [`ROBOT_JOINT_CONTROL.md`](ROBOT_JOINT_CONTROL.md) 與 [`ROBOT_JOINT_DRIVE_CONFIG.md`](ROBOT_JOINT_DRIVE_CONFIG.md)。
 - V6 motion tools 依賴 `isaacsim.robot_motion.motion_generation`。Lula IK 不做 collision avoidance；只有 `planner=rrt` 可回報 Lula world view 的 collision result，`planner=cspace` 會明確標示 unchecked。execution 走 Kit update callback，不阻塞 MCP worker，並具有 pause/resume、cancel、deadline timeout。契約見 [`MOTION_CONTROL.md`](MOTION_CONTROL.md)。
+- V6 gripper/mobile-base tools 必須使用 explicit controller profile，並以 exact joint name/type fail closed。Jetbot differential 使用明確 wheel geometry；Kaya holonomic geometry 從 USD 讀取，且依賴 `isaacsim.robot.experimental.wheeled_robots`。非零 base command 要求 timeline playing，target 會持續到 `stop_mobile_base` 或其他 controller 覆寫。契約見 [`CONTROLLER_PROFILES.md`](CONTROLLER_PROFILES.md)。
 - ROS 2、完整 Replicator SDG 與完整 Action Graph lifecycle 尚無 named tools。
 - Newton 只有實際通過 live matrix 的項目才能標為 verified。
 
@@ -136,14 +137,24 @@ client 應先檢查 `schema_version`，再依 `runtime.physics_backend`、`exten
 - backend：`max_velocity` 透過 `PhysxJointAPI`，Newton 明確 unsupported；Newton 其餘 USD DriveAPI 欄位維持 unverified
 - lifecycle：timeline stopped、scratch prim absent、Kit PID/TCP `8766` 存活、GPU 0 為唯一 active display GPU、error-like log `0`、新增 native dump `0`
 
-2026-08-24 取得 Motion control live 功能證據（scratch final gate pending）：
+2026-08-24 完成 Motion control scratch live 驗收：
 
-- registry：62 extension commands；motion generation `8.2.9` enabled，五個 motion commands 已註冊
-- fixture：`/World/MCP_Task_2_3_Robot` Franka，explicit seven-joint planning start，fixture namespace finally cleanup；重跑時 guard 發現非空 Stage 並拒絕 clear/write
+- registry：68 extension commands；motion generation `8.2.9` enabled，五個 motion commands 已註冊
+- fixture：`/World/MCP_Task_2_3_Robot` Franka，explicit seven-joint planning start；scratch guard 在任何寫入前通過，最後只清除 verifier 自建 robot 與 physics fixtures
 - IK：position error `7.363885225415161e-7 m`；warm start 與 seed `17` 的兩次結果完全相同；collision 明確 unchecked
 - RRT：path found、collision checked/path_valid；目前 scene obstacle count 0、`scene_obstacles_included=false`，不得宣稱整個 Stage collision-free
 - lifecycle：queued/paused → running → completed，另通過 cancel 與 `timeout_ms=1` terminal timeout；execute 立即回 `non_blocking=true`
-- pending：切換至可清除的空白 Stage 後重跑 verifier；完成前不得標成 scratch-isolated verified
+- lifecycle gate：timeline stopped，2.3/2.4 robot 與 `/World/groundPlane`、`/World/PhysicsScene` 全 absent；Kit PID `29916`／TCP `8766` 存活，當次啟動 log 關鍵錯誤 `0`，新增 native dump `0`
+
+2026-08-24 完成 Controller profiles scratch live 驗收：
+
+- registry：68 extension commands；六個 controller named tools 已註冊
+- extension：`isaacsim.robot.experimental.wheeled_robots` enabled，version `0.2.11`
+- profiles：Franka parallel gripper、NVIDIA Jetbot differential、NVIDIA Kaya holonomic 三組 explicit profiles 可讀回
+- gripper：Franka total width `0.08/0.03/0.0 m` 的 finger targets 分別為 `[0.04,0.04]`、`[0.015,0.015]`、`[0,0]`；錯誤 profile 回 `CONTROLLER_PROFILE_MISMATCH` 且 command targets 不變
+- mobile base：Jetbot targets `[2.9583333,3.7083333]`、Kaya targets `[-9.304024,-6.6114283,-9.497344] rad/s`，兩者 measured velocities 均為有限值；stop 後全部 profiled wheel targets 讀回零
+- lifecycle：clean restart 後依序完成 2.4、2.3；scratch fixtures/physics prim 全 absent、timeline stopped、Kit PID/TCP 存活、當次 log 無 GPU/device-lost/PhysX crash signature、新增 native dump `0`
+- 歷史警示：舊長時間 session 曾因錯誤 device allocation 後出現 RTX CUDA external-memory failures、GPU page fault 與 `ERROR_DEVICE_LOST`，該 session 未納入驗收；Warp arrays 現在固定跟隨 Articulation physics device
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

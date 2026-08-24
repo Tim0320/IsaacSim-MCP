@@ -30,6 +30,7 @@ RELEVANT_EXTENSIONS = (
     "isaacsim.replicator.agent.core",
     "isaacsim.ros2.bridge",
     "isaacsim.robot_motion.motion_generation",
+    "isaacsim.robot.experimental.wheeled_robots",
     "isaacsim.physics.newton",
 )
 
@@ -128,7 +129,10 @@ def _runtime_info(adapter: IsaacAdapterBase) -> Dict[str, Any]:
 
 
 def _feature_flags(
-    adapter_generation: Optional[int], physics_backend: str, motion_generation_enabled: Optional[bool] = None
+    adapter_generation: Optional[int],
+    physics_backend: str,
+    motion_generation_enabled: Optional[bool] = None,
+    wheeled_robots_enabled: Optional[bool] = None,
 ) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     backend_verification = "verified" if physics_backend == "physx" else "unverified"
@@ -299,6 +303,33 @@ def _feature_flags(
             "deterministic_seed": True,
             "ik_collision_check": False,
         },
+        "robot.gripper_profiles": {
+            "state": "supported" if adapter_generation == 6 else "unsupported",
+            "profiles": ["franka_parallel_gripper"],
+            "tools": ["set_gripper_width", "open_gripper", "close_gripper"],
+            "explicit_profile_required": True,
+            "signature_validation": True,
+        },
+        "robot.mobile_base_profiles": {
+            "state": "supported" if adapter_generation == 6 else "unsupported",
+            "profiles": ["nvidia_jetbot_differential", "nvidia_kaya_holonomic"],
+            "profile_states": {
+                "nvidia_jetbot_differential": "supported" if adapter_generation == 6 else "unsupported",
+                "nvidia_kaya_holonomic": (
+                    "supported"
+                    if adapter_generation == 6 and wheeled_robots_enabled is True
+                    else "unavailable" if adapter_generation == 6 and wheeled_robots_enabled is False else "unknown"
+                ),
+            },
+            "profile_requirements": {
+                "nvidia_kaya_holonomic": "isaacsim.robot.experimental.wheeled_robots"
+            },
+            "tools": ["set_mobile_base_velocity", "stop_mobile_base"],
+            "explicit_profile_required": True,
+            "signature_validation": True,
+            "nonzero_command_requires_playing_timeline": True,
+            "stop_readback": True,
+        },
         "omnigraph.create_edit": {"state": "partial"},
         "omnigraph.lifecycle": {"state": "unsupported"},
         "ros2.named_tools": {"state": "unsupported"},
@@ -369,6 +400,7 @@ def get_capabilities(
     commands = sorted(registry)
     extensions = _extension_states(extension_manager)
     motion_enabled = extensions["isaacsim.robot_motion.motion_generation"]["enabled"]
+    wheeled_enabled = extensions["isaacsim.robot.experimental.wheeled_robots"]["enabled"]
     return {
         "status": "success",
         "schema_version": CAPABILITIES_SCHEMA_VERSION,
@@ -381,7 +413,7 @@ def get_capabilities(
         },
         "extensions": extensions,
         "feature_flags": _feature_flags(
-            runtime["adapter_generation"], runtime["physics_backend"], motion_enabled
+            runtime["adapter_generation"], runtime["physics_backend"], motion_enabled, wheeled_enabled
         ),
         "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"]),
         "sensor_warmup": _sensor_warmup(adapter),

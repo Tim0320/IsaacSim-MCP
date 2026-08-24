@@ -29,6 +29,7 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 
@@ -248,9 +249,11 @@ def test_v6_set_joint_positions_calls_set_dof_position_targets(monkeypatch):
 
 def test_v6_joint_command_uses_dof_subset_for_all_modes(monkeypatch):
     calls = []
+    allocations = []
 
     class _Articulation:
         dof_names = ["j0", "j1", "j2"]
+        _device = "cuda:0"
 
         def is_physics_tensor_entity_valid(self):
             return True
@@ -265,7 +268,11 @@ def test_v6_joint_command_uses_dof_subset_for_all_modes(monkeypatch):
             calls.append(("effort", values, dof_indices))
 
     fake_warp_mod = types.ModuleType("warp")
-    fake_warp_mod.array = lambda data, dtype=None: list(data)
+    def fake_array(data, dtype=None, device=None):
+        allocations.append((dtype, device))
+        return list(data)
+
+    fake_warp_mod.array = fake_array
     fake_warp_mod.float32 = "float32"
     fake_warp_mod.int32 = "int32"
     monkeypatch.setitem(sys.modules, "warp", fake_warp_mod)
@@ -282,6 +289,57 @@ def test_v6_joint_command_uses_dof_subset_for_all_modes(monkeypatch):
     assert [call[0] for call in calls] == ["position", "velocity", "effort"]
     assert all(list(call[1][0]) == [1.0, 2.0] for call in calls)
     assert all(list(call[2]) == [0, 2] for call in calls)
+    assert allocations and all(device == "cuda:0" for _dtype, device in allocations)
+
+
+def test_v6_holonomic_accepts_experimental_sequence_and_reorders_names(monkeypatch):
+    class _Setup:
+        def __init__(self, robot_prim_path, com_prim_path):
+            assert robot_prim_path == "/World/Kaya"
+            assert com_prim_path == "/World/Kaya/base_link/control_offset"
+
+        def get_holonomic_controller_params(self):
+            return [0.1] * 3, np.zeros((3, 3)), np.zeros((3, 4)), [45.0] * 3, [1, 0, 0], [0, 0, 1]
+
+        def get_articulation_controller_params(self):
+            return ["axle_2_joint", "axle_0_joint", "axle_1_joint"]
+
+    class _Controller:
+        def __init__(self, **_kwargs):
+            pass
+
+        def forward(self, command):
+            assert list(command) == [0.2, -0.1, 0.3]
+            return [10.0, 20.0, 30.0]
+
+    controllers_mod = types.ModuleType("isaacsim.robot.experimental.wheeled_robots.controllers")
+    controllers_mod.HolonomicController = _Controller
+    robots_mod = types.ModuleType("isaacsim.robot.experimental.wheeled_robots.robots")
+    robots_mod.HolonomicRobotUsdSetup = _Setup
+    for name in (
+        "isaacsim.robot",
+        "isaacsim.robot.experimental",
+        "isaacsim.robot.experimental.wheeled_robots",
+    ):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, controllers_mod.__name__, controllers_mod)
+    monkeypatch.setitem(sys.modules, robots_mod.__name__, robots_mod)
+
+    class _Prim:
+        def IsValid(self):
+            return True
+
+    from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+
+    adapter = object.__new__(IsaacAdapterV6)
+    adapter.get_stage = lambda: types.SimpleNamespace(GetPrimAtPath=lambda _path: _Prim())
+    result = adapter.compute_holonomic_wheel_velocities(
+        "/World/Kaya",
+        "/World/Kaya/base_link/control_offset",
+        [0.2, -0.1, 0.3],
+        ["axle_0_joint", "axle_1_joint", "axle_2_joint"],
+    )
+    assert result == [20.0, 30.0, 10.0]
 
 
 def test_v6_joint_state_reads_measured_and_target_arrays():

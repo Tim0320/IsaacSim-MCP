@@ -14,10 +14,12 @@ import isaac_sim_mcp_extension.adapters.base as base_mod
 import isaac_sim_mcp_extension.adapters.v5 as v5_mod
 import isaac_sim_mcp_extension.adapters.v6 as v6_mod
 import isaac_sim_mcp_extension.adapters.version as version_mod
+import isaac_sim_mcp_extension.controller_profiles as controller_profiles_mod
 import isaac_sim_mcp_extension.handlers as handlers_init
 import isaac_sim_mcp_extension.handlers.artifacts as artifacts_mod
 import isaac_sim_mcp_extension.handlers.assets as assets_mod
 import isaac_sim_mcp_extension.handlers.capabilities as capabilities_mod
+import isaac_sim_mcp_extension.handlers.controllers as controllers_mod
 import isaac_sim_mcp_extension.handlers.graphs as graphs_mod
 import isaac_sim_mcp_extension.handlers.humans as humans_mod
 import isaac_sim_mcp_extension.handlers.lighting as lighting_mod
@@ -30,12 +32,13 @@ import isaac_sim_mcp_extension.handlers.sensors as sensors_mod
 import isaac_sim_mcp_extension.handlers.simulation as simulation_mod
 from isaac_sim_mcp_extension.extension import MCPExtension
 
-for module in (version_mod, base_mod, v5_mod, v6_mod, adapters_init):
+for module in (version_mod, base_mod, v5_mod, v6_mod, adapters_init, controller_profiles_mod):
     importlib.reload(module)
 for module in (
     artifacts_mod,
     assets_mod,
     capabilities_mod,
+    controllers_mod,
     graphs_mod,
     humans_mod,
     lighting_mod,

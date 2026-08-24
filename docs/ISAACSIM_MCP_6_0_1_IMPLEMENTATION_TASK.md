@@ -169,22 +169,30 @@
   > atomic／lifecycle：負 stiffness、未知 joint name 與 Play 中寫入均在 apply 前拒絕，前後五欄 snapshot 完全一致；scratch prim absent、timeline stopped、Kit PID `22232`／TCP `8766` 存活、`cudaDevice=0` 對應唯一 active display GPU、run-scoped error-like log `0`、新增 native dump `0`。
   > 驗證腳本與契約：`scripts/verify_robot_joint_drive_config_live.py`、`docs/ROBOT_JOINT_DRIVE_CONFIG.md`。
 
-- [ ] 9. IK、trajectory、motion planning 與 controller lifecycle
+- [x] 9. IK、trajectory、motion planning 與 controller lifecycle
   > 現況：沒有 named tool 可建立/選擇 controller、求 IK、產生 trajectory、執行、暫停、取消與查詢 job。
   > 缺漏位置：目前 `isaac_mcp/tools/` 沒有 motion/controller 模組。
   > 實作：先建立最小 `compute_ik`、`plan_joint_trajectory`、`execute_trajectory`、`cancel_motion`、`get_motion_status`；依 capabilities 掛接 Isaac Sim 可用 motion generation stack。
   > 驗收：對固定 robot fixture 驗證 end-effector 誤差、collision result、timeout/cancel 與 deterministic seed；禁止阻塞 MCP worker 無限等待。
   > 已實作：新增五個 named tools、`motion.*` extension commands 與 V6 adapter。IK 使用 Lula warm start／seed／iteration bound；trajectory 支援 collision-aware RRT 與明確 unchecked 的 C-space spline；execution 使用 Kit update subscription 與 opaque job/trajectory ID，同一 robot 拒絕重疊 active job。
   > 能力邊界：Lula IK 官方 API `supports_collision_avoidance()` 為 false，因此 IK response 永遠回 `collision_check.checked=false`。RRT 的 checked result 只包含 Lula robot model 與已註冊 world view；目前 USD scene obstacle count 為 0 且 `scene_obstacles_included=false`，不得宣稱整個 Stage collision-free，也不得把 `cspace` spline 宣稱為 collision-free path。
-  > live 功能證據（2026-08-24，尚未完成最終驗收）：Isaac Sim `6.0.1-rc.7`、motion generation `8.2.9`、PhysX、62 commands。Franka IK error=`7.363885225415161e-7 m`，相同 warm start／seed `17` 解完全一致；RRT path_valid；job 通過 pause/resume/completed、cancel 與 1 ms timeout，且 `execute_trajectory` 立即回 `non_blocking=true`；fixture namespace 已清除。
-  > 未完成 gate：重跑時新增的 scratch-stage guard 發現 live Stage 原本已有多個非 2.3 prim，因此拒絕 `clear_scene` 與後續寫入。以上功能結果不能標為 scratch-isolated 最終驗收；須由使用者切換至可清除的空白 Stage 後重跑 verifier，才勾選本項。
+  > live 驗收（2026-08-24）：在乾淨重啟、`/physics/cudaDevice=0`、空白 scratch Stage 的 Isaac Sim `6.0.1-rc.7`／PhysX 完成，registry 為 68 commands、motion generation `8.2.9`。Franka IK error=`7.363885225415161e-7 m`，相同 warm start／seed `17` 解完全一致；RRT 回 `checked=true`、`path_valid=true`，同時明確回報 obstacle count `0` 與 `scene_obstacles_included=false`。
+  > lifecycle／cleanup：job 通過 paused→running→completed（progress `1.0`）、cancel terminal state 與 `timeout_ms=1` terminal timeout，且 execute 立即回 `non_blocking=true`。verifier 只清除自建 `/World/MCP_Task_2_3_Robot`、`/World/groundPlane`、`/World/PhysicsScene`；最終 read-back 全 absent、timeline stopped、Kit PID `29916`／TCP `8766` 存活，當次 log 無 GPU page fault、CUDA external-memory、`ERROR_DEVICE_LOST` 或 PhysX crash signature，新增 native dump `0`。
   > 驗證腳本與契約：`scripts/verify_motion_control_live.py`、`docs/MOTION_CONTROL.md`。
 
-- [ ] 10. Gripper 與 mobile base 常用操作
+- [x] 10. Gripper 與 mobile base 常用操作
   > 現況：可透過底層 joints 或 `execute_script` 組合，但缺少穩定、高階 named tools。
   > 缺漏位置：robot tool registry、controller presets、fixture tests。
   > 實作：新增 open/close/set width，以及 differential/holonomic velocity command；所有 preset 都要顯式綁定 robot profile。
   > 驗收：未匹配 profile 時拒絕執行；有 profile 時讀回 joint/base 狀態與停止 postcondition。
+  > 已實作：新增 `list_controller_profiles`、`set_gripper_width`、`open_gripper`、`close_gripper`、`set_mobile_base_velocity`、`stop_mobile_base`。Franka、Jetbot、Kaya profiles 以 exact joint name/type fail closed；Jetbot 使用明確 differential geometry，Kaya 透過 Isaac Sim 6 experimental wheeled-robot API 從 USD 讀取 holonomic geometry。
+  > safety／units：gripper width 為兩指總寬（m）；base twist 為 m/s 與 rad/s。非零 base command 只允許 timeline playing，targets 明確標為 persistent；stop 必須將全部 wheel velocity targets 讀回為零。未知、錯誤種類、joint/type 不匹配及超限全部在 apply 前拒絕。
+  > live discovery（2026-08-24）：Isaac Sim `6.0.1-rc.7`、PhysX、68 commands；`isaacsim.robot.experimental.wheeled_robots` enabled/version `0.2.11`；三組 profiles 已由 live registry 讀回。
+  > 2026-08-24 scratch 重跑：首次發現 verifier 把 Play 中 measured state 納入 mismatch atomicity 比較，已改為只比較 command targets；cleanup 也補上 verifier 自建的 physics scene/ground plane。後續確認 Warp input arrays 原先跟隨 process-current `cuda:1`，可能與 PhysX articulation 的 `cuda:0` 不同，已改為顯式使用 articulation physics device 並加入 unit test。
+  > 歷史失效 session：同一個長時間運作的 Kit session 在先前 `cuda:1` allocation failure 後，RTX 持續回 `Cannot create cuda external memory`，之後發生 GPU page fault／`ERROR_DEVICE_LOST` 並產生 `.nv-gpudmp`；該 session 的結果未納入驗收。
+  > live 驗收（2026-08-24）：乾淨重啟後，Franka open/set-width/close 的總寬依序為 `0.08/0.03/0.0 m`，finger targets 為 `[0.04,0.04]`、`[0.015,0.015]`、`[0,0]`。錯誤 profile 回 `CONTROLLER_PROFILE_MISMATCH` 且 command targets 前後一致。Jetbot targets=`[2.9583333,3.7083333] rad/s`、Kaya targets=`[-9.304024,-6.6114283,-9.497344] rad/s`；兩者均取得有限 measured velocity，stop 後全部 wheel targets 立即讀回零。
+  > lifecycle／cleanup：Kaya experimental controller 回傳 ndarray 的 Isaac Sim 6 API 已正規化，並以 shuffled setup names unit test 驗證 joint reorder。verifier 最終 `pass=true`，只清除自建三個 robot 與 physics fixtures；全部 read-back absent、timeline stopped、Kit PID `29916`／TCP `8766` 存活，當次 log 關鍵錯誤 `0`、新增 native dump `0`。
+  > 契約：`docs/CONTROLLER_PROFILES.md`。
 
 ## Phase 3：Physics、材料與 USD stage
 

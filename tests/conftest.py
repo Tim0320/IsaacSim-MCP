@@ -121,6 +121,7 @@ def _install_isaac_stubs() -> None:
         # calls.  The stub asarray ignores them, but the attribute lookup must
         # not raise AttributeError.
         np_stub.float32 = "float32"  # type: ignore[attr-defined]
+        np_stub.float64 = "float64"  # type: ignore[attr-defined]
         np_stub.int32 = "int32"  # type: ignore[attr-defined]
         np_stub.uint8 = "uint8"  # type: ignore[attr-defined]
         np_stub.uint64 = "uint64"  # type: ignore[attr-defined]

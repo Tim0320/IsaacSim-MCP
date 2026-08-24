@@ -30,6 +30,7 @@ TOOLS_DIR = os.path.join(os.path.dirname(__file__), "..", "isaac_mcp", "tools")
 
 EXPECTED_MODULES = [
     "capabilities.py",
+    "controllers.py",
     "artifacts.py",
     "scene.py",
     "objects.py",
@@ -79,7 +80,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_62_unique_names():
+def test_named_tool_inventory_has_68_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -96,7 +97,7 @@ def test_named_tool_inventory_has_62_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 62
+    assert len(names) == 68
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
     assert {
@@ -105,6 +106,14 @@ def test_named_tool_inventory_has_62_unique_names():
         "execute_trajectory",
         "cancel_motion",
         "get_motion_status",
+    } <= set(names)
+    assert {
+        "list_controller_profiles",
+        "set_gripper_width",
+        "open_gripper",
+        "close_gripper",
+        "set_mobile_base_velocity",
+        "stop_mobile_base",
     } <= set(names)
     assert "get_lidar_config" in names
     assert "delete_sensor" in names

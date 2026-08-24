@@ -589,9 +589,14 @@ class IsaacAdapterV6(IsaacAdapterBase):
         try:
             self._ensure_physics_world()
             art = self._runtime_articulation(prim_path)
-            positions_arr = wp.array(np.asarray([list(positions)], dtype=np.float32), dtype=wp.float32)
+            array_kwargs = {"device": art._device} if getattr(art, "_device", None) is not None else {}
+            positions_arr = wp.array(
+                np.asarray([list(positions)], dtype=np.float32), dtype=wp.float32, **array_kwargs
+            )
             if joint_indices is not None:
-                idx_arr = wp.array(np.asarray(joint_indices, dtype=np.int32), dtype=wp.int32)
+                idx_arr = wp.array(
+                    np.asarray(joint_indices, dtype=np.int32), dtype=wp.int32, **array_kwargs
+                )
                 art.set_dof_position_targets(positions_arr, dof_indices=idx_arr)
             else:
                 art.set_dof_position_targets(positions_arr)
@@ -774,8 +779,13 @@ class IsaacAdapterV6(IsaacAdapterBase):
         if len(set(selected)) != len(selected) or any(index < 0 or index >= count for index in selected):
             raise ValueError("Joint command contains an invalid or duplicate DOF index")
 
-        values_arr = wp.array(np.asarray([list(values)], dtype=np.float32), dtype=wp.float32)
-        indices_arr = wp.array(np.asarray(selected, dtype=np.int32), dtype=wp.int32)
+        array_kwargs = {"device": art._device} if getattr(art, "_device", None) is not None else {}
+        values_arr = wp.array(
+            np.asarray([list(values)], dtype=np.float32), dtype=wp.float32, **array_kwargs
+        )
+        indices_arr = wp.array(
+            np.asarray(selected, dtype=np.int32), dtype=wp.int32, **array_kwargs
+        )
         if mode == "position":
             art.set_dof_position_targets(values_arr, dof_indices=indices_arr)
         elif mode == "velocity":
@@ -1134,6 +1144,48 @@ class IsaacAdapterV6(IsaacAdapterBase):
                 job["state"] = "cancelled"
         self._motion_update_subscription = None
         self._motion_trajectories.clear()
+
+    def compute_holonomic_wheel_velocities(
+        self,
+        prim_path: str,
+        com_prim_path: str,
+        command: Sequence[float],
+        joint_names: Sequence[str],
+    ) -> List[float]:
+        """Use NVIDIA's V6 USD setup and QP controller for a Kaya profile."""
+        from isaacsim.robot.experimental.wheeled_robots.controllers import HolonomicController
+        from isaacsim.robot.experimental.wheeled_robots.robots import HolonomicRobotUsdSetup
+
+        stage = self.get_stage()
+        if not stage.GetPrimAtPath(prim_path).IsValid():
+            raise ValueError(f"Prim not found: {prim_path}")
+        if not stage.GetPrimAtPath(com_prim_path).IsValid():
+            raise ValueError(f"Holonomic center-of-mass prim not found: {com_prim_path}")
+        setup = HolonomicRobotUsdSetup(robot_prim_path=prim_path, com_prim_path=com_prim_path)
+        wheel_radius, wheel_positions, wheel_orientations, mecanum_angles, wheel_axis, up_axis = (
+            setup.get_holonomic_controller_params()
+        )
+        controller = HolonomicController(
+            wheel_radius=wheel_radius,
+            wheel_positions=wheel_positions,
+            wheel_orientations=wheel_orientations,
+            mecanum_angles=mecanum_angles,
+            wheel_axis=wheel_axis,
+            up_axis=up_axis,
+        )
+        action = controller.forward(np.asarray(command, dtype=np.float64))
+        # Isaac Sim 6 experimental HolonomicController returns an ndarray;
+        # older controller variants wrap it in ArticulationAction.
+        values = getattr(action, "joint_velocities", action)
+        if values is None or len(values) != len(wheel_positions):
+            raise RuntimeError("HolonomicController returned an invalid wheel velocity vector")
+        setup_names = list(setup.get_articulation_controller_params())
+        if len(set(setup_names)) != len(setup_names) or set(setup_names) != set(joint_names):
+            raise ValueError(
+                f"USD mecanum joint names {setup_names} do not exactly match profile joints {list(joint_names)}"
+            )
+        by_name = dict(zip(setup_names, values))
+        return [float(by_name[name]) for name in joint_names]
 
     @staticmethod
     def _drive_units(joint_type: str) -> Dict[str, str]:

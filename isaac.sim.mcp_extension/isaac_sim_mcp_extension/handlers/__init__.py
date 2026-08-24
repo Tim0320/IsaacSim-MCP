@@ -41,6 +41,7 @@ def register_all_handlers(registry: Dict[str, Any], adapter: IsaacAdapterBase) -
         artifacts,
         assets,
         capabilities,
+        controllers,
         graphs,
         humans,
         lighting,
@@ -55,6 +56,7 @@ def register_all_handlers(registry: Dict[str, Any], adapter: IsaacAdapterBase) -
 
     for module in [
         capabilities,
+        controllers,
         artifacts,
         scene,
         objects,

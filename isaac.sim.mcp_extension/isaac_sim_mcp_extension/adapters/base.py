@@ -236,6 +236,16 @@ class IsaacAdapterBase(ABC):
         """Release motion update subscriptions during extension shutdown."""
         return None
 
+    def compute_holonomic_wheel_velocities(
+        self,
+        prim_path: str,
+        com_prim_path: str,
+        command: Sequence[float],
+        joint_names: Sequence[str],
+    ) -> List[float]:
+        """Resolve USD geometry and return targets in the requested joint-name order."""
+        raise NotImplementedError("Holonomic controller profiles require the Isaac Sim 6.x adapter")
+
     def get_joint_drive_config(self, prim_path: str) -> Dict[str, Any]:
         """Return typed drive gains, limits, and drive modes in runtime units."""
         raise NotImplementedError("Joint drive configuration requires the Isaac Sim 6.x adapter")

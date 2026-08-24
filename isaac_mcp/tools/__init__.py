@@ -51,6 +51,7 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
         artifacts,
         assets,
         capabilities,
+        controllers,
         graphs,
         humans,
         lighting,
@@ -67,6 +68,7 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
 
     for module in [
         capabilities,
+        controllers,
         artifacts,
         scene,
         objects,
