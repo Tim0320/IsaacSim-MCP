@@ -200,3 +200,49 @@ def test_delete_and_cleanup_are_idempotently_safe(tmp_path):
     cleanup = store.cleanup_expired()
     assert cleanup["deleted_count"] == 1
     assert cleanup["deleted_ids"] == [first["id"]]
+
+
+def test_json_payload_is_not_misread_as_a_metadata_sidecar(tmp_path):
+    store = ArtifactStore(root=tmp_path, ttl_seconds=60, max_total_bytes=4096, max_artifact_bytes=2048)
+    first = store.write_bytes(
+        b"[]",
+        kind="sdg_output",
+        format="json",
+        mime_type="application/json",
+        filename_prefix="sdg-output",
+    )
+
+    cleanup = store.cleanup_expired()
+    second = store.write_bytes(
+        b'{"schema_version":"1.0"}',
+        kind="sdg_manifest",
+        format="json",
+        mime_type="application/json",
+        filename_prefix="sdg-manifest",
+    )
+
+    assert cleanup["deleted_count"] == 0
+    assert store.info(first["handle"])["sha256"] == first["sha256"]
+    assert store.info(second["handle"])["sha256"] == second["sha256"]
+
+
+def test_json_payload_bytes_are_included_in_capacity_accounting(tmp_path):
+    store = ArtifactStore(root=tmp_path, ttl_seconds=60, max_total_bytes=4, max_artifact_bytes=4)
+    store.write_bytes(
+        b"1234",
+        kind="sdg_output",
+        format="json",
+        mime_type="application/json",
+        filename_prefix="sdg-output",
+    )
+
+    with pytest.raises(ArtifactError) as exc:
+        store.write_bytes(
+            b"x",
+            kind="sdg_manifest",
+            format="json",
+            mime_type="application/json",
+            filename_prefix="sdg-manifest",
+        )
+
+    assert exc.value.code == "ARTIFACT_CAPACITY_EXCEEDED"

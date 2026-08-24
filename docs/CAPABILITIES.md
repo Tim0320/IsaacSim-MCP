@@ -216,12 +216,22 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 
 2026-08-25 完成 Task 4.2 ROS 2 prerequisite 與 Clock publisher live 驗收：
 
-- registry：106 extension commands；`feature_flags.ros2.named_tools` 列出 8 個 tools、三項 required extensions、四種 QoS profile 與 ownership guard
+- registry：106 extension commands；`feature_flags.ros2.named_tools` 列出 8 個 tools、三項 required extensions、四種 QoS profile 與 ownership guard（Task 4.2 歷史值）
 - fail-closed：bridge/core/nodes disabled 時，實際 create 回 `ROS2_PREREQUISITE_MISSING` 且 Stage 未新增 graph
 - runtime：啟用 bundled Jazzy 後 bridge/core/nodes 版本為 `5.1.2`／`1.9.4`／`1.18.13`，domain 可由每個 workflow 明確覆寫
 - external subscriber：獨立 `C:\isaacsim\python.bat` Jazzy `rclpy` process 在 domain `42` 收到 20 筆 `/mcp_task_4_2/clock`；schema=`rosgraph_msgs/msg/Clock`，最近一次首筆 `{sec:0,nanosec:116666666}`、末筆 `{sec:0,nanosec:433333333}`，觀測頻率約 `60.23 Hz`
 - teardown：`delete_ros2_workflow` 後 graph、USD prim 與 ownership marker 都 absent；workflow list 還原、timeline stopped
 - 邊界：TF／JointState／Camera／RTX LiDAR 的 6.0 graph topology 與 public forwarding 已 offline 驗證；各資產型 publisher 仍須用相符外部 subscriber 做逐型 live message 驗收，不由 Clock 結果代替
+
+2026-08-25 完成 Task 4.3 Replicator/SDG job lifecycle live 驗收：
+
+- registry/runtime：113 extension commands；`feature_flags.replicator.sdg_workflows= supported`；`omni.replicator.core=1.13.27`
+- contract：7 個 named tools；BasicWriter、manual trigger、fixed seed、typed transform/light randomizers、managed artifacts、single active job、preview-by-default 與 cleanup read-back
+- deterministic：seed `4317` 的兩次 2-frame run 產生相同 trace 與 SHA-256 `05aa5ea00c8630aab62ece8c019a6ce32248c2614f974e71465ee228240a5f45`
+- output：live acceptance 使用 RGB 與 colorized semantic segmentation，各 annotation frame count 都為 `2`；manifest 記錄 relative path、format、bytes、SHA-256、annotation file/frame counts
+- boundary：bbox/distance 等 NumPy annotations 在 Isaac Sim 6.0.1 BasicWriter 會因 removed `fix_imports` argument 產生 backend error，目前 fail-closed 列為 unavailable，不由 partial JSON output 升級
+- cancel/cleanup：100-frame run 在第 `2` frame 取消；writer detached、render product destroyed、trigger removed 全為 true；scratch fixture absent、retained job count `0`、timeline stopped
+- verifier：`scripts/verify_replicator_sdg_live.py`；固定使用獨立 scratch fixture，不納入 destructive `tests/test_integration.py`
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

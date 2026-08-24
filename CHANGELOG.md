@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — bounded Replicator synthetic-data jobs
+
+- Added seven named tools for Replicator status, typed SDG job creation,
+  asynchronous start/status/cancel, managed manifests, and terminal job cleanup.
+  The named-tool inventory is now 113.
+- BasicWriter jobs use bounded manual triggers, fixed seeds, typed transform or
+  light randomizers, a single-active-job guard, and preview-by-default writes.
+- Output files and the terminal manifest use managed artifact handles with
+  relative paths, sizes, SHA-256, formats, and per-annotation file/frame counts.
+- Every terminal path detaches its writer, destroys the owned render product,
+  removes the owned trigger state, restores randomized USD attributes and the
+  previous capture-on-play setting, and exposes cleanup read-back.
+- Added a scratch live verifier that reproduced an exact fixed-seed trace over
+  two runs, validated RGB and semantic-segmentation output counts, cancelled a 100-frame
+  job after two frames, and restored an empty job registry and stopped timeline.
+- Fixed artifact cleanup so producer JSON payloads cannot be mistaken for
+  32-character managed metadata sidecars, while still counting JSON payload
+  bytes against the configured artifact capacity.
+- NumPy-backed bbox/distance annotations fail closed on Isaac Sim 6.0.1 because
+  its BasicWriter passes a removed `fix_imports` argument; partial output is not
+  reported as success. RGB and colorized segmentation are the live-supported set.
+
 ### Added — guarded ROS 2 publisher workflows
 
 - Added eight named ROS 2 tools for runtime/prerequisite status, owned-workflow

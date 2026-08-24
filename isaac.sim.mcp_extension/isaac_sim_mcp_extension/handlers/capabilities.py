@@ -192,6 +192,7 @@ def _feature_flags(
     ros2_bridge_enabled: Optional[bool] = None,
     ros2_core_enabled: Optional[bool] = None,
     ros2_nodes_enabled: Optional[bool] = None,
+    replicator_core_enabled: Optional[bool] = None,
 ) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     fallback_verification = "verified" if physics_backend == "physx" else "unverified"
@@ -648,7 +649,33 @@ def _feature_flags(
             "ownership_guarded_delete": True,
             "external_subscriber_verification_required": True,
         },
-        "replicator.sdg_workflows": {"state": "unsupported"},
+        "replicator.sdg_workflows": {
+            "state": (
+                "supported"
+                if adapter_generation == 6 and replicator_core_enabled is True
+                else "unavailable"
+                if replicator_core_enabled is False
+                else "unknown"
+            ),
+            "tools": [
+                "get_replicator_status",
+                "create_sdg_job",
+                "start_sdg_job",
+                "get_sdg_job_status",
+                "cancel_sdg_job",
+                "get_sdg_manifest",
+                "delete_sdg_job",
+            ],
+            "required_extensions": ["omni.replicator.core"],
+            "writer": "BasicWriter",
+            "trigger_modes": ["manual"],
+            "randomizer_types": ["transform", "light"],
+            "fixed_seed": True,
+            "managed_artifacts": True,
+            "preview_default": True,
+            "single_active_job": True,
+            "cleanup_readback": True,
+        },
         "human.spawn": {"state": "supported"},
         "human.lifecycle": {"state": "partial"},
         "execute_script": {"state": "supported", "risk": "high"},
@@ -724,6 +751,7 @@ def get_capabilities(
     ros2_bridge_enabled = extensions["isaacsim.ros2.bridge"]["enabled"]
     ros2_core_enabled = extensions["isaacsim.ros2.core"]["enabled"]
     ros2_nodes_enabled = extensions["isaacsim.ros2.nodes"]["enabled"]
+    replicator_core_enabled = extensions["omni.replicator.core"]["enabled"]
     backend_matrix = _backend_matrix(adapter, runtime["physics_backend"])
     return {
         "status": "success",
@@ -750,6 +778,7 @@ def get_capabilities(
             ros2_bridge_enabled,
             ros2_core_enabled,
             ros2_nodes_enabled,
+            replicator_core_enabled,
         ),
         "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"], runtime["physics_backend"]),
         "sensor_warmup": _sensor_warmup(adapter),

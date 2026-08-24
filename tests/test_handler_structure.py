@@ -127,6 +127,7 @@ def test_all_handler_modules_have_register():
         "stage_composition.py",
         "objects.py",
         "physics.py",
+        "replicator.py",
         "humans.py",
         "lighting.py",
         "robots.py",

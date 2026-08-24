@@ -275,11 +275,14 @@
   > offline 驗收：ROS 2 focused contract `43 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `336 passed`，Ruff、Python compile 與 `git diff --check` 通過。
   > 驗證邊界：Clock 已完成真正外部 subscriber；TF／JointState／Camera／LiDAR 已完成 6.0 topology、forwarding、validation、preview/ownership offline contract，但仍需各自對應資產與外部 subscriber 的逐型 live schema/frame 驗收，不能由 Clock 證據代替。契約與 verifier：`docs/ROS2_WORKFLOWS.md`、`scripts/verify_ros2_workflows_live.py`。
 
-- [ ] 18. Replicator 與 synthetic data generation
-  > 現況：除基本 camera capture 與 `spawn_human` 外，缺 randomizer、writer、trigger、annotation export 與 job lifecycle 的 typed 控制。
-  > 缺漏位置：tool registry 尚無完整 replicator/SDG 模組。
-  > 實作：新增 writer 設定、frame count、trigger、randomization graph、start/cancel/status、輸出 manifest；沿用共用 artifact 契約。
-  > 驗收：固定 seed 可重現；輸出 frame、annotation、metadata 數量一致；取消後不殘留 writer/trigger。
+- [x] 18. Replicator 與 synthetic data generation
+  > 已實作：新增 7 個 Replicator SDG named tools，registry `106→113`；支援 bounded `BasicWriter`、manual trigger、frame/resolution/subframe/delta-time、固定 seed、typed transform/light randomization、非阻塞 start/status/cancel、terminal manifest 與 job/artifact delete。
+  > 安全契約：create/start/cancel/delete 預設 `preview=true`；frame、pixel、annotation、randomizer 與 retained job 數量皆有上限；同時只允許一個 active job。輸出逐檔轉為 managed artifact，manifest 包含相對路徑、size、SHA-256、format、annotation frame/file counts 與 deterministic randomization trace hash。
+  > teardown：每個終態 read-back `writer_detached=true`、`render_product_destroyed=true`、`trigger_removed=true`，並還原 capture-on-play 與被 randomize 的 USD attributes；取消只在 frame safe point 生效，不留下背景寫入。
+  > artifact 修復：JSON annotation output 曾暴露 managed `.json` data 被 cleanup 誤判為 sidecar；sidecar 掃描已限縮為 exact 32-character managed ID，regression test 證明 JSON payload/manifest 可連續寫入與查詢。
+  > live 驗收（2026-08-25）：Replicator core `1.13.27`；兩次 seed `4317` 的 2-frame RGB + semantic-segmentation job，randomization trace/hash 完全一致；每輪兩種 annotation frame count 都是 `2`。100-frame job 在 bounded frame safe point 取消，terminal=`cancelled` 且三項 cleanup 全 true。最後 scratch fixture absent、job count `0`、timeline stopped。
+  > runtime 邊界：Isaac Sim 6.0.1 `BasicWriter` 的 bbox NumPy backend 會傳入目前 NumPy 已移除的 `fix_imports` 參數並產生 partial output，因此 bbox/distance 等 NumPy annotations 目前 fail-closed 列為 unavailable；named workflow 只宣稱 live-verified RGB 與 colorized semantic/instance segmentation，不能以部分 JSON 檔誤報 bbox 成功。
+  > offline 驗收：focused Replicator/artifact tests `26 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `351 passed, 1 deselected`；專用 verifier：`scripts/verify_replicator_sdg_live.py`。不可用會累積 sensor/robot 的 `tests/test_integration.py` 取代此 teardown acceptance。完整契約：`docs/REPLICATOR_SDG.md`。
 
 - [ ] 19. Human lifecycle 與 runtime 行為控制
   > 現況：已有 `spawn_human`；移動、朝向、idle、刪除、行為更新與 NavMesh status 仍依賴 `reload_script`/`execute_script`。

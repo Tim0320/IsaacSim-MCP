@@ -163,6 +163,27 @@ def test_handler_returns_stable_runtime_capability_contract():
         "ownership_guarded_delete": True,
         "external_subscriber_verification_required": True,
     }
+    assert result["feature_flags"]["replicator.sdg_workflows"] == {
+        "state": "unavailable",
+        "tools": [
+            "get_replicator_status",
+            "create_sdg_job",
+            "start_sdg_job",
+            "get_sdg_job_status",
+            "cancel_sdg_job",
+            "get_sdg_manifest",
+            "delete_sdg_job",
+        ],
+        "required_extensions": ["omni.replicator.core"],
+        "writer": "BasicWriter",
+        "trigger_modes": ["manual"],
+        "randomizer_types": ["transform", "light"],
+        "fixed_seed": True,
+        "managed_artifacts": True,
+        "preview_default": True,
+        "single_active_job": True,
+        "cleanup_readback": True,
+    }
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",
         "delete_tool": "delete_sensor",

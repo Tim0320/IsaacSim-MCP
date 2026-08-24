@@ -35,6 +35,7 @@ EXPECTED_MODULES = [
     "scene.py",
     "objects.py",
     "physics.py",
+    "replicator.py",
     "ros2.py",
     "humans.py",
     "lighting.py",
@@ -72,6 +73,7 @@ def test_init_imports_all_modules():
         "scene",
         "objects",
         "physics",
+        "replicator",
         "ros2",
         "humans",
         "lighting",
@@ -84,7 +86,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_106_unique_names():
+def test_named_tool_inventory_has_113_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -101,7 +103,7 @@ def test_named_tool_inventory_has_106_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 106
+    assert len(names) == 113
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
     assert {
@@ -110,6 +112,15 @@ def test_named_tool_inventory_has_106_unique_names():
         "execute_trajectory",
         "cancel_motion",
         "get_motion_status",
+    } <= set(names)
+    assert {
+        "get_replicator_status",
+        "create_sdg_job",
+        "start_sdg_job",
+        "get_sdg_job_status",
+        "cancel_sdg_job",
+        "get_sdg_manifest",
+        "delete_sdg_job",
     } <= set(names)
     assert {
         "list_controller_profiles",

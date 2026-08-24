@@ -28,6 +28,7 @@ DEFAULT_MAX_CHUNK_BYTES = 1024 * 1024
 DEFAULT_READ_LENGTH = 256 * 1024
 
 _HANDLE = re.compile(r"^artifact://managed/([A-Za-z0-9_-]{32})$")
+_SIDECAR_NAME = re.compile(r"^[A-Za-z0-9_-]{32}\.json$")
 _PREFIX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _FORMAT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+-]{0,31}$")
 
@@ -154,7 +155,7 @@ class ArtifactStore:
     def _current_bytes(self) -> int:
         total = 0
         for path in self.root.iterdir():
-            if path.is_file() and path.suffix != ".json" and not path.name.startswith("."):
+            if path.is_file() and not _SIDECAR_NAME.fullmatch(path.name) and not path.name.startswith("."):
                 total += path.stat().st_size
         return total
 
@@ -293,7 +294,9 @@ class ArtifactStore:
         deleted_ids = []
         freed_bytes = 0
         now = self._now()
-        for sidecar in sorted(self.root.glob("*.json")):
+        # Managed JSON payloads also end in .json. Only the exact 32-character
+        # metadata ID form is a sidecar; producer-prefixed JSON files are data.
+        for sidecar in sorted(path for path in self.root.glob("*.json") if _SIDECAR_NAME.fullmatch(path.name)):
             try:
                 metadata = json.loads(sidecar.read_text(encoding="utf-8"))
                 expires_epoch = metadata.get("expires_epoch")
