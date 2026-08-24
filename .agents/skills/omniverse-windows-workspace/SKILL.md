@@ -13,7 +13,7 @@ Use the installed Windows baseline and choose the correct execution path before 
 2. Read [references/mcp-routing.md](references/mcp-routing.md) before choosing an MCP server or launcher.
 3. Read [references/environment.md](references/environment.md) when paths, versions, Python runtimes, or installation portability matter.
 4. Read [references/isaacsim-mcp-1x.md](references/isaacsim-mcp-1x.md) when the request involves Camera, LiDAR, artifacts, sensor deletion, tasks 1.1 through 1.6, or the completed IsaacSim-MCP 1.x research baseline.
-5. Read [references/isaacsim-mcp-2x.md](references/isaacsim-mcp-2x.md) when the request involves Robot joint state, position/velocity/effort command modes, or task 2.1 and later Phase 2 work.
+5. Read [references/isaacsim-mcp-2x.md](references/isaacsim-mcp-2x.md) when the request involves Robot joint state/commands, Drive configuration, IK/trajectory jobs, grippers, mobile bases, or tasks 2.1 through 2.4.
 6. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
 
 Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely because a process is stopped or a tool is unavailable. Diagnose the existing installation first.
@@ -31,6 +31,12 @@ Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely 
 Tasks 1.1 through 1.6 are the completed Camera, LiDAR, artifact transport, and sensor lifecycle baseline for Isaac Sim 6.0.1. Use the 1.x reference as the navigation index, then read the linked contract and verifier for the requested capability. Do not rely on a short summary when changing a response schema, runtime lifecycle, transfer limit, or live verification rule.
 
 Treat the recorded 2026-08-23 live results as historical evidence. Recheck the current Git checkout, `get_capabilities`, Isaac Sim version, extension command count, live port, physics GPU selection, and scratch stage before claiming current verification.
+
+## IsaacSim-MCP 2.x baseline
+
+Tasks 2.1 through 2.4 are the completed Robot-control baseline for Isaac Sim 6.0.1: atomic joint state/commands, stopped-timeline Drive configuration, bounded Lula motion jobs, and explicit-profile gripper/mobile-base commands. Start with the 2.x reference for the numbering map, invariants, known runtime hazards, and recorded acceptance evidence. Then read the linked contract and live verifier for the requested capability.
+
+Treat every recorded 2.x result as historical evidence. Before a current support claim, confirm the canonical checkout, 68-command registry, PhysX backend, required extensions, TCP `8766`, active-display physics GPU, empty scratch Stage, target/measured-state read-back, owned-fixture cleanup, Kit survival, run-scoped logs, and native dumps. If a run reports a CUDA device mismatch, external-memory failure, GPU page fault, or `ERROR_DEVICE_LOST`, discard that runtime and restart before rerunning 2.4, then 2.3.
 
 ## Live scene workflow
 
@@ -50,6 +56,7 @@ Never claim a scene edit succeeded from code generation alone. Verify through an
 - Do not use a documentation MCP response as evidence that a live stage was modified.
 - Treat a successful Python import as runtime evidence only. It does not prove the Isaac Sim stage or extension is ready.
 - Keep 1.x live tests inside their dedicated scratch namespaces. Refuse or isolate a stage containing unrelated user prims before destructive verification.
+- Keep 2.x live tests inside their dedicated scratch namespaces. Run each verifier's read-only guard before Stop, clear, fixture creation, or command writes; only delete verifier-owned robot and physics prims.
 - Obtain explicit authorization before publishing, deleting, or overwriting external or material data.
 
 ## Finish with evidence

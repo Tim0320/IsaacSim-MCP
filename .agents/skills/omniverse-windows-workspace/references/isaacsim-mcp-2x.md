@@ -3,6 +3,31 @@
 Use this reference for Phase 2 Robot control work in
 `docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`.
 
+## Contents
+
+- [Retrieval workflow](#retrieval-workflow)
+- [Numbering map](#numbering-map)
+- [2.3 invariants](#23-invariants)
+- [2.2 invariants](#22-invariants)
+- [2.1 invariants](#21-invariants)
+- [Recorded 2.1 evidence](#recorded-21-evidence)
+- [Recorded 2.2 evidence](#recorded-22-evidence)
+- [Recorded final 2.3 acceptance](#recorded-final-23-acceptance)
+- [Task 2.4 controller profile invariants](#task-24-controller-profile-invariants)
+- [Recorded 2.4 read-only guard evidence](#recorded-24-read-only-guard-evidence)
+- [Recorded 2.4 failed scratch rerun](#recorded-24-failed-scratch-rerun)
+- [Recorded final 2.4 acceptance](#recorded-final-24-acceptance)
+
+## Retrieval workflow
+
+1. Identify the research label in the numbering map.
+2. Read the linked contract for schema, units, prerequisites, limitations, and stable errors.
+3. Inspect the linked verifier before changing implementation or making a live claim.
+4. Read the matching invariant and recorded-evidence sections below.
+5. Confirm the current checkbox and Phase boundary in the implementation task.
+
+Recorded results are historical baselines. A current live claim requires a fresh guarded verifier run plus checkout, capability registry, backend/extensions, GPU, TCP, cleanup, process, log, and native-dump evidence.
+
 ## Numbering map
 
 | Research label | Task item | Capability | Named tools | Contract | Live verifier |

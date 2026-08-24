@@ -46,6 +46,16 @@
 | 2.3 | Lula IK、RRT／C-space trajectory、non-blocking job、pause/resume、cancel、timeout | `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`, `cancel_motion`, `get_motion_status` | [`MOTION_CONTROL.md`](docs/MOTION_CONTROL.md)／[`verify_motion_control_live.py`](scripts/verify_motion_control_live.py) |
 | 2.4 | Explicit profile gripper width/open/close、differential/holonomic base velocity 與 zero-target stop | `list_controller_profiles`, `set_gripper_width`, `open_gripper`, `close_gripper`, `set_mobile_base_velocity`, `stop_mobile_base` | [`CONTROLLER_PROFILES.md`](docs/CONTROLLER_PROFILES.md)／[`verify_controller_profiles_live.py`](scripts/verify_controller_profiles_live.py) |
 
+後續 agent 處理 Robot 2.x 時，依序讀取：
+
+1. 專案 skill 的 [`SKILL.md`](.agents/skills/omniverse-windows-workspace/SKILL.md)，確認 repository、runtime、MCP route 與 scratch-stage 安全規則。
+2. [`isaacsim-mcp-2x.md`](.agents/skills/omniverse-windows-workspace/references/isaacsim-mcp-2x.md)，確認 2.1～2.4 編號、invariants、已知 runtime hazards 與歷史驗收證據。
+3. 表格連結的 capability contract，確認 schema、units、prerequisites、支援邊界與 stable error codes。
+4. 對應 live verifier，確認 fixture namespace、guard、read-back、cleanup 與 health gate 的實際執行方式。
+5. [`ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`](docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md)，確認整體 Phase 2 狀態與後續 task 邊界。
+
+README 與 skill 中的 2026-08-24 結果是歷史驗收基準。後續要宣稱目前版本仍可控制，必須在當下 checkout 重新核對 68-command registry、PhysX/backend、required extensions、TCP `8766`、active-display physics GPU、空白 scratch Stage、target/measured-state read-back、fixture cleanup、Kit process、run log 與 native dump。
+
 `effort` 是每個 update 必須重送的 command。連續控制由後續 controller lifecycle 負責；目前 tool 會套用一次並立即 read-back。
 
 2026-08-24 已在 Isaac Sim `6.0.1-rc.7`／PhysX 以 9-DOF Franka scratch fixture 完成 2.1 live 驗證；三種 target、physics update 後 measured state、invalid-name atomicity、Stop-first cleanup、PID/port、GPU、log 與 native dump 檢查均通過。
