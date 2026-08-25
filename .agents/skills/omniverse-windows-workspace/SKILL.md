@@ -1,6 +1,6 @@
 ---
 name: omniverse-windows-workspace
-description: Operate, develop, diagnose, and maintain a Windows NVIDIA Omniverse and Isaac Sim MCP workspace. Use whenever a request mentions Omniverse, Isaac Sim, Isaac Lab, OpenUSD, USD, pxr, omni, Kit, OmniUI, physics or material authoring, stage composition, OmniGraph or ScriptNode, ROS 2, Replicator SDG, IRA humans or Behavior Agents, robot or factory simulation, NVIDIA assets, VS Code MCP, the live Isaac Sim extension socket, headless SimulationApp, or importing omni without opening the GUI. Routes documentation questions separately from live scene control, selects the Isaac runtime for local code, and preserves credentials, scenes, and unrelated Git changes.
+description: Operate, develop, diagnose, and maintain a Windows NVIDIA Omniverse and Isaac Sim MCP workspace. Use whenever a request mentions Omniverse, Isaac Sim, Isaac Lab, OpenUSD, USD, pxr, omni, Kit, OmniUI, physics or material authoring, stage composition, OmniGraph or ScriptNode, ROS 2, Replicator SDG, IRA humans or Behavior Agents, command governance, script policy, async jobs, transport limits, diagnostics, robot or factory simulation, NVIDIA assets, VS Code MCP, the live Isaac Sim extension socket, headless SimulationApp, or importing omni without opening the GUI. Routes documentation questions separately from live scene control, selects the Isaac runtime for local code, and preserves credentials, scenes, and unrelated Git changes.
 ---
 
 # Omniverse Windows Workspace
@@ -16,7 +16,8 @@ Use the installed Windows baseline and choose the correct execution path before 
 5. Read [references/isaacsim-mcp-2x.md](references/isaacsim-mcp-2x.md) when the request involves Robot joint state/commands, Drive configuration, IK/trajectory jobs, grippers, mobile bases, or tasks 2.1 through 2.4.
 6. Read [references/isaacsim-mcp-3x.md](references/isaacsim-mcp-3x.md) when the request involves physics parameters, backend capability state, rigid bodies, colliders, joints, physics materials, Stage lifecycle, USD composition, variants, semantics, typed attributes, or tasks 3.1 through 3.5.
 7. Read [references/isaacsim-mcp-4x.md](references/isaacsim-mcp-4x.md) when the request involves Action Graph lifecycle, ScriptNode configure/reload, ROS 2 workflows, Replicator SDG jobs, IRA humans, Behavior Agents, NavMesh, or tasks 4.1 through 4.4.
-8. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
+8. Read [references/isaacsim-mcp-5x.md](references/isaacsim-mcp-5x.md) when the request involves `execute_script` policy, command ID/idempotency, response lifecycle, transaction boundaries, managed jobs, cancellation/deadlines, socket limits, log correlation/redaction, publishing, or tasks 5.1 through 5.4.
+9. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
 
 Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely because a process is stopped or a tool is unavailable. Diagnose the existing installation first.
 
@@ -52,6 +53,12 @@ Tasks 4.1 through 4.4 are the completed integration-lifecycle baseline for Isaac
 
 Treat recorded 4.x command counts and live results as historical evidence. Recheck the current checkout, `get_capabilities`, required extension versions, timeline state, owned scratch namespace, response read-back/rollback, fixture and artifact cleanup, Kit/TCP health, run-scoped logs, and native dumps before claiming current support. Clock subscriber evidence does not prove asset-specific ROS 2 publishers; task acceptance does not prove a human reached its target; a deterministic SDG trace does not promise cross-machine renderer hashes.
 
+## IsaacSim-MCP 5.x baseline
+
+Tasks 5.1 through 5.4 are the completed security, reliability, and observability baseline for Isaac Sim 6.0.1: bounded script policy, command correlation and idempotent replay, limited Stage transactions, unified long-running jobs and cancellation, transport limits, and command-correlated redacted diagnostics. Start with the 5.x reference for the numbering map, exact limits, lifecycle states, implementation paths, verifier routes, and publish gates.
+
+Treat recorded 5.x command counts, PIDs, test totals, and live results as historical evidence. Before a current claim, recheck the canonical checkout and remote, 128-command registry, policy/capability flags, job terminal state and repeat-query behavior, legacy and structured log redaction, transport limits, scratch cleanup, Kit/TCP health, and native dumps. Runtime idempotency is not durable, cooperative cancellation cannot preempt native Kit calls, and Stage batch rollback does not cover cross-subsystem work.
+
 ## Live scene workflow
 
 1. Resolve `ISAACSIM_ROOT`, defaulting to `C:\isaacsim` when it is not configured.
@@ -73,6 +80,7 @@ Never claim a scene edit succeeded from code generation alone. Verify through an
 - Keep 2.x live tests inside their dedicated scratch namespaces. Run each verifier's read-only guard before Stop, clear, fixture creation, or command writes; only delete verifier-owned robot and physics prims.
 - Keep 3.x writes inside verifier-owned scratch namespaces or explicit filesystem scratch roots. Preserve existing PhysicsScene and Stage root/session layers with snapshot/restore. Do not run `tests/test_integration.py` as part of an offline suite while live TCP `8766` is reachable.
 - Keep 4.x writes inside exact MCP-owned graph, job, workflow, human, artifact, and scratch namespaces. Honor preview/timeline prerequisites, never mutate external humans or graphs, and use only the dedicated 4.x verifiers for live acceptance. Do not substitute `tests/test_integration.py` while TCP `8766` is reachable.
+- Keep 5.x verification within the script/job/diagnostic policy and dedicated scratch namespaces. Preserve runtime-only idempotency semantics, bounded response/log behavior, provider-owned motion/SDG lifecycles, complete redaction, and pre/post-publish backup gates. Do not expand `apply_stage_batch` into an unsupported cross-subsystem transaction.
 - Obtain explicit authorization before publishing, deleting, or overwriting external or material data.
 
 ## Finish with evidence

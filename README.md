@@ -112,8 +112,6 @@ ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file`
 
 4.4 將既有 `spawn_human` 擴充為 10 個 Human tools。Read tools 可描述 external human，但控制與刪除只接受 schema `1.0` MCP-owned character；MoveTo／LookAt／Idle 要求 Timeline Play，NavMesh bake 與 delete 要求 stopped/paused。`speed_mps` 依 Stage `metersPerUnit` 轉換並回傳 runtime stage-unit read-back。2026-08-25 live run 驗證 IRA `1.6.8`、Behavior／Navigation Core `110.1.4`、NavMesh ready、stopped rejection、MoveTo task 與 `0.2639` stage-unit 位移、LookAt、Idle、exact delete、fixture/list restore 與 stopped timeline。Task accepted 不代表已抵達，後續仍須用 `get_human` 驗 position/task state。
 
-5.3/5.4 新增 4 個共用 job tools，為 asset/sensor 長操作提供 bounded retained lifecycle，並讓 motion/SDG job 共用 status/cancel 入口。TCP request/response 與 socket wait 有 fail-closed 上限；`get_isaac_logs` 新增 command-correlated structured records、bounded filters 與 sensitive-value redaction。2026-08-25 live run 證明 Camera job 不依賴 client socket 存活、同 job 重查不重跑、SDG 共用取消與完整 cleanup，以及 dispatcher/Kit/stdout 同 command ID 追蹤。完整契約見 [`docs/JOB_DIAGNOSTICS.md`](docs/JOB_DIAGNOSTICS.md)。
-
 後續 agent 處理 4.x 時，依序讀取：
 
 1. 專案 skill 的 [`SKILL.md`](.agents/skills/omniverse-windows-workspace/SKILL.md)，確認 repository、runtime、live route、ownership 與 scratch-stage 規則。
@@ -121,6 +119,29 @@ ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file`
 3. 對應的 `OMNIGRAPH_LIFECYCLE.md`、`ROS2_WORKFLOWS.md`、`REPLICATOR_SDG.md` 或 `HUMAN_LIFECYCLE.md`，再讀 handler、tests 與 verifier。
 
 以上 98／106／113／122 command counts 與 live 數值都是各項完成當時的歷史證據。宣稱目前仍可控制前，必須重驗 checkout、`get_capabilities`、extension versions、timeline、owned scratch namespace、read-back/rollback、cleanup、Kit/TCP、run log 與 native dump。不可用 documentation MCP、static tests 或 live `8766` 開啟時的 destructive `tests/test_integration.py` 取代專用驗收。
+
+## IsaacSim-MCP 5.x 安全、可靠性與可觀測性
+
+| 研究項目 | 能力 | Named tools／共用介面 | 契約／驗證 |
+|---|---|---|---|
+| 5.1 | `execute_script`／`reload_script` policy、path/timeout/output/background limits 與 hash-only audit | `execute_script`, `reload_script`, `get_script_policy`, `get_script_audit_log` | [`COMMAND_GOVERNANCE.md`](docs/COMMAND_GOVERNANCE.md)／[`verify_command_governance_live.py`](scripts/verify_command_governance_live.py) |
+| 5.2 | 全 tool command ID、runtime idempotency replay、write lifecycle/read-back 與 Stage batch rollback | 所有 tools 的 `command_id`／`idempotency_key`；`apply_stage_batch` | [`COMMAND_GOVERNANCE.md`](docs/COMMAND_GOVERNANCE.md)、[`RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)／[`verify_command_governance_live.py`](scripts/verify_command_governance_live.py) |
+| 5.3 | asset/sensor managed jobs、motion/SDG 共用 status/cancel、deadline 與 socket request/response limits | `start_job`, `get_job_status`, `cancel_job`, `list_jobs` | [`JOB_DIAGNOSTICS.md`](docs/JOB_DIAGNOSTICS.md)／[`verify_job_diagnostics_live.py`](scripts/verify_job_diagnostics_live.py) |
+| 5.4 | command-correlated structured/legacy logs、bounded query 與 sensitive-value redaction | `get_isaac_logs` | [`JOB_DIAGNOSTICS.md`](docs/JOB_DIAGNOSTICS.md)／[`verify_job_diagnostics_live.py`](scripts/verify_job_diagnostics_live.py) |
+
+5.1/5.2 將全部 named tools 納入同一 response 與 command governance。相同 idempotency key/payload 只 replay 原執行結果；key collision 在 handler 前 fail closed。Ledger 只有目前 Kit runtime 的 256-entry、600-second bounded 狀態，不是 durable dedup。`apply_stage_batch` 只保證 Stage composition writes 的 snapshot/rollback，不能延伸宣稱 sensor、ROS 2、Replicator、motion 或 filesystem 跨 subsystem transaction。
+
+5.3/5.4 新增 4 個共用 job tools，為 asset/sensor 長操作提供 bounded retained lifecycle，並讓 motion/SDG job 共用 status/cancel 入口。預設 request 1 MiB、response 16 MiB、socket wait 300 秒；`get_isaac_logs` 提供 command ID/type、timestamp、severity、source、stage 等 structured records，且 structured/legacy buffers 都先 redaction。Script/job timeout 與 cancellation 採 cooperative safe point，native Kit call 只能在控制權回到 Python 後觀察 deadline。
+
+2026-08-25 歷史驗收：5.1/5.2 使用 124-command registry，驗證 cwd/background/output/timeout fail-closed、timeout target absent、idempotent create/collision、Stage batch rollback 與 hash-only audit。5.3/5.4 使用 128-command registry，Camera metadata job 在 client disconnect 後仍 `succeeded` 且 repeat result 相同；100-frame SDG 在第 3 frame 經共用 cancel 進入 `cancelled`，writer/render product/trigger cleanup 全 true。Intentional warning/stdout 取得 dispatcher/Kit/stdout correlation，synthetic token raw value 在 structured/legacy log 都 absent。Safe suite 為 `384 passed, 1 deselected`。
+
+後續 agent 處理 5.x 時，依序讀取：
+
+1. 專案 skill 的 [`SKILL.md`](.agents/skills/omniverse-windows-workspace/SKILL.md)，確認 canonical repository、runtime、live route、credential、backup 與 scratch 規則。
+2. [`isaacsim-mcp-5x.md`](.agents/skills/omniverse-windows-workspace/references/isaacsim-mcp-5x.md)，確認 5.1～5.4 編號、exact limits、lifecycle states、source map、evidence limits 與 publish gate。
+3. 對應的 `COMMAND_GOVERNANCE.md`、`RESPONSE_SCHEMA.md` 或 `JOB_DIAGNOSTICS.md`，再讀 public tools、dispatcher/handler、focused tests 與專用 verifier。
+
+以上 124／128 command counts、PID、frame 與 test totals 都是各項完成當時的歷史證據。宣稱目前仍可控制前，必須重驗 checkout/remote、`get_capabilities`、policy flags、job terminal/requery、structured/legacy redaction、transport limits、cleanup、Kit/TCP、run log 與 native dump。Camera job 要先 Play 與 bounded warmup；每次 verifier 使用唯一 idempotency key，避免舊 runtime replay 被誤判成新執行。
 
 ## 系統需求
 
@@ -437,8 +458,8 @@ uv run ruff format --check .
 
 ```text
 IsaacSim-MCP/
-├─ .agents/                   專案 skill 與 1.x／2.x／3.x／4.x 後續 agent 閱讀索引
-├─ isaac_mcp/                 Python MCP Server 與 122 個 tool 定義
+├─ .agents/                   專案 skill 與 1.x／2.x／3.x／4.x／5.x 後續 agent 閱讀索引
+├─ isaac_mcp/                 Python MCP Server 與 128 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
 ├─ demo/                      機器人控制範例
