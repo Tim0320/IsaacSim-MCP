@@ -97,6 +97,8 @@ README 與 skill 中的歷史結果只能當作基準。後續要宣稱目前版
 |---|---|---|---|
 | 4.1 | Action Graph 完整 lifecycle、runtime status、exact ScriptNode configure/reload | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` | [`OMNIGRAPH_LIFECYCLE.md`](docs/OMNIGRAPH_LIFECYCLE.md)／[`verify_omnigraph_lifecycle_live.py`](scripts/verify_omnigraph_lifecycle_live.py) |
 | 4.2 | ROS 2 prerequisite/domain/QoS status與 typed publisher workflows | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` | [`ROS2_WORKFLOWS.md`](docs/ROS2_WORKFLOWS.md)／[`verify_ros2_workflows_live.py`](scripts/verify_ros2_workflows_live.py) |
+| 4.3 | bounded Replicator BasicWriter SDG jobs、typed randomization 與 managed manifest | `get_replicator_status`, `create_sdg_job`, `start_sdg_job`, `get_sdg_job_status`, `cancel_sdg_job`, `get_sdg_manifest`, `delete_sdg_job` | [`REPLICATOR_SDG.md`](docs/REPLICATOR_SDG.md)／[`verify_replicator_sdg_live.py`](scripts/verify_replicator_sdg_live.py) |
+| 4.4 | MCP-owned IRA human lifecycle、Behavior Agent tasks/settings 與 NavMesh | `spawn_human`, `list_humans`, `get_human`, `delete_human`, `set_human_target`, `set_human_look_at`, `set_human_idle`, `set_human_behavior`, `get_navmesh_status`, `bake_navmesh` | [`HUMAN_LIFECYCLE.md`](docs/HUMAN_LIFECYCLE.md)／[`verify_human_lifecycle_live.py`](scripts/verify_human_lifecycle_live.py) |
 
 4.1 已完成 12 個 named tools 的程式與 offline contract。新增寫入預設 `preview=true`，所有 graph 寫入要求 stopped timeline；唯一例外是 `set_action_graph_enabled(enabled=false)` 可在 playing 時緊急停用。連線、enabled state、ScriptNode 與刪除各自執行 read-back 和 rollback；刪除使用可 `undo()` 的 `DeletePrimsCommand`。enabled state 屬於 runtime-only，不會宣稱已持久寫入 USD。
 
@@ -105,6 +107,18 @@ ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file`
 2026-08-25 的專用 live verifier 以 98-command registry 與 `/World/MCP_Task_4_1` scratch graph 完成 4.1 驗收。Graph 有 3 nodes 與 1 條初始 edge；短 Play/Stop 驗證 inline `A→B→RECOVERED`、file `C→D` reload，disabled 時 compute count 固定為 `27`。duplicate edge、runtime exception status、delete 後 graph/prim absence、graph list restore 與 stopped timeline 全數通過。stopped explicit evaluation 只增加 OnTick count，ScriptNode 維持 `0`，因此 response 不會把沒有 playback tick 的 ScriptNode 誤報為已執行。不可用 static/offline tests 取代這項證據，也不可在 live `8766` 開啟時把 destructive `tests/test_integration.py` 混入離線 regression suite。
 
 4.2 新增 8 個 ROS 2 named workflows。建立操作預設 `preview=true` 並要求 stopped timeline；bridge/core/nodes 未啟用時回 `ROS2_PREREQUISITE_MISSING`。每個 publisher 都使用 explicit `ROS2Context` 與 `ROS2QoSProfile`，TF／JointState 採 Isaac Sim 6.0 的 compute/read sensor pipeline，Camera／LiDAR 可從 MCP-owned sensor prim 精確解析 render product。刪除只接受具有 MCP ownership marker 的 graph。專用 verifier 以外部 Jazzy `rclpy` process 在 domain `42` 收到 20 筆 `/mcp_task_4_2/clock`，message schema 為 `rosgraph_msgs/msg/Clock`，最近一次觀測頻率約 `60.23 Hz`；graph/prim/marker 均清除並還原 workflow list。
+
+4.3 新增 7 個 Replicator SDG tools。Job 使用 bounded `BasicWriter`、manual trigger、固定 seed 與 typed transform/light randomization；start 非阻塞，cancel 只在 completed-frame safe point 生效。Terminal manifest 只有在 writer、render product、trigger、原始 attributes 與 artifact ingestion 全部完成 cleanup 後才可讀取。2026-08-25 的 Replicator `1.13.27` live run 以相同 seed `4317` 取得一致的兩輪 RGB／semantic trace，並驗證 100-frame job bounded cancel、job registry 清空與 stopped timeline。GPU renderer hash 只作完整性證據，不宣稱跨機器 bitwise deterministic。
+
+4.4 將既有 `spawn_human` 擴充為 10 個 Human tools。Read tools 可描述 external human，但控制與刪除只接受 schema `1.0` MCP-owned character；MoveTo／LookAt／Idle 要求 Timeline Play，NavMesh bake 與 delete 要求 stopped/paused。`speed_mps` 依 Stage `metersPerUnit` 轉換並回傳 runtime stage-unit read-back。2026-08-25 live run 驗證 IRA `1.6.8`、Behavior／Navigation Core `110.1.4`、NavMesh ready、stopped rejection、MoveTo task 與 `0.2639` stage-unit 位移、LookAt、Idle、exact delete、fixture/list restore 與 stopped timeline。Task accepted 不代表已抵達，後續仍須用 `get_human` 驗 position/task state。
+
+後續 agent 處理 4.x 時，依序讀取：
+
+1. 專案 skill 的 [`SKILL.md`](.agents/skills/omniverse-windows-workspace/SKILL.md)，確認 repository、runtime、live route、ownership 與 scratch-stage 規則。
+2. [`isaacsim-mcp-4x.md`](.agents/skills/omniverse-windows-workspace/references/isaacsim-mcp-4x.md)，確認 4.1～4.4 編號、timeline/preview invariants、evidence limits 與專用 verifier 路由。
+3. 對應的 `OMNIGRAPH_LIFECYCLE.md`、`ROS2_WORKFLOWS.md`、`REPLICATOR_SDG.md` 或 `HUMAN_LIFECYCLE.md`，再讀 handler、tests 與 verifier。
+
+以上 98／106／113／122 command counts 與 live 數值都是各項完成當時的歷史證據。宣稱目前仍可控制前，必須重驗 checkout、`get_capabilities`、extension versions、timeline、owned scratch namespace、read-back/rollback、cleanup、Kit/TCP、run log 與 native dump。不可用 documentation MCP、static tests 或 live `8766` 開啟時的 destructive `tests/test_integration.py` 取代專用驗收。
 
 ## 系統需求
 
@@ -419,7 +433,7 @@ uv run ruff format --check .
 
 ```text
 IsaacSim-MCP/
-├─ .agents/                   專案 skill 與 1.x／2.x／3.x 後續 agent 閱讀索引
+├─ .agents/                   專案 skill 與 1.x／2.x／3.x／4.x 後續 agent 閱讀索引
 ├─ isaac_mcp/                 Python MCP Server 與 122 個 tool 定義
 ├─ isaac.sim.mcp_extension/   Isaac Sim Extension、handlers 與 V5/V6 adapters
 ├─ scripts/                   Windows/Linux 啟動、工廠與驗證腳本
