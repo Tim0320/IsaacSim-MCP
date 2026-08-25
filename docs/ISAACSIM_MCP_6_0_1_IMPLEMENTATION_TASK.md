@@ -297,17 +297,23 @@
 
 ## Phase 5：安全性、可靠性與可觀測性
 
-- [ ] 20. 限縮 `execute_script` escape hatch
+- [x] 20. 限縮 `execute_script` escape hatch
   > 現況：`execute_script` 與 `reload_script` 可補足 named tools 缺口，也能任意改動 live stage、檔案與執行環境。
   > 缺漏位置：`tools/simulation.py:219`、`handlers/simulation.py:145`、V6 adapter execution path。
   > 實作：增加 capability/政策開關、允許的 cwd roots、timeout、輸出上限、command ID、audit log；預設提示先使用 named tools。
   > 驗收：超時、超量輸出、越界 cwd 與禁用狀態均 fail closed；停止或取消後不繼續背景修改 stage。
+  > 已實作：新增 `get_script_policy`、`get_script_audit_log`；execute/reload 共用 enabled、allowed roots、code bytes、cooperative timeout、per-stream output 與 background opt-in policy。預設禁止 thread/process/subprocess/async task 排程；audit 僅保存 command ID、SHA-256、結果、耗時與 byte counts，不保存 source。
+  > 邊界：timeout 可中止 Python bytecode，native Kit call 只能在控制權回到 Python 後中止；此能力只接受可信任程式碼，不宣稱為 hostile-code OS sandbox。完整契約與 verifier：`docs/COMMAND_GOVERNANCE.md`、`scripts/verify_command_governance_live.py`。
+  > live 驗收（2026-08-25）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、124 commands。越界 `C:\Windows`、thread background、64-byte output cap 分別回 `SCRIPT_POLICY_DENIED`／`SCRIPT_POLICY_DENIED`／`SCRIPT_OUTPUT_LIMIT_EXCEEDED`；0.05 s infinite loop 回 `SCRIPT_TIMEOUT`，timeout 後 `/World/MCP_Task_5_1_5_2/MustStayAbsent` read-back 為 absent。audit 取得 5 筆 hash-only records。
 
-- [ ] 21. Command ID、idempotency、transaction 與 read-back
+- [x] 21. Command ID、idempotency、transaction 與 read-back
   > 現況：連線可發 command，但 destructive/retry 操作缺一致的去重、原子性與 postcondition 契約。
   > 缺漏位置：client connection、extension server/dispatcher、所有 write handlers。
   > 實作：每次寫入有 `command_id`；支援 idempotency key、validate/apply/read-back、batch transaction 與 partial rollback 報告。
   > 驗收：重送相同 request 不重複建立 prim；錯誤 batch 可證明哪些步驟未套用、已回復或需人工處理。
+  > 已實作：全部 named tools 接受 optional caller `command_id`／`idempotency_key`；extension 使用 256-entry、600-second bounded ledger。相同 key+payload 回 replay 且不再次呼叫 handler；相同 key+不同 payload 在 apply 前回 `IDEMPOTENCY_KEY_CONFLICT`。所有 response 的 `data.command` 明確標記 read/write、apply state、readback state、key 與 replay state。
+  > transaction：沿用並納入共同契約的 `apply_stage_batch`，限定可完整 snapshot/restore 的 Stage composition writes。`BATCH_ROLLED_BACK` 必須回 `readback.rolled_back=true`；跨 sensor/ROS/Replicator/motion/filesystem 的通用 batch 明確 unsupported，不誤稱可原子 rollback。ledger 僅存在目前 Kit runtime，restart 後不宣稱 durable dedup。
+  > live 驗收（2026-08-25）：`objects.create` 使用相同 key/payload 重送，第二次回 `replayed=true`、`original_command_id=task-5-create-1` 且 Stage 只有 exact prim；相同 key/不同 size 在 apply 前回 `IDEMPOTENCY_KEY_CONFLICT`。錯誤 Stage batch 回 `BATCH_ROLLED_BACK` 與 `readback.rolled_back=true`，rollback probe attribute absent。最後 scratch root absent、timeline stopped、TCP `8766` 存活；final-restart Kit PID `15848` Responding、新增 native dump `0`。bounded log 共 24 筆既知 warnings，`[Error]`／GPU crash signature 均為 `0`。safe offline suite `374 passed`。
 
 - [ ] 22. Timeout、取消、job status 與 response limits
   > 現況：長時間 motion、SDG、資產載入與 sensor capture 缺一致的非同步 job 與取消模型。

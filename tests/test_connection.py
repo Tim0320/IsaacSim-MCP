@@ -203,3 +203,35 @@ def test_send_command_returns_timeout_envelope():
     assert result["status"] == "timeout"
     assert result["code"] == "TIMEOUT"
     assert result["message"] == "deadline exceeded"
+
+
+def test_send_command_forwards_explicit_command_and_idempotency_ids():
+    sent = []
+    conn = IsaacConnection(host="127.0.0.1", port=8766)
+    conn.connect = lambda: True
+    conn.sock = type(
+        "_Socket",
+        (),
+        {
+            "sendall": lambda self, data: sent.append(json.loads(data.decode("utf-8"))),
+            "settimeout": lambda self, _timeout: None,
+        },
+    )()
+    conn.receive_full_response = lambda _sock: json.dumps({"status": "success"}).encode("utf-8")
+
+    result = conn.send_command(
+        "object.create",
+        {"name": "cube"},
+        command_id="caller-command",
+        idempotency_key="create-cube-1",
+    )
+
+    assert sent == [
+        {
+            "type": "object.create",
+            "params": {"name": "cube"},
+            "command_id": "caller-command",
+            "idempotency_key": "create-cube-1",
+        }
+    ]
+    assert result["command_id"] == "caller-command"

@@ -17,6 +17,7 @@ from ..artifact_store import (
     DEFAULT_MAX_TOTAL_BYTES,
     DEFAULT_TTL_SECONDS,
 )
+from ..script_policy import SCRIPT_POLICY
 from .sensors import DEFAULT_INLINE_MAX_BYTES, MAX_INLINE_MAX_BYTES
 
 CAPABILITIES_SCHEMA_VERSION = "1.1"
@@ -726,7 +727,23 @@ def _feature_flags(
             "bake_and_delete_require_stopped_timeline": True,
             "runtime_task_api": "IBehaviorAgent",
         },
-        "execute_script": {"state": "supported", "risk": "high"},
+        "execute_script": {
+            "state": "supported" if SCRIPT_POLICY.policy.enabled else "disabled",
+            "risk": "high",
+            "tools": ["execute_script", "reload_script", "get_script_policy", "get_script_audit_log"],
+            "policy": SCRIPT_POLICY.policy.as_dict(),
+        },
+        "command.governance": {
+            "state": "supported",
+            "command_id": "all_commands",
+            "idempotency_key": "bounded_kit_runtime_replay_ledger",
+            "idempotency_ttl_seconds": 600,
+            "idempotency_max_entries": 256,
+            "transaction_tool": "apply_stage_batch",
+            "transaction_scope": "stage_composition_writes",
+            "atomic_rollback": True,
+            "write_lifecycle_metadata": True,
+        },
     }
 
 

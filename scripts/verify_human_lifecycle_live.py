@@ -81,7 +81,7 @@ def main() -> int:
         state_before = _data(connection.send_command("simulation.get_state"))
         assert state_before["timeline_state"] == "stopped", state_before
         capabilities = _data(connection.send_command("system.get_capabilities"))
-        assert capabilities["extension"]["command_count"] == 122, capabilities["extension"]
+        assert capabilities["extension"]["command_count"] == 124, capabilities["extension"]
         assert capabilities["feature_flags"]["human.lifecycle"]["state"] == "supported"
         original = _data(connection.send_command("humans.list", {"root_prim_path": "/World", "include_external": True}))
         original_paths = [item["human_path"] for item in original["humans"]]
@@ -183,7 +183,7 @@ def main() -> int:
 
         evidence = {
             "status": "success",
-            "command_count": 122,
+            "command_count": 124,
             "extensions": {
                 name: capabilities["extensions"][name]
                 for name in capabilities["feature_flags"]["human.lifecycle"]["required_extensions"]

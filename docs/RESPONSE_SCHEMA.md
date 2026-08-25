@@ -1,6 +1,6 @@
 # MCP response schema
 
-IsaacSim-MCP 的 122 個 named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
+IsaacSim-MCP 的 124 個 named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
 
 ```json
 {
@@ -35,6 +35,8 @@ IsaacSim-MCP 的 122 個 named tools 統一回傳 JSON text，解碼後固定包
 | `artifacts` | array | 後續大型影像、點雲與檔案傳輸使用的 artifact metadata。 |
 | `readback` | any/null | 寫入命令的驗證結果；尚未提供時為 `null`。 |
 
+全部 named tools 接受 optional keyword-only `command_id` 與 `idempotency_key`。extension 會在 `data.command` 回傳 command type、read/write、apply state、readback state 與 replay state。`readback_state=not_reported` 不能當成已驗證 postcondition。完整 replay 與 transaction 契約見 [`COMMAND_GOVERNANCE.md`](COMMAND_GOVERNANCE.md)。
+
 ## 狀態語意
 
 | `status` | 預設 `code` | 語意 |
@@ -54,6 +56,9 @@ IsaacSim-MCP 的 122 個 named tools 統一回傳 JSON text，解碼後固定包
 - `UNKNOWN_COMMAND`：extension registry 沒有該 command。
 - `INTERNAL_ERROR`：handler 拋出未處理例外。
 - `SOCKET_DISPATCH_ERROR`：socket dispatch 層無法完成 response。
+- `INVALID_COMMAND_METADATA`：command ID 或 idempotency key 格式無效。
+- `INVALID_COMMAND_PARAMS`：socket command 的 `params` 不是 object。
+- `IDEMPOTENCY_KEY_CONFLICT`：相同 key 已用於不同 command type 或 canonical params。
 
 rolling upgrade 期間，MCP Server 仍可接收舊 extension 的 `{status, result}` response，並在回給 client 前轉成 schema 1.0。
 

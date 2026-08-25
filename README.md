@@ -239,7 +239,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
-全部 122 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。完整契約請見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 124 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。所有 tools 也接受 caller `command_id`／`idempotency_key`；script policy、replay ledger 與 transaction 邊界見 [`docs/COMMAND_GOVERNANCE.md`](docs/COMMAND_GOVERNANCE.md)，response 欄位見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -255,7 +255,7 @@ Replicator SDG 支援 bounded BasicWriter job、manual trigger、固定 seed、t
 
 ## MCP Tools
 
-目前共 122 個 tools：
+目前共 124 個 tools：
 
 | 類別 | Tools |
 |---|---|
@@ -273,7 +273,7 @@ Replicator SDG 支援 bounded BasicWriter job、manual trigger、固定 seed、t
 | 人物 | `spawn_human`, `list_humans`, `get_human`, `delete_human`, `set_human_target`, `set_human_look_at`, `set_human_idle`, `set_human_behavior`, `get_navmesh_status`, `bake_navmesh` |
 | 感測器 | `create_camera`, `capture_image`, `capture_camera_output`, `get_camera_calibration`, `create_lidar`, `get_lidar_config`, `get_lidar_point_cloud`, `delete_sensor` |
 | 資產 | `list_nvidia_assets`, `spawn_nvidia_asset`, `import_urdf`, `load_usd`, `search_usd`, `generate_3d` |
-| 模擬與診斷 | `play_simulation`, `pause_simulation`, `stop_simulation`, `step_simulation`, `set_physics_params`, `get_isaac_logs`, `get_simulation_state`, `get_physics_state`, `get_joint_config`, `execute_script`, `reload_script` |
+| 模擬與診斷 | `play_simulation`, `pause_simulation`, `stop_simulation`, `step_simulation`, `set_physics_params`, `get_isaac_logs`, `get_simulation_state`, `get_physics_state`, `get_joint_config`, `execute_script`, `reload_script`, `get_script_policy`, `get_script_audit_log` |
 | Action Graph | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` |
 | ROS 2 | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` |
 | Replicator SDG | `get_replicator_status`, `create_sdg_job`, `start_sdg_job`, `get_sdg_job_status`, `cancel_sdg_job`, `get_sdg_manifest`, `delete_sdg_job` |
@@ -379,7 +379,8 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 - ScriptNode 改用 `configure_script_node`／`reload_script_node` 的 exact graph/node、inline/file 契約；避免用一般 `edit_action_graph` 猜測 reload state。
 - 載入含 non-manifold collision 的資產可能使 PhysX native plugin 崩潰。先在乾淨 Stage 驗證資產與碰撞設定。
 - Isaac Sim 6.0.1 多 GPU 環境必須讓 PhysX 使用明確 GPU ordinal；launcher 會依當下主要顯示 GPU 決定，不可移除這項防護或改回未警告的 `-1`。
-- `execute_script` 權限很高，只執行可信任程式碼，並避免在 Action Graph 同時控制相同 articulation 時修改它。
+- `execute_script`／`reload_script` 權限很高，只執行可信任程式碼。預設 policy 限制 cwd/file roots、timeout、source/output bytes，並拒絕背景排程；先使用 named tools。完整設定與 cooperative timeout 邊界見 [`docs/COMMAND_GOVERNANCE.md`](docs/COMMAND_GOVERNANCE.md)。
+- 重試 write 時使用相同 `idempotency_key`。相同 key 與 payload 會 replay，不再次 apply；key collision 會 fail closed。ledger 只保留於目前 Kit runtime。
 
 ## 測試
 

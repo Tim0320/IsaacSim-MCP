@@ -1236,13 +1236,25 @@ class IsaacAdapterV5(IsaacAdapterBase):
             "physics_dt": physics_dt,
         }
 
-    def execute_script(self, code: str, cwd: Optional[str] = None) -> Dict[str, Any]:
-        import io
+    def execute_script(
+        self,
+        code: str,
+        cwd: Optional[str] = None,
+        timeout_s: float = 30.0,
+        max_output_bytes: int = 65536,
+    ) -> Dict[str, Any]:
         import sys
 
         import carb
         import omni
         from pxr import Gf, Sdf, Usd, UsdGeom
+
+        from ..execution_guard import (
+            BoundedTextBuffer,
+            ScriptExecutionTimeout,
+            ScriptOutputLimitExceeded,
+            cooperative_deadline,
+        )
 
         # Auto-add cwd to sys.path
         if cwd and cwd not in sys.path:
@@ -1252,11 +1264,12 @@ class IsaacAdapterV5(IsaacAdapterBase):
 
         # Capture stdout/stderr
         old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout = captured_out = io.StringIO()
-        sys.stderr = captured_err = io.StringIO()
+        sys.stdout = captured_out = BoundedTextBuffer(max_output_bytes)
+        sys.stderr = captured_err = BoundedTextBuffer(max_output_bytes)
         try:
-            self._ensure_physics_world()
-            exec(code, local_ns)
+            with cooperative_deadline(timeout_s):
+                self._ensure_physics_world()
+                exec(code, local_ns)
             out = captured_out.getvalue()
             if out.strip():
                 try:
@@ -1271,6 +1284,16 @@ class IsaacAdapterV5(IsaacAdapterBase):
                 "message": "Script executed successfully",
                 "stdout": out,
                 "stderr": captured_err.getvalue(),
+            }
+        except (ScriptExecutionTimeout, ScriptOutputLimitExceeded) as e:
+            return {
+                "status": "timeout" if isinstance(e, ScriptExecutionTimeout) else "error",
+                "code": "SCRIPT_TIMEOUT" if isinstance(e, ScriptExecutionTimeout) else "SCRIPT_OUTPUT_LIMIT_EXCEEDED",
+                "message": str(e),
+                "traceback": traceback.format_exc(),
+                "stdout": captured_out.getvalue(),
+                "stderr": captured_err.getvalue(),
+                "applied": None,
             }
         except Exception as e:
             out = captured_out.getvalue()
@@ -1295,11 +1318,23 @@ class IsaacAdapterV5(IsaacAdapterBase):
     # Track exec() namespaces to clean up subscriptions on reload
     _exec_namespaces: Dict[str, dict] = {}
 
-    def reload_script(self, file_path: str, module_name: Optional[str] = None) -> Dict[str, Any]:
+    def reload_script(
+        self,
+        file_path: str,
+        module_name: Optional[str] = None,
+        timeout_s: float = 30.0,
+        max_output_bytes: int = 65536,
+    ) -> Dict[str, Any]:
         import importlib
-        import io
         import os
         import sys
+
+        from ..execution_guard import (
+            BoundedTextBuffer,
+            ScriptExecutionTimeout,
+            ScriptOutputLimitExceeded,
+            cooperative_deadline,
+        )
 
         # Auto-add parent directory to sys.path
         parent_dir = os.path.dirname(os.path.abspath(file_path))
@@ -1312,7 +1347,8 @@ class IsaacAdapterV5(IsaacAdapterBase):
         # ScriptNode-aware reload: if any Action-Graph ScriptNode references this
         # file via inputs:scriptPath, force it to recompile (the standalone
         # re-exec below would not touch the running graph node).
-        recompiled = _recompile_scriptnodes_for_file(abs_path)
+        with cooperative_deadline(timeout_s):
+            recompiled = _recompile_scriptnodes_for_file(abs_path)
         if recompiled:
             return {
                 "status": "success",
@@ -1331,41 +1367,42 @@ class IsaacAdapterV5(IsaacAdapterBase):
 
         # Capture stdout/stderr
         old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout = captured_out = io.StringIO()
-        sys.stderr = captured_err = io.StringIO()
+        sys.stdout = captured_out = BoundedTextBuffer(max_output_bytes)
+        sys.stderr = captured_err = BoundedTextBuffer(max_output_bytes)
         try:
-            if module_name:
-                # Reload existing module or import for first time
-                if module_name in sys.modules:
-                    _module = importlib.reload(sys.modules[module_name])
-                    msg = f"Module '{module_name}' reloaded successfully"
+            with cooperative_deadline(timeout_s):
+                if module_name:
+                    # Reload existing module or import for first time
+                    if module_name in sys.modules:
+                        _module = importlib.reload(sys.modules[module_name])
+                        msg = f"Module '{module_name}' reloaded successfully"
+                    else:
+                        _module = importlib.import_module(module_name)
+                        msg = f"Module '{module_name}' imported successfully"
                 else:
-                    _module = importlib.import_module(module_name)
-                    msg = f"Module '{module_name}' imported successfully"
-            else:
-                # Execute file contents (hot-patch)
-                if not os.path.isfile(file_path):
-                    return {"status": "error", "message": f"File not found: {file_path}"}
-                with open(file_path, "r") as f:
-                    code = f.read()
-                import carb
-                import omni
-                from pxr import Gf, Sdf, Usd, UsdGeom
+                    # Execute file contents (hot-patch)
+                    if not os.path.isfile(file_path):
+                        return {"status": "error", "message": f"File not found: {file_path}"}
+                    with open(file_path, "r") as f:
+                        code = f.read()
+                    import carb
+                    import omni
+                    from pxr import Gf, Sdf, Usd, UsdGeom
 
-                local_ns = {
-                    "omni": omni,
-                    "carb": carb,
-                    "Usd": Usd,
-                    "UsdGeom": UsdGeom,
-                    "Sdf": Sdf,
-                    "Gf": Gf,
-                    "__file__": file_path,
-                }
-                self._ensure_physics_world()
-                exec(code, local_ns)
-                # Track namespace so we can clean up subscriptions on next reload
-                self._exec_namespaces[abs_path] = local_ns
-                msg = f"Script '{os.path.basename(file_path)}' executed successfully"
+                    local_ns = {
+                        "omni": omni,
+                        "carb": carb,
+                        "Usd": Usd,
+                        "UsdGeom": UsdGeom,
+                        "Sdf": Sdf,
+                        "Gf": Gf,
+                        "__file__": file_path,
+                    }
+                    self._ensure_physics_world()
+                    exec(code, local_ns)
+                    # Track namespace so we can clean up subscriptions on next reload
+                    self._exec_namespaces[abs_path] = local_ns
+                    msg = f"Script '{os.path.basename(file_path)}' executed successfully"
 
             out = captured_out.getvalue()
             if out.strip():
@@ -1381,6 +1418,16 @@ class IsaacAdapterV5(IsaacAdapterBase):
                 "message": msg,
                 "stdout": out,
                 "stderr": captured_err.getvalue(),
+            }
+        except (ScriptExecutionTimeout, ScriptOutputLimitExceeded) as e:
+            return {
+                "status": "timeout" if isinstance(e, ScriptExecutionTimeout) else "error",
+                "code": "SCRIPT_TIMEOUT" if isinstance(e, ScriptExecutionTimeout) else "SCRIPT_OUTPUT_LIMIT_EXCEEDED",
+                "message": str(e),
+                "traceback": traceback.format_exc(),
+                "stdout": captured_out.getvalue(),
+                "stderr": captured_err.getvalue(),
+                "applied": None,
             }
         except Exception as e:
             out = captured_out.getvalue()

@@ -28,9 +28,15 @@ from __future__ import annotations
 import glob
 import math
 import os
+import time
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 from ..adapters.base import IsaacAdapterBase, PhysicsParamsApplyError
+from ..script_policy import SCRIPT_POLICY
+
+
+def configure_script_policy(settings: Any = None) -> None:
+    SCRIPT_POLICY.configure(settings)
 
 
 def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
@@ -40,6 +46,8 @@ def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["simulation.step"] = lambda **p: step(adapter, **p)
     registry["simulation.set_physics"] = lambda **p: set_physics(adapter, **p)
     registry["simulation.execute_script"] = lambda **p: execute_script(adapter, **p)
+    registry["simulation.get_script_policy"] = lambda **p: get_script_policy(**p)
+    registry["simulation.get_script_audit"] = lambda **p: get_script_audit(**p)
     registry["simulation.get_state"] = lambda **p: get_simulation_state(adapter, **p)
     registry["simulation.get_logs"] = lambda **p: get_logs(adapter, **p)
     registry["simulation.get_physics_state"] = lambda **p: get_physics_state_handler(adapter, **p)
@@ -200,14 +208,78 @@ def set_physics(
         }
 
 
-def execute_script(adapter: IsaacAdapterBase, code: Optional[str] = None, cwd: Optional[str] = None) -> Dict[str, Any]:
+def execute_script(
+    adapter: IsaacAdapterBase,
+    code: Optional[str] = None,
+    cwd: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+    max_output_bytes: Optional[int] = None,
+    allow_background: bool = False,
+) -> Dict[str, Any]:
+    started = time.perf_counter()
+    outcome = "rejected"
+    details: Dict[str, Any] = {}
     try:
+        policy = SCRIPT_POLICY.policy
+        if not policy.enabled:
+            return {
+                "status": "error",
+                "code": "SCRIPT_EXECUTION_DISABLED",
+                "message": "execute_script is disabled by extension policy; use a named tool",
+                "applied": False,
+            }
         if not code:
-            return {"status": "error", "message": "code is required"}
-        result = adapter.execute_script(code, cwd=cwd)
-        return {"status": "success", **result}
+            return {"status": "error", "code": "SCRIPT_CODE_REQUIRED", "message": "code is required"}
+        SCRIPT_POLICY.validate_code(code, allow_background=allow_background)
+        resolved_cwd = SCRIPT_POLICY.require_path(cwd, "cwd") if cwd else None
+        timeout, output_limit = SCRIPT_POLICY.resolve_limits(timeout_s, max_output_bytes)
+        details = {
+            "cwd": resolved_cwd,
+            "timeout_s": timeout,
+            "max_output_bytes": output_limit,
+            "allow_background": allow_background,
+        }
+        result = adapter.execute_script(
+            code,
+            cwd=resolved_cwd,
+            timeout_s=timeout,
+            max_output_bytes=output_limit,
+        )
+        outcome = str(result.get("status", "error"))
+        details["stdout_bytes"] = len(str(result.get("stdout", "")).encode("utf-8"))
+        details["stderr_bytes"] = len(str(result.get("stderr", "")).encode("utf-8"))
+        return {"status": "success", **result, "policy": details}
+    except PermissionError as exc:
+        return {"status": "error", "code": "SCRIPT_POLICY_DENIED", "message": str(exc), "applied": False}
+    except (ValueError, SyntaxError) as exc:
+        return {"status": "error", "code": "INVALID_SCRIPT_REQUEST", "message": str(exc), "applied": False}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        outcome = "error"
+        return {"status": "error", "code": "SCRIPT_EXECUTION_FAILED", "message": str(e)}
+    finally:
+        SCRIPT_POLICY.record(operation="execute_script", target=code or "", outcome=outcome, started=started, details=details)
+
+
+def get_script_policy() -> Dict[str, Any]:
+    return {
+        "status": "success",
+        "code": "SCRIPT_POLICY",
+        "message": "Script escape-hatch policy",
+        "data": SCRIPT_POLICY.policy.as_dict(),
+    }
+
+
+def get_script_audit(count: int = 50) -> Dict[str, Any]:
+    try:
+        records = SCRIPT_POLICY.audit(count)
+        return {
+            "status": "success",
+            "code": "SCRIPT_AUDIT",
+            "message": f"Returned {len(records)} bounded audit records",
+            "data": {"records": records, "count": len(records)},
+        }
+    except (TypeError, ValueError) as exc:
+        return {"status": "error", "code": "INVALID_AUDIT_QUERY", "message": str(exc)}
 
 
 def get_simulation_state(adapter: IsaacAdapterBase) -> Dict[str, Any]:
@@ -239,15 +311,49 @@ def get_joint_config_handler(adapter: IsaacAdapterBase, prim_path: Optional[str]
 
 
 def reload_script_handler(
-    adapter: IsaacAdapterBase, file_path: Optional[str] = None, module_name: Optional[str] = None
+    adapter: IsaacAdapterBase,
+    file_path: Optional[str] = None,
+    module_name: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+    max_output_bytes: Optional[int] = None,
 ) -> Dict[str, Any]:
+    started = time.perf_counter()
+    outcome = "rejected"
+    details: Dict[str, Any] = {}
     try:
+        if not SCRIPT_POLICY.policy.enabled:
+            return {
+                "status": "error",
+                "code": "SCRIPT_EXECUTION_DISABLED",
+                "message": "reload_script is disabled by extension policy; use a named tool",
+                "applied": False,
+            }
         if not file_path:
-            return {"status": "error", "message": "file_path is required"}
-        result = adapter.reload_script(file_path, module_name=module_name)
-        return {"status": "success", **result}
+            return {"status": "error", "code": "SCRIPT_FILE_REQUIRED", "message": "file_path is required"}
+        resolved_path = SCRIPT_POLICY.require_path(file_path, "file_path", require_file=True)
+        timeout, output_limit = SCRIPT_POLICY.resolve_limits(timeout_s, max_output_bytes)
+        details = {"file_path": resolved_path, "timeout_s": timeout, "max_output_bytes": output_limit}
+        result = adapter.reload_script(
+            resolved_path,
+            module_name=module_name,
+            timeout_s=timeout,
+            max_output_bytes=output_limit,
+        )
+        outcome = str(result.get("status", "error"))
+        details["stdout_bytes"] = len(str(result.get("stdout", "")).encode("utf-8"))
+        details["stderr_bytes"] = len(str(result.get("stderr", "")).encode("utf-8"))
+        return {"status": "success", **result, "policy": details}
+    except PermissionError as exc:
+        return {"status": "error", "code": "SCRIPT_POLICY_DENIED", "message": str(exc), "applied": False}
+    except (ValueError, FileNotFoundError) as exc:
+        return {"status": "error", "code": "INVALID_SCRIPT_REQUEST", "message": str(exc), "applied": False}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        outcome = "error"
+        return {"status": "error", "code": "SCRIPT_RELOAD_FAILED", "message": str(e)}
+    finally:
+        SCRIPT_POLICY.record(
+            operation="reload_script", target=file_path or "", outcome=outcome, started=started, details=details
+        )
 
 
 # ── Log buffer for get_logs ───────────────────────────────────────────────────

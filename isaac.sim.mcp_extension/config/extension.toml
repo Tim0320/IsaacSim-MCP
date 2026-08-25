@@ -44,3 +44,10 @@ server.host = "localhost"
 # NavMeshVolume discovery when it is enabled late against an already-open
 # stage, and NVIDIA notes that dependency changes may otherwise need a restart.
 server.enable_humans = true
+server.script.enabled = true
+server.script.default_timeout_s = 30.0
+server.script.max_timeout_s = 300.0
+server.script.default_output_bytes = 65536
+server.script.max_output_bytes = 1048576
+server.script.max_code_bytes = 262144
+server.script.allow_background = false

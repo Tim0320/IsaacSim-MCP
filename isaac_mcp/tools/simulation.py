@@ -226,7 +226,13 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps({"status": "error", "message": str(e)})
 
     @mcp.tool("execute_script")
-    def execute_script(code: str, cwd: Optional[str] = None) -> str:
+    def execute_script(
+        code: str,
+        cwd: Optional[str] = None,
+        timeout_s: Optional[float] = None,
+        max_output_bytes: Optional[int] = None,
+        allow_background: bool = False,
+    ) -> str:
         """Escape hatch: execute arbitrary Python code in Isaac Sim.
 
         PREFER named tools over this for: reading/setting joints (set_joint_positions,
@@ -234,8 +240,10 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         get_joint_config), stepping simulation (step_simulation), and checking logs
         (get_isaac_logs).
 
-        USE this for: operations no named tool covers, such as creating Action Graphs,
-        computing IK, setting up physics callbacks, or configuring advanced USD properties.
+        USE this only for a trusted operation that no named tool covers. Execution
+        is policy-gated, cooperatively timed, output-bounded, cwd-restricted, and
+        audited by code hash. Background scheduling is denied unless both the
+        request and administrator policy explicitly opt in.
 
         CAUTION: touching an articulation controlled by a running ScriptNode /
         Action Graph can silently break its control path (no error is raised).
@@ -250,19 +258,33 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         Args:
             code: Python code to execute in the Isaac Sim context.
             cwd: Optional working directory to add to sys.path before execution.
+            timeout_s: Cooperative Python deadline; capped by extension policy.
+            max_output_bytes: Combined per-stream capture limit; capped by policy.
+            allow_background: Request background scheduling. Default false and
+                rejected unless the extension policy also enables it.
         """
         try:
             conn = get_connection()
             params = {"code": code}
             if cwd is not None:
                 params["cwd"] = cwd
+            if timeout_s is not None:
+                params["timeout_s"] = timeout_s
+            if max_output_bytes is not None:
+                params["max_output_bytes"] = max_output_bytes
+            params["allow_background"] = allow_background
             result = conn.send_command("simulation.execute_script", params)
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
 
     @mcp.tool("reload_script")
-    def reload_script(file_path: str, module_name: Optional[str] = None) -> str:
+    def reload_script(
+        file_path: str,
+        module_name: Optional[str] = None,
+        timeout_s: Optional[float] = None,
+        max_output_bytes: Optional[int] = None,
+    ) -> str:
         """Reload a Python controller from a file on disk.
 
         Two modes, chosen automatically:
@@ -284,13 +306,31 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         Args:
             file_path: Path to the Python file on disk.
             module_name: Optional module name to reload (e.g. 'my_controller').
+            timeout_s: Cooperative Python deadline; capped by extension policy.
+            max_output_bytes: Per-stream capture limit; capped by policy.
         """
         try:
             conn = get_connection()
             params = {"file_path": file_path}
             if module_name is not None:
                 params["module_name"] = module_name
+            if timeout_s is not None:
+                params["timeout_s"] = timeout_s
+            if max_output_bytes is not None:
+                params["max_output_bytes"] = max_output_bytes
             result = conn.send_command("simulation.reload_script", params)
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})
+
+    @mcp.tool("get_script_policy")
+    def get_script_policy() -> str:
+        """Return the current execute/reload policy without exposing script source or credentials."""
+        conn = get_connection()
+        return json.dumps(conn.send_command("simulation.get_script_policy"), indent=2)
+
+    @mcp.tool("get_script_audit_log")
+    def get_script_audit_log(count: int = 50) -> str:
+        """Return bounded script audit metadata. Source code is represented only by SHA-256."""
+        conn = get_connection()
+        return json.dumps(conn.send_command("simulation.get_script_audit", {"count": count}), indent=2)

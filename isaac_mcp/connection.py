@@ -33,6 +33,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+from isaac_mcp.command_context import command_id_var, idempotency_key_var
 from isaac_mcp.responses import normalize_response
 
 logger = logging.getLogger("IsaacMCPServer")
@@ -154,13 +155,23 @@ class IsaacConnection:
             raise TimeoutError("Timeout waiting for Isaac response")
         raise Exception("No data received")
 
-    def send_command(self, command_type: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def send_command(
+        self,
+        command_type: str,
+        params: Optional[Dict[str, Any]] = None,
+        *,
+        command_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
         # connect() also validates a cached socket, so always route through it.
         if not self.connect():
             raise ConnectionError("Not connected to Isaac")
 
-        command_id = str(uuid.uuid4())
+        command_id = str(command_id or command_id_var.get() or uuid.uuid4())
         command = {"type": command_type, "params": params or {}, "command_id": command_id}
+        effective_key = idempotency_key or idempotency_key_var.get()
+        if effective_key is not None:
+            command["idempotency_key"] = str(effective_key)
         try:
             self.sock.sendall(json.dumps(command).encode("utf-8"))
             self.sock.settimeout(300.0)

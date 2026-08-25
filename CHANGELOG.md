@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — script policy, command correlation, and idempotent replay
+
+- Added `get_script_policy` and `get_script_audit_log`; the named-tool inventory is now 124.
+- `execute_script` and `reload_script` now enforce enabled state, allowed roots,
+  bounded source/output, cooperative deadlines, and default-denied background
+  scheduling. Audit records contain hashes and bounded metadata, never source.
+- Every named tool accepts optional caller `command_id` and `idempotency_key`.
+  The extension rejects key collisions and replays identical requests from a
+  bounded 256-entry, 600-second in-memory ledger without invoking handlers twice.
+- Every routed response reports write/apply/read-back/replay lifecycle metadata.
+  `apply_stage_batch` remains the explicit atomic Stage transaction boundary;
+  cross-subsystem rollback is intentionally not claimed.
+- Added focused offline contracts and `scripts/verify_command_governance_live.py`.
+
 ### Added — guarded IRA human lifecycle and runtime behavior control
 
 - Expanded human control from `spawn_human` to ten named tools, adding stable list/get, ownership-guarded delete, MoveTo, LookAt, Idle, live Behavior Agent settings, and NavMesh status/bake. The named-tool inventory is now 122.

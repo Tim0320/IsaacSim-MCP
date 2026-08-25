@@ -953,7 +953,13 @@ class IsaacAdapterBase(ABC):
         ...
 
     @abstractmethod
-    def execute_script(self, code: str, cwd: Optional[str] = None) -> Dict[str, Any]:
+    def execute_script(
+        self,
+        code: str,
+        cwd: Optional[str] = None,
+        timeout_s: float = 30.0,
+        max_output_bytes: int = 65536,
+    ) -> Dict[str, Any]:
         """Execute arbitrary Python code in the Isaac Sim context.
 
         Args:
@@ -963,7 +969,13 @@ class IsaacAdapterBase(ABC):
         ...
 
     @abstractmethod
-    def reload_script(self, file_path: str, module_name: Optional[str] = None) -> Dict[str, Any]:
+    def reload_script(
+        self,
+        file_path: str,
+        module_name: Optional[str] = None,
+        timeout_s: float = 30.0,
+        max_output_bytes: int = 65536,
+    ) -> Dict[str, Any]:
         """Reload a Python script or module into the Isaac Sim runtime.
 
         Args:

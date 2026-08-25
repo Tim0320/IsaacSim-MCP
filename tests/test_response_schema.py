@@ -67,13 +67,16 @@ class _Connection:
         )
 
 
-def test_all_122_named_tools_are_registered_through_schema_wrapper():
+def test_all_124_named_tools_are_registered_through_schema_wrapper():
     mcp = _FakeMCP()
     register_all_tools(mcp, lambda: _Connection())
 
-    assert len(mcp.tools) == 122
+    assert len(mcp.tools) == 124
     for name, function in mcp.tools.items():
-        assert inspect.signature(function), name
+        signature = inspect.signature(function)
+        assert signature, name
+        assert "command_id" in signature.parameters, name
+        assert "idempotency_key" in signature.parameters, name
         assert getattr(function, "__wrapped__", None) is not None, name
         # Calling without arguments either runs a no-argument tool or triggers
         # the wrapper's validation error path. Both must still be schema 1.0.
@@ -87,6 +90,11 @@ def test_all_122_named_tools_are_registered_through_schema_wrapper():
             "timeout",
             "cancelled",
         }, name
+
+    correlated = json.loads(
+        mcp.tools["get_scene_info"](command_id="caller-id", idempotency_key="read-scene-1")
+    )
+    assert correlated["status"] == "success"
 
 
 def test_schema_wrapper_returns_all_fields_for_success_and_legacy_error():

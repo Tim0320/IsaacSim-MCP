@@ -242,6 +242,16 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 - cancel/cleanup：100-frame run 在第 `2` frame 取消；writer detached、render product destroyed、trigger removed 全為 true；scratch fixture absent、retained job count `0`、timeline stopped
 - verifier：`scripts/verify_replicator_sdg_live.py`；固定使用獨立 scratch fixture，不納入 destructive `tests/test_integration.py`
 
+## 5.1 Script policy 與 5.2 command governance
+
+- current registry：124 named tools；新增 `get_script_policy`、`get_script_audit_log`。
+- script policy：enabled、allowed roots、source bytes、cooperative timeout、stdout/stderr bytes 與 background scheduling 都有明確上限；禁用、cwd/file escape、timeout 與 output overflow fail closed。audit 僅保存 SHA-256 與 bounded metadata。
+- command metadata：每個 tool schema 接受 optional `command_id`／`idempotency_key`。extension response 的 `data.command` 回報 command type、read/write、apply state、readback state 與 replay state。
+- idempotency：同 key+canonical payload 只 apply 一次；replay 保留原 result 並標示 original command ID。key+不同 payload 回 `IDEMPOTENCY_KEY_CONFLICT`。ledger 限 256 entries／600 seconds，Kit restart 後清除。
+- transaction：`apply_stage_batch` 是可證明完整 snapshot/restore 的原子 transaction；跨 Stage/runtime/filesystem 的通用 batch 不宣稱原子性。
+- verifier：`scripts/verify_command_governance_live.py`；固定使用 `/World/MCP_Task_5_1_5_2`，驗證 timeout 後 prim absent、idempotent create、collision、`BATCH_ROLLED_BACK`、audit、cleanup 與 TCP health。
+- live（2026-08-25）：Isaac Sim `6.0.1-rc.7`／PhysX／124 commands；cwd/background/output/timeout 四種 fail-closed、timeout target absent、same-payload replay、different-payload conflict、batch rollback probe absent 均通過。scratch root absent、timeline stopped、TCP `8766`、final-restart Kit PID `15848` Responding、新增 dump `0`、bounded `[Error]`／GPU crash signature `0`；safe offline suite `374 passed`。
+
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 
 - launcher 依當下主要顯示 GPU 選為 `/physics/cudaDevice=0`，來源明確回報為 `active display GPU`
