@@ -1,0 +1,5943 @@
+{
+  "schema_version": "1.0",
+  "report_scope": "Isaac Sim 6.0.1 named-tool evidence aggregation",
+  "definitions": {
+    "pass": "guarded live invocation has a successful postcondition/read-back",
+    "partial": "supported path passed, but a declared output or postcondition remains unverified",
+    "blocked": "invocation cannot proceed because an explicit external/runtime prerequisite is absent",
+    "unsupported": "the active runtime or backend explicitly rejects the capability",
+    "fail": "invocation reached the implementation and exposed a code or contract defect"
+  },
+  "git_head": "75cc090e5f640858b550d62ac8fef9965fccaa26",
+  "live_snapshot": {
+    "captured_at": "2026-08-25T16:28:11.755152+00:00",
+    "port": 8766,
+    "isaac_sim_version": "6.0.1-rc.7",
+    "adapter": "IsaacAdapterV6",
+    "physics_backend": "physx",
+    "timeline_state": "stopped",
+    "stage_path": "",
+    "extension_version": "0.6.0",
+    "extension_command_count": 128,
+    "ros2_extensions_enabled": false,
+    "nvidia_asset_catalog": {
+      "status": "success",
+      "sample_count": 1
+    }
+  },
+  "tool_count": 128,
+  "counts": {
+    "blocked": 11,
+    "pass": 117
+  },
+  "results": [
+    {
+      "tool": "apply_material",
+      "module": "materials",
+      "purpose": "Bind a material to an object.",
+      "input": [
+        {
+          "name": "material_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "material_purpose",
+          "required": false,
+          "default": "'auto'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "material schema, direct/resolved binding and physics behavior",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_material_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "apply_stage_batch",
+      "module": "scene",
+      "purpose": "Preview or atomically apply up to 100 layer/arc/variant/semantic/attribute edits. Any failed operation restores the stage snapshot.",
+      "input": [
+        {
+          "name": "operations",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "readback_root_path",
+          "required": false,
+          "default": "'/'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "bake_navmesh",
+      "module": "humans",
+      "purpose": "Bake the current stage NavMesh with a bounded wait; preview by default.",
+      "input": [
+        {
+          "name": "max_frames",
+          "required": false,
+          "default": "2000"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "cancel_job",
+      "module": "jobs",
+      "purpose": "Request cancellation and return a predictable terminal lifecycle state.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "retained job state, reconnect result, cancellation and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_job_diagnostics_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "cancel_motion",
+      "module": "motion",
+      "purpose": "Cancel a running motion job and hold its last commanded position.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "IK error, trajectory validation, progress, terminal state and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_motion_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "cancel_sdg_job",
+      "module": "replicator",
+      "purpose": "Preview or request cancellation; resources detach at the next safe point.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "capture_camera_output",
+      "module": "sensors",
+      "purpose": "Capture a typed RTX camera annotator output.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Camera'"
+        },
+        {
+          "name": "output_type",
+          "required": false,
+          "default": "'depth'"
+        },
+        {
+          "name": "output_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "return_mode",
+          "required": false,
+          "default": "'artifact'"
+        },
+        {
+          "name": "inline_max_bytes",
+          "required": false,
+          "default": "1024 * 1024"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "seven annotator arrays, semantic geometry, calibration matrices and SHA-256",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_camera_outputs_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "capture_image",
+      "module": "sensors",
+      "purpose": "Capture an RGB image from a camera sensor.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Camera'"
+        },
+        {
+          "name": "output_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "return_mode",
+          "required": false,
+          "default": "'artifact'"
+        },
+        {
+          "name": "inline_max_bytes",
+          "required": false,
+          "default": "1024 * 1024"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "pixel shape/content, PNG bytes, raw and artifact SHA-256",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_camera_rgb_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "cleanup_artifacts",
+      "module": "artifacts",
+      "purpose": "Delete expired managed artifacts and report reclaimed capacity.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "metadata, bounded chunks, full SHA-256, delete and expiry",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_artifact_transport_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "clear_scene",
+      "module": "scene",
+      "purpose": "Remove all prims from the scene.",
+      "input": [
+        {
+          "name": "keep_physics",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "keep_environment",
+          "required": false,
+          "default": "False"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "clone_object",
+      "module": "objects",
+      "purpose": "Duplicate an existing object to a new prim path.",
+      "input": [
+        {
+          "name": "source_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "exact prim path, transform and absence after delete",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "close_gripper",
+      "module": "controllers",
+      "purpose": "Close a gripper to the profile's declared closed width with immediate target read-back.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "profile",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "profile signature, command targets, measured velocity and stop targets",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_controller_profiles_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "compute_ik",
+      "module": "motion",
+      "purpose": "Solve bounded Lula inverse kinematics without moving the robot.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_position",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "end_effector_frame",
+          "required": false,
+          "default": "'right_gripper'"
+        },
+        {
+          "name": "target_orientation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "seed_joint_positions",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "random_seed",
+          "required": false,
+          "default": "123456"
+        },
+        {
+          "name": "position_tolerance",
+          "required": false,
+          "default": "0.001"
+        },
+        {
+          "name": "orientation_tolerance",
+          "required": false,
+          "default": "0.01"
+        },
+        {
+          "name": "max_iterations",
+          "required": false,
+          "default": "100"
+        },
+        {
+          "name": "timeout_ms",
+          "required": false,
+          "default": "2000"
+        },
+        {
+          "name": "robot_model",
+          "required": false,
+          "default": "'Franka'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "IK error, trajectory validation, progress, terminal state and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_motion_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "configure_physics_body",
+      "module": "physics",
+      "purpose": "Atomically configure rigid/static body, collider approximation and mass.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "body_type",
+          "required": false,
+          "default": "'dynamic'"
+        },
+        {
+          "name": "collider_enabled",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "approximation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "mass_kg",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "density_kg_m3",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed USD schema, bodies, filters, joint frames/limits and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_authoring_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "configure_script_node",
+      "module": "graphs",
+      "purpose": "Preview or configure one exact ScriptNode in explicit inline/file mode.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "node_path",
+          "required": false,
+          "default": "'ScriptNode'"
+        },
+        {
+          "name": "mode",
+          "required": false,
+          "default": "'inline'"
+        },
+        {
+          "name": "inline_script",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "script_file",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "connect_action_graph",
+      "module": "graphs",
+      "purpose": "Preview or connect one source output to one target input in an Action Graph.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "source_attr",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_attr",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_action_graph",
+      "module": "graphs",
+      "purpose": "Create and wire an OmniGraph Action Graph.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": false,
+          "default": "'/World/ActionGraph'"
+        },
+        {
+          "name": "nodes",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "connections",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "values",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "evaluator",
+          "required": false,
+          "default": "'execution'"
+        },
+        {
+          "name": "script_file",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "inline_script",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_camera",
+      "module": "sensors",
+      "purpose": "Add a camera sensor to the scene.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Camera'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "resolution",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "pixel shape/content, PNG bytes, raw and artifact SHA-256",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_camera_rgb_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_collision_group",
+      "module": "physics",
+      "purpose": "Create a USD collision group and return relationship read-back.",
+      "input": [
+        {
+          "name": "group_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "collider_paths",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "filtered_group_paths",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "invert_filtered_groups",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "merge_group_name",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed USD schema, bodies, filters, joint frames/limits and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_authoring_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_lidar",
+      "module": "sensors",
+      "purpose": "Add a lidar sensor to the scene.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Lidar'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "config",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "variant",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "horizontal_fov_deg",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "vertical_fov_deg",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "horizontal_resolution_deg",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "vertical_resolution_deg",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation_rate_hz",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "min_range_m",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "max_range_m",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "preset/generic RTX LiDAR USD schema values and invalid-config atomicity",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_lidar_config_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_light",
+      "module": "lighting",
+      "purpose": "Create a light in the scene.",
+      "input": [
+        {
+          "name": "light_type",
+          "required": false,
+          "default": "'DistantLight'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "intensity",
+          "required": false,
+          "default": "1000.0"
+        },
+        {
+          "name": "color",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "authored light prim and attributes",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_material",
+      "module": "materials",
+      "purpose": "Create a PBR or physics material.",
+      "input": [
+        {
+          "name": "material_type",
+          "required": false,
+          "default": "'pbr'"
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "color",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "roughness",
+          "required": false,
+          "default": "0.5"
+        },
+        {
+          "name": "metallic",
+          "required": false,
+          "default": "0.0"
+        },
+        {
+          "name": "static_friction",
+          "required": false,
+          "default": "0.5"
+        },
+        {
+          "name": "dynamic_friction",
+          "required": false,
+          "default": "0.5"
+        },
+        {
+          "name": "restitution",
+          "required": false,
+          "default": "0.0"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "material schema, direct/resolved binding and physics behavior",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_material_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_object",
+      "module": "objects",
+      "purpose": "Create a primitive object (Cube, Sphere, Cylinder, Cone, Capsule, Plane).",
+      "input": [
+        {
+          "name": "object_type",
+          "required": false,
+          "default": "'Cube'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scale",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "size",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "color",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "physics_enabled",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "exact prim path, transform and absence after delete",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_physics_joint",
+      "module": "physics",
+      "purpose": "Create fixed, revolute, or prismatic joint with explicit local frames.",
+      "input": [
+        {
+          "name": "joint_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "joint_type",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "body1",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "body0",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "axis",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "lower_limit",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "upper_limit",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "local_position0",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "local_rotation0",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "local_position1",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "local_rotation1",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "collision_enabled",
+          "required": false,
+          "default": "False"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed USD schema, bodies, filters, joint frames/limits and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_authoring_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_physics_scene",
+      "module": "scene",
+      "purpose": "Create a physics scene with ground plane. Call get_scene_info first to verify connection.",
+      "input": [
+        {
+          "name": "gravity",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scene_name",
+          "required": false,
+          "default": "'PhysicsScene'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_robot",
+      "module": "robots",
+      "purpose": "Create a robot in the scene from the Isaac Sim asset library.",
+      "input": [
+        {
+          "name": "robot_type",
+          "required": false,
+          "default": "'franka'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "name",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "robot/DOF inventory, targets, measured state and atomic failure",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "create_ros2_camera_publisher",
+      "module": "ros2",
+      "purpose": "Preview or create a ROS2CameraHelper publisher for an MCP camera runtime.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "camera_prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "render_product_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "topic_name",
+          "required": false,
+          "default": "'/camera/image_raw'"
+        },
+        {
+          "name": "frame_id",
+          "required": false,
+          "default": "'sim_camera'"
+        },
+        {
+          "name": "camera_type",
+          "required": false,
+          "default": "'rgb'"
+        },
+        {
+          "name": "node_namespace",
+          "required": false,
+          "default": "''"
+        },
+        {
+          "name": "domain_id",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "qos_profile",
+          "required": false,
+          "default": "'sensor_data'"
+        },
+        {
+          "name": "use_system_time",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "create_ros2_clock_publisher",
+      "module": "ros2",
+      "purpose": "Preview or create a playback-driven ROS 2 Clock publisher graph.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": false,
+          "default": "'/World/ROS2Clock'"
+        },
+        {
+          "name": "topic_name",
+          "required": false,
+          "default": "'/clock'"
+        },
+        {
+          "name": "node_namespace",
+          "required": false,
+          "default": "''"
+        },
+        {
+          "name": "domain_id",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "qos_profile",
+          "required": false,
+          "default": "'default'"
+        },
+        {
+          "name": "reset_on_stop",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "create_ros2_joint_state_publisher",
+      "module": "ros2",
+      "purpose": "Preview or create an IsaacReadJointState ROS 2 JointState publisher graph.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_prim",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "topic_name",
+          "required": false,
+          "default": "'/joint_states'"
+        },
+        {
+          "name": "node_namespace",
+          "required": false,
+          "default": "''"
+        },
+        {
+          "name": "domain_id",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "qos_profile",
+          "required": false,
+          "default": "'default'"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "create_ros2_lidar_publisher",
+      "module": "ros2",
+      "purpose": "Preview or create a ROS2RtxLidarHelper publisher for an MCP RTX LiDAR runtime.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "lidar_prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "render_product_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "topic_name",
+          "required": false,
+          "default": "'/lidar/points'"
+        },
+        {
+          "name": "frame_id",
+          "required": false,
+          "default": "'sim_lidar'"
+        },
+        {
+          "name": "lidar_type",
+          "required": false,
+          "default": "'point_cloud'"
+        },
+        {
+          "name": "node_namespace",
+          "required": false,
+          "default": "''"
+        },
+        {
+          "name": "domain_id",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "qos_profile",
+          "required": false,
+          "default": "'sensor_data'"
+        },
+        {
+          "name": "use_system_time",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "create_ros2_tf_publisher",
+      "module": "ros2",
+      "purpose": "Preview or create a 6.0-style ComputeTransformTree to ROS 2 TF publisher.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_prims",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "parent_prim",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "topic_name",
+          "required": false,
+          "default": "'/tf'"
+        },
+        {
+          "name": "node_namespace",
+          "required": false,
+          "default": "''"
+        },
+        {
+          "name": "domain_id",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "qos_profile",
+          "required": false,
+          "default": "'default'"
+        },
+        {
+          "name": "static_publisher",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "create_sdg_job",
+      "module": "replicator",
+      "purpose": "Preview or create a bounded manual-trigger BasicWriter SDG job.",
+      "input": [
+        {
+          "name": "camera_prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "frame_count",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "annotations",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "resolution",
+          "required": false,
+          "default": "[640, 480]"
+        },
+        {
+          "name": "seed",
+          "required": false,
+          "default": "0"
+        },
+        {
+          "name": "randomizers",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rt_subframes",
+          "required": false,
+          "default": "1"
+        },
+        {
+          "name": "delta_time",
+          "required": false,
+          "default": "0.0"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "delete_action_graph",
+      "module": "graphs",
+      "purpose": "Preview or delete one exact Action Graph, with deletion read-back.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "delete_artifact",
+      "module": "artifacts",
+      "purpose": "Delete one managed artifact after validating its opaque handle.",
+      "input": [
+        {
+          "name": "handle",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "metadata, bounded chunks, full SHA-256, delete and expiry",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_artifact_transport_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "delete_human",
+      "module": "humans",
+      "purpose": "Delete one MCP-owned human. Preview is enabled by default.",
+      "input": [
+        {
+          "name": "human_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "delete_empty_group",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "delete_object",
+      "module": "objects",
+      "purpose": "Delete an object; Camera/LiDAR use verified lifecycle teardown.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "post_delete_updates",
+          "required": false,
+          "default": "8"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "exact prim path, transform and absence after delete",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "delete_ros2_workflow",
+      "module": "ros2",
+      "purpose": "Preview or delete one MCP-owned ROS 2 workflow; foreign graphs are refused.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "delete_sdg_job",
+      "module": "replicator",
+      "purpose": "Preview or delete one terminal job record and optionally its artifacts.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "delete_artifacts",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "delete_sensor",
+      "module": "sensors",
+      "purpose": "Release and delete one Camera or LiDAR, then verify it stays absent.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "post_delete_updates",
+          "required": false,
+          "default": "8"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "prim, runtime wrapper, render product, caches and metadata all absent",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_sensor_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "disconnect_action_graph",
+      "module": "graphs",
+      "purpose": "Preview or remove one exact connection from an Action Graph.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "source_attr",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_attr",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "edit_action_graph",
+      "module": "graphs",
+      "purpose": "Edit an existing OmniGraph Action Graph: set attribute values or add connections.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": false,
+          "default": "'/World/ActionGraph'"
+        },
+        {
+          "name": "values",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "connections",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "edit_composition_arc",
+      "module": "scene",
+      "purpose": "Preview or edit a reference/payload arc. Payloads also support load/unload; every mutation is read back and rolled back on failure.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "arc_type",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "action",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "asset_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "target_prim_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "edit_sublayer",
+      "module": "scene",
+      "purpose": "Preview or add/remove a root-layer subLayer path with stopped-timeline and exact read-back checks.",
+      "input": [
+        {
+          "name": "action",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "layer_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "index",
+          "required": false,
+          "default": "-1"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "evaluate_action_graph",
+      "module": "graphs",
+      "purpose": "Explicitly evaluate one exact Action Graph and return post-evaluation status.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "execute_script",
+      "module": "simulation",
+      "purpose": "Escape hatch: execute arbitrary Python code in Isaac Sim.",
+      "input": [
+        {
+          "name": "code",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "cwd",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "timeout_s",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "max_output_bytes",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "allow_background",
+          "required": false,
+          "default": "False"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "execute_trajectory",
+      "module": "motion",
+      "purpose": "Start a trajectory job and return immediately without blocking the MCP worker.",
+      "input": [
+        {
+          "name": "trajectory_id",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "timeout_ms",
+          "required": false,
+          "default": "30000"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "IK error, trajectory validation, progress, terminal state and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_motion_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "generate_3d",
+      "module": "assets",
+      "purpose": "Generate a 3D model from text or image using Beaver3D, then load it into the scene.",
+      "input": [
+        {
+          "name": "text_prompt",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "image_url",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scale",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "catalog or resulting USD prim",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Provider credentials/model configuration are external prerequisites, not a code defect.",
+      "blocker": {
+        "type": "external_configuration",
+        "missing": [
+          "ARK_API_KEY",
+          "BEAVER3D_MODEL"
+        ]
+      }
+    },
+    {
+      "tool": "get_action_graph",
+      "module": "graphs",
+      "purpose": "Read one Action Graph's nodes, edges, state, and optional values or script source.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "include_values",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "include_script_source",
+          "required": false,
+          "default": "False"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_action_graph_status",
+      "module": "graphs",
+      "purpose": "Read one Action Graph's enabled, evaluation, and error status.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_artifact_info",
+      "module": "artifacts",
+      "purpose": "Get size, type, hash, expiry, and producer metadata for a managed artifact.",
+      "input": [
+        {
+          "name": "handle",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "metadata, bounded chunks, full SHA-256, delete and expiry",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_artifact_transport_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_camera_calibration",
+      "module": "sensors",
+      "purpose": "Read camera intrinsics, extrinsics, projection, resolution, and units.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Camera'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "seven annotator arrays, semantic geometry, calibration matrices and SHA-256",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_camera_outputs_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_capabilities",
+      "module": "capabilities",
+      "purpose": "Discover the live Isaac Sim MCP runtime and its explicit limitations.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "runtime, extensions, command registry and backend matrix",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_backend_capability_matrix_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_collision_group",
+      "module": "physics",
+      "purpose": "Read collision group members, filters, inversion and merge name.",
+      "input": [
+        {
+          "name": "group_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed USD schema, bodies, filters, joint frames/limits and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_authoring_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_human",
+      "module": "humans",
+      "purpose": "Return USD and live Behavior Agent state for one IRA human.",
+      "input": [
+        {
+          "name": "human_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_isaac_logs",
+      "module": "simulation",
+      "purpose": "Diagnostic tool: recent WARN/ERROR logs plus captured print() output.",
+      "input": [
+        {
+          "name": "clear",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "count",
+          "required": false,
+          "default": "100"
+        },
+        {
+          "name": "since_last_play",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "filter_command_id",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "severity",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "source",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "correlated bounded structured records with credential redaction",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_job_diagnostics_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_job_status",
+      "module": "jobs",
+      "purpose": "Read a managed, motion, or SDG job without executing it again.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "retained job state, reconnect result, cancellation and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_job_diagnostics_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_joint_config",
+      "module": "simulation",
+      "purpose": "Diagnostic tool: get joint drive configuration for a robot articulation.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_joint_positions",
+      "module": "robots",
+      "purpose": "Read current joint positions from a robot.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "robot/DOF inventory, targets, measured state and atomic failure",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_joint_state",
+      "module": "robots",
+      "purpose": "Read measured joint state and active command targets.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "joint_names",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "joint_indices",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "position/velocity/effort targets, measured values and atomic rejection",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_lidar_config",
+      "module": "sensors",
+      "purpose": "Read effective LiDAR FOV, angular resolution, rate, range, and USD schema values.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Lidar'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "preset/generic RTX LiDAR USD schema values and invalid-config atomicity",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_lidar_config_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_lidar_point_cloud",
+      "module": "sensors",
+      "purpose": "Get typed point cloud fields from a lidar sensor.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/Lidar'"
+        },
+        {
+          "name": "output_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "return_mode",
+          "required": false,
+          "default": "'artifact'"
+        },
+        {
+          "name": "inline_max_bytes",
+          "required": false,
+          "default": "1024 * 1024"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed Cartesian fields, known object ID mapping and NPZ SHA-256",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_lidar_point_cloud_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_material",
+      "module": "materials",
+      "purpose": "Read PBR or physics material parameters and explicit units.",
+      "input": [
+        {
+          "name": "material_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "material schema, direct/resolved binding and physics behavior",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_material_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_material_binding",
+      "module": "materials",
+      "purpose": "Read the resolved physics or visual material binding on a prim.",
+      "input": [
+        {
+          "name": "target_prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "material_purpose",
+          "required": false,
+          "default": "'physics'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "material schema, direct/resolved binding and physics behavior",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_material_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_motion_status",
+      "module": "motion",
+      "purpose": "Read motion job state, progress, timing, and terminal error details.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "IK error, trajectory validation, progress, terminal state and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_motion_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_navmesh_status",
+      "module": "humans",
+      "purpose": "Return Navigation Core, NavMeshVolume, bake and area status.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_physics_body",
+      "module": "physics",
+      "purpose": "Read authored rigid body, collider, approximation, mass and density.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed USD schema, bodies, filters, joint frames/limits and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_authoring_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_physics_joint",
+      "module": "physics",
+      "purpose": "Read joint type, body targets, frames, axis, limits and units.",
+      "input": [
+        {
+          "name": "joint_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "typed USD schema, bodies, filters, joint frames/limits and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_authoring_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_physics_state",
+      "module": "simulation",
+      "purpose": "Diagnostic tool: get physics state for a prim.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "USD/runtime physics values, exact step timing and restored snapshot",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_params_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_prim_info",
+      "module": "scene",
+      "purpose": "Get detailed information about a specific prim.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_replicator_status",
+      "module": "replicator",
+      "purpose": "Read Replicator extension, orchestrator, job, writer, and trigger state.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_robot_info",
+      "module": "robots",
+      "purpose": "Get robot joint information including names, DOF count, joint types, and limits.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "robot/DOF inventory, targets, measured state and atomic failure",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_ros2_status",
+      "module": "ros2",
+      "purpose": "Read ROS 2 bridge/core/nodes state, domain source, distro, and workflow count.",
+      "input": [],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "get_scene_info",
+      "module": "scene",
+      "purpose": "Ping the Isaac Sim extension server and return scene information including stage path, assets root, and prim count.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_script_audit_log",
+      "module": "simulation",
+      "purpose": "Return bounded script audit metadata. Source code is represented only by SHA-256.",
+      "input": [
+        {
+          "name": "count",
+          "required": false,
+          "default": "50"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_script_policy",
+      "module": "simulation",
+      "purpose": "Return the current execute/reload policy without exposing script source or credentials.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_sdg_job_status",
+      "module": "replicator",
+      "purpose": "Read bounded SDG job progress, lifecycle state, and cleanup read-back.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_sdg_manifest",
+      "module": "replicator",
+      "purpose": "Return a terminal job manifest and managed artifact handles.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_semantic_labels",
+      "module": "scene",
+      "purpose": "Read Isaac Sim 6.0.1 LabelsAPI taxonomies and labels, plus any legacy semantic labels.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_simulation_state",
+      "module": "simulation",
+      "purpose": "Get the current simulation state: timeline status (playing/stopped/paused),",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_stage_composition",
+      "module": "scene",
+      "purpose": "Read the root layer, full layer stack, prim count, references/payloads, variant selections, semantics, and stage metadata.",
+      "input": [
+        {
+          "name": "root_path",
+          "required": false,
+          "default": "'/'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "get_typed_attribute",
+      "module": "scene",
+      "purpose": "Read a USD attribute value, declared type, and authored-value state in JSON-safe form.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "attribute",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "import_urdf",
+      "module": "assets",
+      "purpose": "Import a robot from a URDF file into the scene.",
+      "input": [
+        {
+          "name": "urdf_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/robot'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "catalog or resulting USD prim",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_action_graphs",
+      "module": "graphs",
+      "purpose": "List Action Graphs below a USD root, including disabled graphs by default.",
+      "input": [
+        {
+          "name": "root_path",
+          "required": false,
+          "default": "'/World'"
+        },
+        {
+          "name": "include_disabled",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_available_robots",
+      "module": "robots",
+      "purpose": "List all available robots discovered from the Isaac Sim asset server.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "robot/DOF inventory, targets, measured state and atomic failure",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_controller_profiles",
+      "module": "controllers",
+      "purpose": "List the exact gripper and mobile-base profiles accepted by high-level controller tools.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "profile signature, command targets, measured velocity and stop targets",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_controller_profiles_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_environments",
+      "module": "scene",
+      "purpose": "List all available environments discovered from the Isaac Sim asset server.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_humans",
+      "module": "humans",
+      "purpose": "List IRA human characters without changing the stage.",
+      "input": [
+        {
+          "name": "root_prim_path",
+          "required": false,
+          "default": "'/World/Characters'"
+        },
+        {
+          "name": "include_external",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_jobs",
+      "module": "jobs",
+      "purpose": "List the bounded retained managed-job registry.",
+      "input": [
+        {
+          "name": "count",
+          "required": false,
+          "default": "50"
+        },
+        {
+          "name": "include_terminal",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "retained job state, reconnect result, cancellation and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_job_diagnostics_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_nvidia_assets",
+      "module": "assets",
+      "purpose": "List NVIDIA assets that can be spawned through MCP.",
+      "input": [
+        {
+          "name": "category",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "query",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "max_results",
+          "required": false,
+          "default": "50"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "current NVIDIA asset catalog query succeeded and returned a bounded sample",
+      "evidence": {
+        "type": "read_only_live",
+        "verified_at": "2026-08-25T16:28:11.755152+00:00",
+        "source": "scripts/generate_all_tools_report.py --live"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_prims",
+      "module": "scene",
+      "purpose": "List all prims in the scene, optionally filtered by type.",
+      "input": [
+        {
+          "name": "root_path",
+          "required": false,
+          "default": "'/'"
+        },
+        {
+          "name": "prim_type",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "list_ros2_workflows",
+      "module": "ros2",
+      "purpose": "List MCP-owned ROS 2 publisher graphs below a USD root.",
+      "input": [
+        {
+          "name": "root_path",
+          "required": false,
+          "default": "'/World'"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "workflow graph/prim plus external subscriber message and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_ros2_workflows_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Previously live-verified with an external subscriber; current runtime extensions are disabled.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "enabled Isaac Sim ROS 2 bridge/core/nodes"
+        ]
+      }
+    },
+    {
+      "tool": "load_environment",
+      "module": "scene",
+      "purpose": "Load a pre-built environment into the scene. Supports fuzzy matching.",
+      "input": [
+        {
+          "name": "environment",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "stage path, prim inventory, authored fixture or cleanup postcondition",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "load_usd",
+      "module": "assets",
+      "purpose": "Load a USD asset from a URL or file path into the scene.",
+      "input": [
+        {
+          "name": "usd_url",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "'/World/my_usd'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scale",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "catalog or resulting USD prim",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "modify_light",
+      "module": "lighting",
+      "purpose": "Modify properties of an existing light.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "intensity",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "color",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "authored light prim and attributes",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "new_stage",
+      "module": "scene",
+      "purpose": "Preview or create a new empty stage. Requires scratch_stage=true, a scratch_root, stopped timeline, and defaults to preview-only.",
+      "input": [
+        {
+          "name": "scratch_stage",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "scratch_root",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "open_gripper",
+      "module": "controllers",
+      "purpose": "Open a gripper to the profile's declared open width with immediate target read-back.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "profile",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "profile signature, command targets, measured velocity and stop targets",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_controller_profiles_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "open_stage",
+      "module": "scene",
+      "purpose": "Preview or open a local USD stage inside scratch_root. Destructive stage replacement requires explicit scratch_stage=true.",
+      "input": [
+        {
+          "name": "path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "scratch_stage",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "scratch_root",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "readback_root_path",
+          "required": false,
+          "default": "'/'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "pause_simulation",
+      "module": "simulation",
+      "purpose": "Pause the physics simulation.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "plan_joint_trajectory",
+      "module": "motion",
+      "purpose": "Plan a bounded joint trajectory and return an opaque trajectory_id.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "goal_joint_positions",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "start_joint_positions",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "planner",
+          "required": false,
+          "default": "'rrt'"
+        },
+        {
+          "name": "random_seed",
+          "required": false,
+          "default": "123456"
+        },
+        {
+          "name": "max_iterations",
+          "required": false,
+          "default": "5000"
+        },
+        {
+          "name": "timeout_ms",
+          "required": false,
+          "default": "5000"
+        },
+        {
+          "name": "robot_model",
+          "required": false,
+          "default": "'Franka'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "IK error, trajectory validation, progress, terminal state and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_motion_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "play_simulation",
+      "module": "simulation",
+      "purpose": "Start the physics simulation.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "read_artifact",
+      "module": "artifacts",
+      "purpose": "Read one bounded base64 chunk from a managed artifact.",
+      "input": [
+        {
+          "name": "handle",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "offset",
+          "required": false,
+          "default": "0"
+        },
+        {
+          "name": "length",
+          "required": false,
+          "default": "256 * 1024"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "metadata, bounded chunks, full SHA-256, delete and expiry",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-23",
+        "source": "scripts/verify_artifact_transport_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "refresh_robot_library",
+      "module": "robots",
+      "purpose": "Force re-scan the asset server for available robots. Use this if new robot assets were added.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "robot/DOF inventory, targets, measured state and atomic failure",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "reload_script",
+      "module": "simulation",
+      "purpose": "Reload a Python controller from a file on disk.",
+      "input": [
+        {
+          "name": "file_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "module_name",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "timeout_s",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "max_output_bytes",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "reload_script_node",
+      "module": "graphs",
+      "purpose": "Preview or recompile one exact ScriptNode without cross-graph fallback.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "node_path",
+          "required": false,
+          "default": "'ScriptNode'"
+        },
+        {
+          "name": "mode",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "inline_script",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "script_file",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "save_stage_as",
+      "module": "scene",
+      "purpose": "Preview or export the current stage to a different local USD file inside scratch_root. Source overwrite is always rejected.",
+      "input": [
+        {
+          "name": "path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "scratch_stage",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "scratch_root",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "overwrite",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "readback_root_path",
+          "required": false,
+          "default": "'/'"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "search_usd",
+      "module": "assets",
+      "purpose": "Search the NVIDIA USD asset library by text description, then load the best match.",
+      "input": [
+        {
+          "name": "text_prompt",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_path",
+          "required": false,
+          "default": "'/World/my_usd'"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scale",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "catalog or resulting USD prim",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "No secret is requested, stored, or printed by this report.",
+      "blocker": {
+        "type": "external_configuration",
+        "missing": [
+          "NVIDIA_API_KEY"
+        ]
+      }
+    },
+    {
+      "tool": "set_action_graph_enabled",
+      "module": "graphs",
+      "purpose": "Preview or enable/disable one Action Graph and read back its effective state.",
+      "input": [
+        {
+          "name": "graph_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "enabled",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "nodes, edges, enabled/evaluation state, source hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_omnigraph_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_gripper_width",
+      "module": "controllers",
+      "purpose": "Set total gripper opening width using an explicit robot profile.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "profile",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "width_m",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "profile signature, command targets, measured velocity and stop targets",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_controller_profiles_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_human_behavior",
+      "module": "humans",
+      "purpose": "Update supported live Behavior Agent settings with read-back.",
+      "input": [
+        {
+          "name": "human_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "enabled",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "speed_mps",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "navigation_areas",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "obstacle_avoidance_enabled",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "auto_avoidance_enabled",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_human_idle",
+      "module": "humans",
+      "purpose": "Cancel the active action by issuing Idle, optionally facing one target.",
+      "input": [
+        {
+          "name": "human_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "facing_position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "facing_prim_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_human_look_at",
+      "module": "humans",
+      "purpose": "Issue a Behavior Agent LookAt task; zero duration means indefinite.",
+      "input": [
+        {
+          "name": "human_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "target_prim_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "duration_seconds",
+          "required": false,
+          "default": "0.0"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_human_target",
+      "module": "humans",
+      "purpose": "Issue a Behavior Agent MoveTo task to exactly one target.",
+      "input": [
+        {
+          "name": "human_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "target_position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "target_prim_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "speed_mps",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "auto_brake",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_joint_command",
+      "module": "robots",
+      "purpose": "Apply an atomic position, velocity, or effort joint command.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "mode",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "values",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "joint_names",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "joint_indices",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "position/velocity/effort targets, measured values and atomic rejection",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_joint_drive_config",
+      "module": "robots",
+      "purpose": "Atomically update drive gains, limits, or drive type for selected joints.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "stiffness",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "damping",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "max_force",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "max_velocity",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "drive_type",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "joint_names",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "joint_indices",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "drive gains, force/velocity limits, drive type and rollback",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_drive_config_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_joint_positions",
+      "module": "robots",
+      "purpose": "Set target joint positions on a robot via ArticulationAction.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "joint_positions",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "joint_indices",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "robot/DOF inventory, targets, measured state and atomic failure",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_robot_joint_control_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_mobile_base_velocity",
+      "module": "controllers",
+      "purpose": "Apply a profiled differential or holonomic base velocity target.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "profile",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "forward_mps",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "lateral_mps",
+          "required": false,
+          "default": "0.0"
+        },
+        {
+          "name": "yaw_radps",
+          "required": false,
+          "default": "0.0"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "profile signature, command targets, measured velocity and stop targets",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_controller_profiles_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_physics_params",
+      "module": "simulation",
+      "purpose": "Atomically configure Isaac Sim 6 PhysX scene parameters.",
+      "input": [
+        {
+          "name": "gravity",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "time_step",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "gpu_enabled",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "USD/runtime physics values, exact step timing and restored snapshot",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_physics_params_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_semantic_labels",
+      "module": "scene",
+      "purpose": "Preview or apply Isaac Sim 6.0.1 UsdSemantics LabelsAPI labels under one taxonomy with read-back.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "taxonomy",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "labels",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "overwrite",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_typed_attribute",
+      "module": "scene",
+      "purpose": "Preview or set a finite, explicitly typed USD attribute. Existing attributes require overwrite=true and cannot change type.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "attribute",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "type_name",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "value",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "custom",
+          "required": false,
+          "default": "True"
+        },
+        {
+          "name": "overwrite",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "set_variant_selection",
+      "module": "scene",
+      "purpose": "Preview or select an existing USD variant after validating the set and available names.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "variant_set",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "selection",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "layer stack, composition arcs, typed values, semantics, rollback and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_stage_composition_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "spawn_human",
+      "module": "humans",
+      "purpose": "Spawn animated NVIDIA human characters into the CURRENT USD stage.",
+      "input": [
+        {
+          "name": "count",
+          "required": false,
+          "default": "1"
+        },
+        {
+          "name": "group_name",
+          "required": false,
+          "default": "'MCPHumans'"
+        },
+        {
+          "name": "root_prim_path",
+          "required": false,
+          "default": "'/World/Characters'"
+        },
+        {
+          "name": "asset_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "motion_library_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "behavior",
+          "required": false,
+          "default": "'wander'"
+        },
+        {
+          "name": "spawn_areas",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "speed_range",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "distance_range",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "idle_time_range",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "patrol_points",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "auto_create_navmesh_volume",
+          "required": false,
+          "default": "False"
+        },
+        {
+          "name": "navmesh_volume_center",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "navmesh_volume_size",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "seed",
+          "required": false,
+          "default": "12345"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "ownership, behavior task, measured movement, navmesh and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_human_lifecycle_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "spawn_nvidia_asset",
+      "module": "assets",
+      "purpose": "Spawn one catalog asset into the CURRENT USD stage.",
+      "input": [
+        {
+          "name": "asset_key",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "prim_path",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scale",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "blocked",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "catalog or resulting USD prim",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "Catalog/contract exists, but no preserved per-tool 6.0.1 scratch live postcondition is available.",
+      "blocker": {
+        "type": "runtime_prerequisite",
+        "missing": [
+          "dedicated exact-path scratch stage"
+        ]
+      }
+    },
+    {
+      "tool": "start_job",
+      "module": "jobs",
+      "purpose": "Start an eligible asset or sensor command as a bounded background job.",
+      "input": [
+        {
+          "name": "command_type",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "params",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "deadline_ms",
+          "required": false,
+          "default": "30000"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "retained job state, reconnect result, cancellation and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_job_diagnostics_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "start_sdg_job",
+      "module": "replicator",
+      "purpose": "Preview or asynchronously start one configured SDG job.",
+      "input": [
+        {
+          "name": "job_id",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "preview",
+          "required": false,
+          "default": "True"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "job state, frame manifest, deterministic trace hash and cleanup",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_replicator_sdg_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": true,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "step_simulation",
+      "module": "simulation",
+      "purpose": "Advance the simulation by exactly N physics frames on a FROZEN timeline.",
+      "input": [
+        {
+          "name": "num_steps",
+          "required": false,
+          "default": "1"
+        },
+        {
+          "name": "observe_prims",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "observe_joints",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "stop_mobile_base",
+      "module": "controllers",
+      "purpose": "Set every profiled wheel velocity target to zero and verify the stop target read-back.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "profile",
+          "required": true,
+          "default": null
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "profile signature, command targets, measured velocity and stop targets",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-24",
+        "source": "scripts/verify_controller_profiles_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "stop_simulation",
+      "module": "simulation",
+      "purpose": "Stop the physics simulation and reset to spawn state.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "timeline/physics state, bounded script policy, audit and correlated logs",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-25",
+        "source": "scripts/verify_command_governance_live.py"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    },
+    {
+      "tool": "transform_object",
+      "module": "objects",
+      "purpose": "Set the transform (position, rotation, scale) of an existing object.",
+      "input": [
+        {
+          "name": "prim_path",
+          "required": true,
+          "default": null
+        },
+        {
+          "name": "position",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "rotation",
+          "required": false,
+          "default": "None"
+        },
+        {
+          "name": "scale",
+          "required": false,
+          "default": "None"
+        }
+      ],
+      "status": "pass",
+      "prerequisites": [
+        "Isaac Sim 6.0.1",
+        "TCP 8766",
+        "dedicated scratch namespace for writes"
+      ],
+      "readback": "exact prim path, transform and absence after delete",
+      "evidence": {
+        "type": "guarded_live",
+        "verified_at": "2026-08-20",
+        "source": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md"
+      },
+      "kit_log": {
+        "checked": true,
+        "result": "See the named verifier's bounded run-scoped log evidence."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "SHA-256 verified when an artifact is produced"
+      },
+      "limitations": "PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise.",
+      "blocker": null
+    }
+  ]
+}

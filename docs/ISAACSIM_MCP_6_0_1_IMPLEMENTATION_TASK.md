@@ -336,23 +336,32 @@
 
 ## Phase 6：測試、報告與發布
 
-- [ ] 24. 建立完整測試金字塔與 scratch-stage harness
+- [x] 24. 建立完整測試金字塔與 scratch-stage harness
   > 現況：已有 unit/structure/integration tests；既有 integration 會連 `8766` 並含 `clear_scene`，不能直接對使用者 live stage 執行。
   > 缺漏位置：`tests/test_integration.py`、fixture/launcher、CI Windows matrix。
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
+  > 已實作（2026-08-26）：pytest marker 將 suite 分成 `unit`、`contract`、`offline_adapter`、`live/destructive`、`windows_launcher`、`unix_launcher`；CI 新增 Windows/Ubuntu offline matrix，並把 PowerShell/Bash launcher 拆成各自平台 job。legacy integration 預設 skip，只有完整 confirmation、exact scratch USD、允許根目錄、stopped timeline 全部成立才可進入。
+  > scratch contract：`ScratchRun.validate()` 在任何 write 前拒絕匿名 stage、path mismatch、root escape、playing timeline 與既存 namespace；每輪配置 `/World/MCP_Live_<32 hex>`，cleanup 只刪該 root 並讀回 absent。當前 8766 的匿名 stage 實測被拒絕，未發生 Stage mutation。契約與測試：`docs/LIVE_TEST_HARNESS.md`、`isaac_mcp/live_testing.py`、`tests/test_live_testing.py`。
+  > offline 驗收：`384 passed, 70 deselected`；Windows PowerShell launcher `16 passed`；Unix Bash launcher 已隔離到 Ubuntu CI，本機 Windows 的 `bash.exe` 因 WSL 未安裝 `/bin/bash` 不納入失敗判定。Ruff、publish-candidate format 與 `git diff --check` 全數通過。
 
-- [ ] 25. 目前 56 個 tools 的統一 Isaac Sim 6.0.1 live 報告
+- [x] 25. 目前 128 個 tools 的統一 Isaac Sim 6.0.1 live 報告
   > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config、artifact transport、sensor lifecycle 與 Robot joint control 工具未納入同一輪 56-tool live matrix。
   > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
   > 驗收：56 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
+  > 已實作（2026-08-26）：source AST 自動盤點 128 個 named tools，逐項輸出用途、input、前置條件、read-back、固定狀態、verifier/date、Kit log 範圍、artifact/hash 契約、限制與 blocker。tracked machine artifact 為 `docs/ALL_TOOLS_TEST_RESULTS.json`；產生器與相容入口都只做 read-only snapshot，不再呼叫 `clear_scene`。
+  > 本次 runtime snapshot：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、128 commands、timeline stopped。聚合結果 `117 pass / 11 blocked / 0 fail`；其中 8 個 ROS 2 tools 因目前 bridge/core/nodes 關閉而 blocked，仍保留 2026-08-25 external subscriber live 證據；`search_usd`／`generate_3d` 因外部 provider 設定 blocked；`spawn_nvidia_asset` 因缺 dedicated exact-path scratch live postcondition blocked，未以 catalog/contract presence 冒充 pass。報告：`docs/ALL_TOOLS_TEST_REPORT.md`、`docs/ALL_TOOLS_TEST_RESULTS.json`；產生器：`scripts/generate_all_tools_report.py`。
 
-- [ ] 26. 文件、相容性、migration 與 release gate
+- [x] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。
   > 缺漏位置：README、tool docs、protocol/version 文件、changelog。
   > 實作：補 Isaac Sim 6.0.1 安裝、8766 啟動、tool inventory、限制、schema 範例、migration、備份/還原、PhysX/Newton matrix。
   > 驗收：全新 checkout 可依文件完成 secret-free setup；release 前執行 backup、tests、live matrix、Git diff review，未經使用者授權不 push/merge/tag。
+  > 已實作（2026-08-26）：新增 `INSTALLATION_WINDOWS.md`、`PROTOCOL_VERSIONING_AND_MIGRATION.md`、`RELEASE_GATE.md`，README 連結 6.1～6.3 與 exact `isaac-sim-live` route。文件分開說明 package/extension `0.6.0`、response `1.0`、capability `1.1`、backend matrix `1.0`、42→128 tools migration、artifact/job/idempotency/preview/script policy、PhysX/Newton/legacy V5 邊界。
+  > release gate：`scripts/release_gate.ps1` strict mode 預設要求 clean worktree；依序檢查 exact repository/origin、version/runtime、tracked 與 untracked publish-candidate credential、verified backup、offline pyramid、Windows launcher、Ruff/publish-candidate format/diff、8766 read-only matrix、wheel/fresh temporary venv install 與 worktree fingerprint。`-AllowDirty` 只供開發驗證，仍要求前後 fingerprint 完全相同；腳本沒有 commit/push/merge/tag。
+  > 驗收：完整 `-AllowDirty` run 通過。credential findings=`0`；backup restore verify=`True`、compared=`250`；offline=`384 passed, 70 deselected`；Windows launcher=`16 passed`；Ruff/diff 通過；live matrix=`117 pass / 11 blocked / 0 fail`、port owner PID=`31576`；wheel `isaacsim_mcp_server-0.6.0-py3-none-any.whl` 在全新 temporary venv 安裝/import version=`0.6.0`；worktree fingerprint unchanged。另實測 strict mode 在 dirty worktree 立即拒絕，符合 fail-closed。
+  > 後續讀取：專案 skill 新增 `references/isaacsim-mcp-6x.md`，入口 `SKILL.md` 與 README 都提供 6.1～6.3 路由、evidence taxonomy、scratch invariants、protocol/release 邊界與 GitHub publish verification 順序；skill `quick_validate.py` 通過。
 
 ## 延後範圍：Isaac Lab MCP
 
@@ -362,6 +371,38 @@
   > 後續方向：另建 Isaac Lab capability/task，涵蓋 environment、manager、training、policy、checkpoint、evaluation 與 job lifecycle；沿用本文件已穩定的 protocol，而不是共用不明確的 tool 名稱。
 
 ## 每次工作紀錄模板
+
+### 2026-08-26：Tasks 6.1 / 6.2
+
+```text
+Task：24 測試金字塔與 scratch-stage harness；25 統一 128-tool evidence report
+變更前 Git HEAD / status：75cc090e5f640858b550d62ac8fef9965fccaa26 / clean
+變更前備份：E:\碩士論文\backups\isaacsim-mcp\20260826-001602-740-pre-6-1-6-2
+變更前 bundle SHA-256 / verify：F40E1965BB7081C7F1A8BE098A2889427D5B12395CEBA010D1B6DD70BB37BBDC / True
+測試：offline 379 passed, 70 deselected；Windows launcher 16 passed；focused 11 passed；Ruff/format/diff check passed
+Isaac Sim 6.0.1 live：6.0.1-rc.7 / IsaacAdapterV6 / PhysX / 128 commands / TCP 8766
+scratch guard：anonymous stage 被拒絕；未建立 prim namespace，未執行 write
+read-back：report 前後 stage_path 都為空字串、prim_count 都為 33
+報告結果：117 pass / 11 blocked / 0 fail
+變更後備份：E:\碩士論文\backups\isaacsim-mcp\20260826-002851-468-post-6-1-6-2
+變更後 bundle SHA-256 / verify：F40E1965BB7081C7F1A8BE098A2889427D5B12395CEBA010D1B6DD70BB37BBDC / True
+```
+
+### 2026-08-26：Task 6.3
+
+```text
+Task：26 文件、相容性、migration 與 release gate
+變更前 Git HEAD / status：75cc090e5f640858b550d62ac8fef9965fccaa26 / 保留 6.1、6.2 dirty/untracked
+變更前備份：E:\碩士論文\backups\isaacsim-mcp\20260826-005736-667-pre-6-3
+變更前 bundle SHA-256 / verify：F40E1965BB7081C7F1A8BE098A2889427D5B12395CEBA010D1B6DD70BB37BBDC / True
+release gate backup：E:\碩士論文\backups\isaacsim-mcp\20260826-010348-619-release-gate
+release gate backup verify / compared：True / 250
+tests：offline 384 passed, 70 deselected；Windows launcher 16 passed；focused release docs 16 passed
+live：Isaac Sim 6.0.1-rc.7 / IsaacAdapterV6 / PhysX / 128 commands / TCP 8766 PID 31576
+live matrix：117 pass / 11 blocked / 0 fail；read-only --check，未重寫 tracked report
+package：0.6.0 wheel build、fresh temporary venv install/import 通過
+security / Git：credential findings 0；worktree fingerprint unchanged；strict dirty refusal 通過；未 commit/push/merge/tag
+```
 
 ```text
 [日期時間]

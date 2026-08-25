@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — installation, protocol migration, and release gate
+
+- Added a secret-free fresh-checkout guide for Windows and Isaac Sim 6.0.1, including exact live/documentation route separation and multi-GPU PhysX startup policy.
+- Documented package, extension, response `1.0`, capability `1.1`, backend-matrix `1.0`, artifact, rolling-upgrade, and 42-to-128-tool migration contracts.
+- Added a fail-closed PowerShell release gate for exact repository identity, clean-worktree policy, secret scan, verified backup, offline/launcher tests, read-only live matrix, wheel/fresh-venv install, and worktree-preservation review.
+- Added `--check` to the 128-tool report generator so release validation cannot rewrite tracked evidence.
+- Added a routed 6.x project-skill reference for future test, migration, release, and GitHub verification work.
+
+### Added — fail-closed live harness and 128-tool evidence matrix
+
+- Added explicit pytest layers for unit, schema contract, offline adapter, live/destructive, Windows launcher, and Unix launcher tests, with Windows/Ubuntu CI separation.
+- Added an exact-path scratch-stage guard, unique per-run prim namespace, and cleanup read-back that distinguishes exact prim absence from connection/handler errors.
+- Disabled the legacy clear-scene integration path by default and changed `scripts/test_all_tools.py` into a read-only compatibility entry point.
+- Added a source-complete 128-tool report and tracked JSON artifact with fixed pass/partial/blocked/unsupported/fail definitions and per-tool evidence provenance.
+- Current read-only Isaac Sim 6.0.1 snapshot reports 117 pass, 11 blocked, and 0 fail; blocked external/runtime prerequisites remain separate from code defects.
+
 ### Added — script policy, command correlation, and idempotent replay
 
 - Added `get_script_policy` and `get_script_audit_log`; the named-tool inventory is now 124.

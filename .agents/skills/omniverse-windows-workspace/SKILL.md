@@ -1,6 +1,6 @@
 ---
 name: omniverse-windows-workspace
-description: Operate, develop, diagnose, and maintain a Windows NVIDIA Omniverse and Isaac Sim MCP workspace. Use whenever a request mentions Omniverse, Isaac Sim, Isaac Lab, OpenUSD, USD, pxr, omni, Kit, OmniUI, physics or material authoring, stage composition, OmniGraph or ScriptNode, ROS 2, Replicator SDG, IRA humans or Behavior Agents, command governance, script policy, async jobs, transport limits, diagnostics, robot or factory simulation, NVIDIA assets, VS Code MCP, the live Isaac Sim extension socket, headless SimulationApp, or importing omni without opening the GUI. Routes documentation questions separately from live scene control, selects the Isaac runtime for local code, and preserves credentials, scenes, and unrelated Git changes.
+description: Operate, develop, diagnose, test, migrate, and release a Windows NVIDIA Omniverse and Isaac Sim MCP workspace. Use whenever a request mentions Omniverse, Isaac Sim, Isaac Lab, OpenUSD, USD, pxr, omni, Kit, OmniUI, physics or material authoring, stage composition, OmniGraph or ScriptNode, ROS 2, Replicator SDG, IRA humans or Behavior Agents, command governance, script policy, async jobs, transport limits, diagnostics, test pyramids, scratch-stage live tests, protocol migration, release gates, robot or factory simulation, NVIDIA assets, VS Code MCP, the live Isaac Sim extension socket, headless SimulationApp, or importing omni without opening the GUI. Routes documentation questions separately from live scene control, selects the Isaac runtime for local code, and preserves credentials, scenes, and unrelated Git changes.
 ---
 
 # Omniverse Windows Workspace
@@ -17,7 +17,8 @@ Use the installed Windows baseline and choose the correct execution path before 
 6. Read [references/isaacsim-mcp-3x.md](references/isaacsim-mcp-3x.md) when the request involves physics parameters, backend capability state, rigid bodies, colliders, joints, physics materials, Stage lifecycle, USD composition, variants, semantics, typed attributes, or tasks 3.1 through 3.5.
 7. Read [references/isaacsim-mcp-4x.md](references/isaacsim-mcp-4x.md) when the request involves Action Graph lifecycle, ScriptNode configure/reload, ROS 2 workflows, Replicator SDG jobs, IRA humans, Behavior Agents, NavMesh, or tasks 4.1 through 4.4.
 8. Read [references/isaacsim-mcp-5x.md](references/isaacsim-mcp-5x.md) when the request involves `execute_script` policy, command ID/idempotency, response lifecycle, transaction boundaries, managed jobs, cancellation/deadlines, socket limits, log correlation/redaction, publishing, or tasks 5.1 through 5.4.
-9. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
+9. Read [references/isaacsim-mcp-6x.md](references/isaacsim-mcp-6x.md) when the request involves test layers, destructive integration safety, scratch-stage harnesses, the 128-tool evidence matrix, fresh installation, response/capability migration, packaging, release gates, GitHub publishing, or tasks 6.1 through 6.3.
+10. Inspect current files, Git state, and processes. Treat detected values as evidence and examples as fallbacks.
 
 Do not reinstall Isaac Sim, Isaac Lab, CUDA, Docker, or MCP dependencies merely because a process is stopped or a tool is unavailable. Diagnose the existing installation first.
 
@@ -59,6 +60,12 @@ Tasks 5.1 through 5.4 are the completed security, reliability, and observability
 
 Treat recorded 5.x command counts, PIDs, test totals, and live results as historical evidence. Before a current claim, recheck the canonical checkout and remote, 128-command registry, policy/capability flags, job terminal state and repeat-query behavior, legacy and structured log redaction, transport limits, scratch cleanup, Kit/TCP health, and native dumps. Runtime idempotency is not durable, cooperative cancellation cannot preempt native Kit calls, and Stage batch rollback does not cover cross-subsystem work.
 
+## IsaacSim-MCP 6.x baseline
+
+Tasks 6.1 through 6.3 are the completed verification and release baseline: explicit pytest layers, fail-closed exact-path scratch-stage validation, a source-complete 128-tool evidence artifact, secret-free Windows installation, protocol/version migration, and a release gate that covers backup, tests, read-only live discovery, wheel installation, and Git preservation. Start with the 6.x reference for the task map, current-claim rules, evidence taxonomy, strict versus `-AllowDirty` modes, and publish sequence.
+
+Do not use registry presence as a live pass. A pass must point to a guarded verifier with read-back; missing external/runtime prerequisites are `blocked`; a reached implementation defect is `fail`. The legacy integration suite remains disabled unless its exact confirmation, exact scratch USD, scratch root, and stopped timeline all match. Before publishing, run the release gate against the exact canonical remote; after commit rerun strict mode, push only with explicit authorization, verify the remote ref equals local HEAD, and create a post-push verified backup.
+
 ## Live scene workflow
 
 1. Resolve `ISAACSIM_ROOT`, defaulting to `C:\isaacsim` when it is not configured.
@@ -81,6 +88,7 @@ Never claim a scene edit succeeded from code generation alone. Verify through an
 - Keep 3.x writes inside verifier-owned scratch namespaces or explicit filesystem scratch roots. Preserve existing PhysicsScene and Stage root/session layers with snapshot/restore. Do not run `tests/test_integration.py` as part of an offline suite while live TCP `8766` is reachable.
 - Keep 4.x writes inside exact MCP-owned graph, job, workflow, human, artifact, and scratch namespaces. Honor preview/timeline prerequisites, never mutate external humans or graphs, and use only the dedicated 4.x verifiers for live acceptance. Do not substitute `tests/test_integration.py` while TCP `8766` is reachable.
 - Keep 5.x verification within the script/job/diagnostic policy and dedicated scratch namespaces. Preserve runtime-only idempotency semantics, bounded response/log behavior, provider-owned motion/SDG lifecycles, complete redaction, and pre/post-publish backup gates. Do not expand `apply_stage_batch` into an unsupported cross-subsystem transaction.
+- Keep 6.x evidence source-complete and non-destructive. Use `generate_all_tools_report.py --live --check` inside release validation so tracked reports are not rewritten. Strict release mode requires a clean worktree; `-AllowDirty` is a development check and must preserve the status fingerprint. Never treat skipped backup/live/package gates as release evidence.
 - Obtain explicit authorization before publishing, deleting, or overwriting external or material data.
 
 ## Finish with evidence

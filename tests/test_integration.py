@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Integration tests for all MCP tools against a running Isaac Sim instance.
+r"""Integration tests for all MCP tools against a running Isaac Sim instance.
 
 Prerequisites:
     1. Isaac Sim 5.1.0 must be running with the MCP extension enabled:
@@ -30,12 +30,18 @@ Prerequisites:
 
     2. The extension must be listening on localhost:8766
 
-Run:
+Run only on a disposable stage:
+    set ISAAC_MCP_ALLOW_LEGACY_CLEAR_SCENE=I_UNDERSTAND_THIS_CLEARS_THE_STAGE
+    set ISAAC_MCP_SCRATCH_ROOT=C:\scratch
+    set ISAAC_MCP_SCRATCH_STAGE_PATH=C:\scratch\isaacsim-mcp-live.usda
     pytest tests/test_integration.py -v
     pytest tests/test_integration.py -v -k "scene"     # run only scene tests
     pytest tests/test_integration.py -v -k "robot"      # run only robot tests
 
 All tests are skipped automatically if Isaac Sim is not reachable.
+They are also refused unless the connected stage path exactly matches the
+explicit scratch path.  New live coverage belongs in the namespace-safe
+scratch harness; this legacy file remains for historical regression coverage.
 """
 
 from __future__ import annotations
@@ -52,6 +58,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from isaac_mcp.connection import IsaacConnection
+from isaac_mcp.live_testing import ScratchStageGuardError, require_legacy_clear_stage
+
+pytestmark = [pytest.mark.live, pytest.mark.destructive]
 
 # ── Fixtures ──────────────────────────────────────────────
 
@@ -80,6 +89,11 @@ def conn() -> IsaacConnection:
     c = IsaacConnection(host="localhost", port=8766)
     if not c.connect():
         pytest.skip("Could not connect to Isaac Sim")
+    try:
+        require_legacy_clear_stage(c)
+    except ScratchStageGuardError as exc:
+        c.disconnect()
+        pytest.skip(str(exc))
     yield c
     c.disconnect()
 

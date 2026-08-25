@@ -50,6 +50,15 @@ path = "isaac_mcp/__init__.py"
 
 [tool.pytest.ini_options]
 pythonpath = ["isaac.sim.mcp_extension"]
+markers = [
+    "unit: pure tests that do not require Isaac Sim or a socket",
+    "contract: MCP schema and public tool contract tests",
+    "offline_adapter: adapter and handler tests using runtime stubs or mocks",
+    "live: tests that connect to a running Isaac Sim instance",
+    "destructive: live tests that may replace or mutate a stage",
+    "windows_launcher: Windows PowerShell launcher tests",
+    "unix_launcher: Unix Bash launcher tests",
+]
 
 [tool.hatch.build.targets.sdist]
 include = ["isaac_mcp/"]

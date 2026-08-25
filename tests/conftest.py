@@ -35,6 +35,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 
 def _make_stub(name: str, **attrs) -> types.ModuleType:
     """Create a minimal module stub with optional attributes."""
@@ -172,3 +174,25 @@ def _install_isaac_stubs() -> None:
 # Install stubs at collection time so that any test module importing
 # ``isaac_sim_mcp_extension`` does not get an ImportError.
 _install_isaac_stubs()
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Assign every test to a stable test-pyramid layer by file role."""
+    contract_tokens = ("contract", "schema", "tool_registration", "tool_docstrings", "capabilities")
+    adapter_tokens = ("adapter", "handler")
+    for item in items:
+        filename = item.path.name
+        if filename == "test_integration.py" or "live" in item.keywords:
+            item.add_marker(pytest.mark.live)
+            if filename == "test_integration.py":
+                item.add_marker(pytest.mark.destructive)
+        elif filename == "test_run_isaac_sim_windows.py":
+            item.add_marker(pytest.mark.windows_launcher)
+        elif filename == "test_launcher_engine.py":
+            item.add_marker(pytest.mark.unix_launcher)
+        elif any(token in filename for token in contract_tokens):
+            item.add_marker(pytest.mark.contract)
+        elif any(token in filename for token in adapter_tokens):
+            item.add_marker(pytest.mark.offline_adapter)
+        else:
+            item.add_marker(pytest.mark.unit)

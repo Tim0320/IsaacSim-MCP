@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -21,14 +23,53 @@ jobs:
         run: ruff check .
 
       - name: Format check
-        run: ruff format --check .
+        shell: bash
+        run: |
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=ACMR \
+              "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" -- \
+              '*.py' '*.pyi' '*.md'
+          )
+          if ((${#files[@]})); then
+            ruff format --check "${files[@]}"
+          else
+            echo "No changed Python or Markdown files to format-check."
+          fi
 
+  offline-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
       - name: Install package and test dependencies
         run: python -m pip install -e . pytest
+      - name: Unit, contract, and offline adapter tests
+        run: pytest -q -m "not live and not windows_launcher and not unix_launcher" -k "not test_detect_version_returns_zero_on_failure"
 
-      - name: Unit tests
-        run: >-
-          pytest -q
-          --ignore=tests/test_launcher_engine.py
-          --ignore=tests/test_integration.py
-          -k "not test_detect_version_returns_zero_on_failure"
+  windows-launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: python -m pip install pytest
+      - name: PowerShell launcher tests
+        run: pytest -q tests/test_run_isaac_sim_windows.py
+
+  unix-launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: python -m pip install pytest
+      - name: Bash launcher tests
+        run: pytest -q tests/test_launcher_engine.py

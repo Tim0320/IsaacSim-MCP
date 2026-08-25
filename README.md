@@ -143,6 +143,23 @@ ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file`
 
 以上 124／128 command counts、PID、frame 與 test totals 都是各項完成當時的歷史證據。宣稱目前仍可控制前，必須重驗 checkout/remote、`get_capabilities`、policy flags、job terminal/requery、structured/legacy redaction、transport limits、cleanup、Kit/TCP、run log 與 native dump。Camera job 要先 Play 與 bounded warmup；每次 verifier 使用唯一 idempotency key，避免舊 runtime replay 被誤判成新執行。
 
+## IsaacSim-MCP 6.x 測試、migration 與發布
+
+| 研究項目 | 能力 | 文件／工具 |
+|---|---|---|
+| 6.1 | unit/contract/offline adapter/live 測試分層、exact scratch-stage guard、Windows/Unix launcher CI 分流 | [`LIVE_TEST_HARNESS.md`](docs/LIVE_TEST_HARNESS.md) |
+| 6.2 | 128 named tools 逐項 evidence、固定狀態定義與 tracked JSON artifact | [`ALL_TOOLS_TEST_REPORT.md`](docs/ALL_TOOLS_TEST_REPORT.md)／[`ALL_TOOLS_TEST_RESULTS.json`](docs/ALL_TOOLS_TEST_RESULTS.json) |
+| 6.3 | secret-free fresh checkout、protocol/version migration、package/backup/live/Git release gate | [`INSTALLATION_WINDOWS.md`](docs/INSTALLATION_WINDOWS.md)／[`PROTOCOL_VERSIONING_AND_MIGRATION.md`](docs/PROTOCOL_VERSIONING_AND_MIGRATION.md)／[`RELEASE_GATE.md`](docs/RELEASE_GATE.md) |
+
+正式 release 前執行 `scripts/release_gate.ps1`。strict mode 會拒絕 dirty worktree，並檢查 exact origin、version、credential、verified backup、offline tests、Windows launcher、read-only 128-tool live matrix、wheel/fresh-venv install 與 worktree preservation。腳本不會 commit、push、merge 或 tag。
+
+後續 agent 處理 6.x 時，依序讀取：
+
+1. 專案 skill 的 [`SKILL.md`](.agents/skills/omniverse-windows-workspace/SKILL.md)，確認 canonical repository、runtime、live route、scratch 與 publish authorization。
+2. [`isaacsim-mcp-6x.md`](.agents/skills/omniverse-windows-workspace/references/isaacsim-mcp-6x.md)，確認 6.1～6.3 編號、test/evidence taxonomy、strict release gate 與 GitHub 驗證順序。
+3. 依需求讀 [`LIVE_TEST_HARNESS.md`](docs/LIVE_TEST_HARNESS.md)、[`ALL_TOOLS_TEST_REPORT.md`](docs/ALL_TOOLS_TEST_REPORT.md)、[`PROTOCOL_VERSIONING_AND_MIGRATION.md`](docs/PROTOCOL_VERSIONING_AND_MIGRATION.md) 或 [`RELEASE_GATE.md`](docs/RELEASE_GATE.md)。
+4. 執行前重新查詢 Git、Isaac Sim、8766 與 capability 狀態；文件中的日期、PID、tool 統計與 blocked 原因都視為歷史 evidence。
+
 ## 系統需求
 
 | 項目 | 需求 |
@@ -169,6 +186,8 @@ Isaac Sim 6.0.1 / USD / PhysX
 ```
 
 ## 安裝
+
+完整的全新 checkout 與 secret-free 驗證流程見 [`docs/INSTALLATION_WINDOWS.md`](docs/INSTALLATION_WINDOWS.md)。以下是精簡流程。
 
 ### 1. 下載專案
 
@@ -232,7 +251,7 @@ $env:ISAAC_PHYSICS_GPU = "1"
 ```json
 {
   "mcpServers": {
-    "isaac-sim": {
+    "isaac-sim-live": {
       "command": "D:\\Dev\\IsaacSim-MCP\\.venv\\Scripts\\python.exe",
       "args": ["-m", "isaac_mcp.server"],
       "env": {
@@ -414,23 +433,27 @@ $env:ARK_API_KEY = "你的 Beaver3D API key"
 uv sync --dev
 ```
 
-執行不需要 Isaac Sim runtime 的測試：
+執行不需要 Isaac Sim runtime 的測試金字塔：
 
 ```powershell
-uv run pytest -q --ignore=tests/test_launcher_engine.py --ignore=tests/test_integration.py -k "not test_detect_version_returns_zero_on_failure"
+uv run pytest -q -m "not live and not windows_launcher and not unix_launcher" -k "not test_detect_version_returns_zero_on_failure"
 uv run ruff check .
 uv run ruff format --check .
 ```
 
-完整 MCP live test 需要先啟動 Isaac Sim：
+產生 128 named tools 統一報告只會讀取 8766 的 runtime snapshot；逐項 pass 由各功能的 guarded live verifier 提供：
 
 ```powershell
-.\.venv\Scripts\python.exe .\scripts\test_all_tools.py
+.\.venv\Scripts\python.exe .\scripts\generate_all_tools_report.py --live
 ```
+
+舊 `tests/test_integration.py` 含 `clear_scene`，現在預設拒絕執行。只有 exact scratch USD、stopped timeline 與完整 confirmation 同時成立時才會開放；新 live test 使用唯一 `/World/MCP_Live_<run-id>` root 並在 cleanup 後讀回 absent。完整規則見 [`docs/LIVE_TEST_HARNESS.md`](docs/LIVE_TEST_HARNESS.md)。
 
 測試結果與限制請見：
 
 - [`docs/ALL_TOOLS_TEST_REPORT.md`](docs/ALL_TOOLS_TEST_REPORT.md)
+- [`docs/ALL_TOOLS_TEST_RESULTS.json`](docs/ALL_TOOLS_TEST_RESULTS.json)
+- [`docs/LIVE_TEST_HARNESS.md`](docs/LIVE_TEST_HARNESS.md)
 - [`docs/NVIDIA_ASSET_CATALOG.md`](docs/NVIDIA_ASSET_CATALOG.md)
 
 ## 專案備份與還原驗證
@@ -471,20 +494,25 @@ IsaacSim-MCP/
 └─ LICENSE                    MIT License
 ```
 
-## 上傳 GitHub
+## Release 與上傳 GitHub
 
-確認測試通過後執行：
+先在尚未 commit 的工作樹執行完整預覽：
 
 ```powershell
-git init -b main
-git add .
-git status
-git commit -m "Initial Isaac Sim MCP release"
-git remote add origin https://github.com/Tim0320/IsaacSim-MCP.git
-git push -u origin main
+.\scripts\release_gate.ps1 -AllowDirty
 ```
 
-`git status` 不應出現 `.venv/`、`test_outputs/`、`logs/`、`.env` 或 API 金鑰檔案。
+完成 review 與 commit 後，以 clean worktree 執行 strict gate：
+
+```powershell
+.\scripts\release_gate.ps1
+git rev-parse --show-toplevel
+git remote get-url origin
+git rev-parse HEAD
+git status --short
+```
+
+預期 origin 是 `https://github.com/Tim0320/IsaacSim-MCP.git`。gate 不會執行 `git commit`、`git push`、merge、tag 或 GitHub release；這些外部寫入只在使用者明確授權後執行。完整規則見 [`docs/RELEASE_GATE.md`](docs/RELEASE_GATE.md)。
 
 ## 授權
 

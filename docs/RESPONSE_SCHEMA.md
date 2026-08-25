@@ -62,6 +62,8 @@ IsaacSim-MCP 的 128 個 named tools 統一回傳 JSON text，解碼後固定包
 
 rolling upgrade 期間，MCP Server 仍可接收舊 extension 的 `{status, result}` response，並在回給 client 前轉成 schema 1.0。
 
+package、extension、response、capability 與 backend matrix 的版本關係，以及從舊 42-tool client 升級到 128 tools 的 migration 步驟，見 [`PROTOCOL_VERSIONING_AND_MIGRATION.md`](PROTOCOL_VERSIONING_AND_MIGRATION.md)。
+
 Camera 與 LiDAR artifact 已使用此欄位。共用 TTL、容量、分塊下載、hash、刪除與 cleanup 契約見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)；Camera 契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md) 與 [`CAMERA_OUTPUTS.md`](CAMERA_OUTPUTS.md)；LiDAR `.npz`、typed fields 與 per-field hash 契約見 [`LIDAR_POINT_CLOUD.md`](LIDAR_POINT_CLOUD.md)。
 
 ## OmniGraph lifecycle response
