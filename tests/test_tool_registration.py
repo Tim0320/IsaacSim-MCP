@@ -86,7 +86,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_113_unique_names():
+def test_named_tool_inventory_has_122_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -103,7 +103,7 @@ def test_named_tool_inventory_has_113_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 113
+    assert len(names) == 122
     assert len(names) == len(set(names))
     assert "get_capabilities" in names
     assert {
@@ -131,6 +131,18 @@ def test_named_tool_inventory_has_113_unique_names():
         "stop_mobile_base",
     } <= set(names)
     assert "get_lidar_config" in names
+    assert {
+        "spawn_human",
+        "list_humans",
+        "get_human",
+        "delete_human",
+        "set_human_target",
+        "set_human_look_at",
+        "set_human_idle",
+        "set_human_behavior",
+        "get_navmesh_status",
+        "bake_navmesh",
+    } <= set(names)
     assert "delete_sensor" in names
     assert {"get_joint_state", "set_joint_command", "set_joint_drive_config"} <= set(names)
     assert {"get_artifact_info", "read_artifact", "delete_artifact", "cleanup_artifacts"} <= set(names)

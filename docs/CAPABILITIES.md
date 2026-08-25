@@ -225,7 +225,16 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 
 2026-08-25 完成 Task 4.3 Replicator/SDG job lifecycle live 驗收：
 
-- registry/runtime：113 extension commands；`feature_flags.replicator.sdg_workflows= supported`；`omni.replicator.core=1.13.27`
+- 4.3 歷史 live registry/runtime：113 extension commands；`feature_flags.replicator.sdg_workflows= supported`；`omni.replicator.core=1.13.27`。這是 Replicator 驗收當時的歷史數值，不代表目前 4.4 registry。
+
+## 4.4 Human lifecycle（live verified）
+
+- current registry：122 named tools；新增 `list_humans`、`get_human`、`delete_human`、`set_human_target`、`set_human_look_at`、`set_human_idle`、`set_human_behavior`、`get_navmesh_status`、`bake_navmesh`。
+- required extensions：`isaacsim.replicator.agent.core`、`omni.anim.behavior.core`、`omni.anim.navigation.core`；capability 依實際 enabled state 回 `supported|unavailable|unknown`。
+- runtime API：Isaac Sim 6.0.1 的 public `IBehaviorAgent`；不使用 UI automation 或 private cache。
+- ownership：read tools 可報 external human；control/delete 只允許 `spawn_human` 寫入 schema `1.0` marker 的 exact human root。
+- timeline：MoveTo/LookAt/Idle 真正 apply 要求 playing；NavMesh bake/delete 要求 stopped/paused；所有新增 writes 預設 preview。
+- live（2026-08-25）：registry 122；IRA `1.6.8`、Behavior/Navigation Core `110.1.4`；NavMesh ready、owned human spawn、stopped-state rejection、MoveTo 位移 `0.2639`、LookAt、Idle、delete absent、scratch/list/timeline restore 全通過。safe suite `365 passed`；專用 verifier 為 `scripts/verify_human_lifecycle_live.py`。
 - contract：7 個 named tools；BasicWriter、manual trigger、fixed seed、typed transform/light randomizers、managed artifacts、single active job、preview-by-default 與 cleanup read-back
 - deterministic：seed `4317` 的兩次 2-frame run 產生相同 trace 與 SHA-256 `05aa5ea00c8630aab62ece8c019a6ce32248c2614f974e71465ee228240a5f45`
 - output：live acceptance 使用 RGB 與 colorized semantic segmentation，各 annotation frame count 都為 `2`；manifest 記錄 relative path、format、bytes、SHA-256、annotation file/frame counts

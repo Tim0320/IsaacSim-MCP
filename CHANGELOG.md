@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — guarded IRA human lifecycle and runtime behavior control
+
+- Expanded human control from `spawn_human` to ten named tools, adding stable list/get, ownership-guarded delete, MoveTo, LookAt, Idle, live Behavior Agent settings, and NavMesh status/bake. The named-tool inventory is now 122.
+- New writes default to preview. Behavior Agent tasks require a playing timeline; bake and delete require stopped/paused state. External humans remain queryable but cannot be controlled or deleted.
+- Spawned character roots carry a schema `1.0` ownership marker. Delete targets one exact owned root, cancels/disables its live agent, and proves the prim is absent before reporting success.
+- Runtime control uses the public Isaac Sim 6.0.1 `IBehaviorAgent` API and converts m/s to stage units/s using `metersPerUnit`; task and settings responses include immediate read-back.
+- Added focused tool/handler/capability coverage and the human lifecycle contract in `docs/HUMAN_LIFECYCLE.md`.
+- Scratch live acceptance verified Navigation Core baking, an owned manual human,
+  stopped-state rejection, accepted MoveTo/LookAt/Idle tasks, measured MoveTo
+  displacement, exact deletion, list restoration and stopped-timeline cleanup.
+  The safe offline suite passes 365 tests.
+
 ### Added — bounded Replicator synthetic-data jobs
 
 - Added seven named tools for Replicator status, typed SDG job creation,

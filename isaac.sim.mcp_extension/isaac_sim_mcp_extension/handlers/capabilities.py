@@ -28,6 +28,8 @@ RELEVANT_EXTENSIONS = (
     "isaacsim.sensors.experimental.rtx",
     "omni.replicator.core",
     "isaacsim.replicator.agent.core",
+    "omni.anim.behavior.core",
+    "omni.anim.navigation.core",
     "isaacsim.ros2.bridge",
     "isaacsim.ros2.core",
     "isaacsim.ros2.nodes",
@@ -193,6 +195,9 @@ def _feature_flags(
     ros2_core_enabled: Optional[bool] = None,
     ros2_nodes_enabled: Optional[bool] = None,
     replicator_core_enabled: Optional[bool] = None,
+    ira_core_enabled: Optional[bool] = None,
+    behavior_core_enabled: Optional[bool] = None,
+    navigation_core_enabled: Optional[bool] = None,
 ) -> Dict[str, Dict[str, Any]]:
     lidar_config_state = "supported" if adapter_generation == 6 else "partial"
     fallback_verification = "verified" if physics_backend == "physx" else "unverified"
@@ -676,8 +681,51 @@ def _feature_flags(
             "single_active_job": True,
             "cleanup_readback": True,
         },
-        "human.spawn": {"state": "supported"},
-        "human.lifecycle": {"state": "partial"},
+        "human.spawn": {
+            "state": (
+                "supported"
+                if adapter_generation == 6 and ira_core_enabled is True and navigation_core_enabled is True
+                else "unavailable"
+                if ira_core_enabled is False or navigation_core_enabled is False
+                else "unknown"
+            ),
+            "tools": ["spawn_human"],
+            "requires_navmesh": True,
+        },
+        "human.lifecycle": {
+            "state": (
+                "supported"
+                if adapter_generation == 6
+                and ira_core_enabled is True
+                and behavior_core_enabled is True
+                and navigation_core_enabled is True
+                else "unavailable"
+                if ira_core_enabled is False or behavior_core_enabled is False or navigation_core_enabled is False
+                else "unknown"
+            ),
+            "tools": [
+                "spawn_human",
+                "list_humans",
+                "get_human",
+                "delete_human",
+                "set_human_target",
+                "set_human_look_at",
+                "set_human_idle",
+                "set_human_behavior",
+                "get_navmesh_status",
+                "bake_navmesh",
+            ],
+            "required_extensions": [
+                "isaacsim.replicator.agent.core",
+                "omni.anim.behavior.core",
+                "omni.anim.navigation.core",
+            ],
+            "preview_default_for_writes": True,
+            "ownership_guarded_control_and_delete": True,
+            "task_commands_require_playing_timeline": True,
+            "bake_and_delete_require_stopped_timeline": True,
+            "runtime_task_api": "IBehaviorAgent",
+        },
         "execute_script": {"state": "supported", "risk": "high"},
     }
 
@@ -752,6 +800,9 @@ def get_capabilities(
     ros2_core_enabled = extensions["isaacsim.ros2.core"]["enabled"]
     ros2_nodes_enabled = extensions["isaacsim.ros2.nodes"]["enabled"]
     replicator_core_enabled = extensions["omni.replicator.core"]["enabled"]
+    ira_core_enabled = extensions["isaacsim.replicator.agent.core"]["enabled"]
+    behavior_core_enabled = extensions["omni.anim.behavior.core"]["enabled"]
+    navigation_core_enabled = extensions["omni.anim.navigation.core"]["enabled"]
     backend_matrix = _backend_matrix(adapter, runtime["physics_backend"])
     return {
         "status": "success",
@@ -779,6 +830,9 @@ def get_capabilities(
             ros2_core_enabled,
             ros2_nodes_enabled,
             replicator_core_enabled,
+            ira_core_enabled,
+            behavior_core_enabled,
+            navigation_core_enabled,
         ),
         "unsupported_arguments": _unsupported_arguments(runtime["adapter_generation"], runtime["physics_backend"]),
         "sensor_warmup": _sensor_warmup(adapter),

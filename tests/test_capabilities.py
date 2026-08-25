@@ -44,6 +44,9 @@ class _ExtensionManager:
         "omni.graph.core",
         "omni.graph.action",
         "omni.graph.scriptnode",
+        "isaacsim.replicator.agent.core",
+        "omni.anim.behavior.core",
+        "omni.anim.navigation.core",
     }
 
     def is_extension_enabled(self, name):
@@ -142,6 +145,31 @@ def test_handler_returns_stable_runtime_capability_contract():
         "script_modes": ["inline", "file"],
         "graph_scoped_script_reload": True,
         "runtime_error_messages": True,
+    }
+    assert result["feature_flags"]["human.lifecycle"] == {
+        "state": "supported",
+        "tools": [
+            "spawn_human",
+            "list_humans",
+            "get_human",
+            "delete_human",
+            "set_human_target",
+            "set_human_look_at",
+            "set_human_idle",
+            "set_human_behavior",
+            "get_navmesh_status",
+            "bake_navmesh",
+        ],
+        "required_extensions": [
+            "isaacsim.replicator.agent.core",
+            "omni.anim.behavior.core",
+            "omni.anim.navigation.core",
+        ],
+        "preview_default_for_writes": True,
+        "ownership_guarded_control_and_delete": True,
+        "task_commands_require_playing_timeline": True,
+        "bake_and_delete_require_stopped_timeline": True,
+        "runtime_task_api": "IBehaviorAgent",
     }
     assert result["feature_flags"]["ros2.named_tools"] == {
         "state": "unavailable",

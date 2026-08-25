@@ -284,11 +284,16 @@
   > runtime 邊界：Isaac Sim 6.0.1 `BasicWriter` 的 bbox NumPy backend 會傳入目前 NumPy 已移除的 `fix_imports` 參數並產生 partial output，因此 bbox/distance 等 NumPy annotations 目前 fail-closed 列為 unavailable；named workflow 只宣稱 live-verified RGB 與 colorized semantic/instance segmentation，不能以部分 JSON 檔誤報 bbox 成功。
   > offline 驗收：focused Replicator/artifact tests `26 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `351 passed, 1 deselected`；專用 verifier：`scripts/verify_replicator_sdg_live.py`。不可用會累積 sensor/robot 的 `tests/test_integration.py` 取代此 teardown acceptance。完整契約：`docs/REPLICATOR_SDG.md`。
 
-- [ ] 19. Human lifecycle 與 runtime 行為控制
+- [x] 19. Human lifecycle 與 runtime 行為控制
   > 現況：已有 `spawn_human`；移動、朝向、idle、刪除、行為更新與 NavMesh status 仍依賴 `reload_script`/`execute_script`。
   > 缺漏位置：`tools/humans.py`、`handlers/humans.py`、IRA/People/NavMesh integration。
   > 實作：新增 list/get/delete human、set target/look/idle/behavior、NavMesh bake/status；把 external prerequisites 放入 capability。
   > 驗收：spawn 後能查詢與控制，刪除後相關 prim/graph/script state 均清除；缺 extension 或資產時回可行動的 prerequisite error。
+  > 已實作：新增 9 個 lifecycle named tools，registry `113→122`；list/get 可辨識 owned/external，control/delete 僅允許 schema `1.0` MCP-owned human。MoveTo/LookAt/Idle 使用公開 `IBehaviorAgent`，behavior settings 支援 enabled、m/s speed、NavMesh areas 與 avoidance read-back。
+  > 安全契約：所有新 write 預設 `preview=true`；runtime task 僅在 playing 派送，NavMesh bake/delete 僅在 stopped/paused 執行；delete 只移除 exact human，group 僅在 empty 時移除。
+  > live 驗收（2026-08-25）：Isaac Sim `6.0.1-rc.7`、IRA `1.6.8`、Behavior/Navigation Core `110.1.4`；官方 physics ground + `/World/MCP_Task_4_4/NavMeshVolume` 在 1 frame 產生 ready NavMesh。manual human 建立於 `/World/MCP_Task_4_4/Characters/MCPHumans/MCPHumans_0`，ownership schema=`1.0`；stopped apply 正確回 `TIMELINE_STATE_CONFLICT`。playing 時 MoveTo task=`running` 且量測位移 `0.2639` stage units，LookAt/Idle 均回 exact running task；delete read-back human absent。
+  > teardown/health：scratch root absent、human list 恢復、timeline stopped、TCP `8766` owner PID `9280`、Kit Responding、post-run bounded error/crash signature=`0`（另有 hot-reload ext-folder 掃描到 repo 非 extension 目錄的既知 warnings）、重啟後新增 `.dmp/.dump`=`0`。完整 safe suite（排除 destructive `tests/test_integration.py` 與固定 Bash launcher）`365 passed`；Ruff、compile、`git diff --check` 通過。專用 verifier：`scripts/verify_human_lifecycle_live.py`；完整契約：`docs/HUMAN_LIFECYCLE.md`。
+  > 實測修復：Navigation Core 自有 tests 會在建立 volume 後先跑 5 個 app updates；handler 同步採用此 notice window。live fixture 必須使用 Navigation Core 可辨識的 physics ground；任意縮放 Cube 不能當作 NavMesh bake 成功證據。task ID 只證明 dispatch/acceptance，MoveTo 另以 position delta 證明實際執行。
 
 ## Phase 5：安全性、可靠性與可觀測性
 

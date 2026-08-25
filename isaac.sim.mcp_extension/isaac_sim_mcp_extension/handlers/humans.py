@@ -32,10 +32,147 @@ from ..adapters.base import IsaacAdapterBase
 
 _IRA_CORE_ID = "isaacsim.replicator.agent.core"
 _USD_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_MCP_HUMAN_KEY = "isaacsimMcpHuman"
+_MCP_HUMAN_SCHEMA = "1.0"
+
+
+class _TimelineStateConflict(RuntimeError):
+    pass
+
+
+class _HumanTaskRejected(RuntimeError):
+    pass
 
 
 def register(registry: Dict[str, Any], adapter: IsaacAdapterBase) -> None:
     registry["humans.spawn"] = lambda **p: spawn(adapter, **p)
+    registry["humans.list"] = lambda **p: list_humans(adapter, **p)
+    registry["humans.get"] = lambda **p: get_human(adapter, **p)
+    registry["humans.delete"] = lambda **p: delete_human(adapter, **p)
+    registry["humans.set_target"] = lambda **p: set_human_target(adapter, **p)
+    registry["humans.look_at"] = lambda **p: set_human_look_at(adapter, **p)
+    registry["humans.idle"] = lambda **p: set_human_idle(adapter, **p)
+    registry["humans.set_behavior"] = lambda **p: set_human_behavior(adapter, **p)
+    registry["humans.navmesh_status"] = lambda **p: get_navmesh_status(adapter, **p)
+    registry["humans.bake_navmesh"] = lambda **p: bake_navmesh(adapter, **p)
+
+
+def _error(code: str, message: str, **data: Any) -> Dict[str, Any]:
+    result: Dict[str, Any] = {"status": "error", "code": code, "message": message}
+    result.update(data)
+    return result
+
+
+def _valid_absolute_prim_path(path: Any) -> bool:
+    if not isinstance(path, str) or not path.startswith("/") or path == "/":
+        return False
+    try:
+        from pxr import Sdf
+
+        return bool(Sdf.Path(path).IsAbsolutePath() and Sdf.Path(path).IsPrimPath())
+    except Exception:
+        return bool(re.fullmatch(r"/(?:[A-Za-z_][A-Za-z0-9_]*)(?:/[A-Za-z_][A-Za-z0-9_]*)*", path))
+
+
+def _human_marker(prim: Any) -> Optional[dict[str, Any]]:
+    marker = prim.GetCustomDataByKey(_MCP_HUMAN_KEY)
+    if not isinstance(marker, dict):
+        return None
+    marker = dict(marker)
+    if marker.get("owner") != "isaacsim-mcp" or marker.get("schema") != _MCP_HUMAN_SCHEMA:
+        return None
+    return marker
+
+
+def _find_behavior_agent_paths(prim: Any) -> list[str]:
+    import BehaviorSchema
+    from pxr import Usd
+
+    return sorted(
+        str(candidate.GetPath())
+        for candidate in Usd.PrimRange(prim)
+        if candidate.HasAPI(BehaviorSchema.BehaviorAgentAPI)
+    )
+
+
+def _resolve_human(stage: Any, human_path: str) -> tuple[Any, Optional[dict[str, Any]], list[str]]:
+    if not _valid_absolute_prim_path(human_path):
+        raise ValueError("human_path must be an absolute USD prim path")
+    prim = stage.GetPrimAtPath(human_path)
+    if not prim or not prim.IsValid():
+        raise LookupError(f"Human prim does not exist: {human_path}")
+
+    current = prim
+    while current and current.IsValid() and str(current.GetPath()) != "/":
+        marker = _human_marker(current)
+        if marker:
+            return current, marker, _find_behavior_agent_paths(current)
+        current = current.GetParent()
+    paths = _find_behavior_agent_paths(prim)
+    return prim, None, paths
+
+
+def _acquire_behavior_agent(agent_paths: Sequence[str]) -> tuple[Any, str]:
+    import omni.anim.behavior.core as behavior_core
+
+    interface = behavior_core.acquire_interface()
+    for path in agent_paths:
+        agent = interface.get_agent(path)
+        if agent:
+            return agent, path
+    return None, ""
+
+
+def _float3(value: Sequence[float]) -> Any:
+    import carb
+
+    return carb.Float3(float(value[0]), float(value[1]), float(value[2]))
+
+
+def _one_target(position: Optional[Sequence[float]], prim_path: Optional[str], position_name: str) -> Any:
+    if (position is None) == (prim_path is None):
+        raise ValueError(f"Provide exactly one of {position_name} or target prim path")
+    if position is not None:
+        return _float3(_vector3(position, position_name))
+    if not _valid_absolute_prim_path(prim_path):
+        raise ValueError("target prim path must be an absolute USD prim path")
+    return prim_path
+
+
+def _task_snapshot(agent: Any, task_id: int) -> dict[str, Any]:
+    import omni.anim.behavior.core as behavior_core
+
+    if task_id == behavior_core.BEHAVIOR_TASK_ID_INVALID:
+        raise _HumanTaskRejected("Behavior Agent rejected the task; verify initialization and NavMesh reachability")
+    status = agent.get_task_status(task_id)
+    return {
+        "task_id": int(task_id),
+        "task_name": agent.get_task_name(task_id),
+        "task_status": getattr(status, "name", str(status)).lower(),
+        "task_running": bool(agent.is_task_running(task_id)),
+    }
+
+
+def _agent_snapshot(agent: Any, agent_path: str) -> dict[str, Any]:
+    task_id = int(agent.get_action_task_id())
+    result = {
+        "agent_path": agent_path,
+        "enabled": bool(agent.is_enabled()),
+        "position": [float(v) for v in agent.get_world_translation()],
+        "facing_direction": [float(v) for v in agent.get_facing_direction()],
+        "linear_velocity": [float(v) for v in agent.get_linear_velocity()],
+        "speed_stage_units_per_second": float(agent.get_speed()),
+        "navigation_areas": list(agent.get_navmesh_areas_allowed()),
+        "obstacle_avoidance_enabled": bool(agent.is_obstacle_avoidance_enabled()),
+        "auto_avoidance_enabled": bool(agent.is_auto_avoidance_enabled()),
+        "current_task_id": task_id,
+    }
+    if task_id >= 0:
+        try:
+            result.update(_task_snapshot(agent, task_id))
+        except Exception:
+            result["task_name"] = None
+    return result
 
 
 def _pair(value: Optional[Sequence[float]], default: Sequence[float], name: str) -> list[float]:
@@ -145,17 +282,26 @@ def _ensure_navmesh_volume(
     return str(volume_path), True
 
 
-async def _wait_for_navmesh(max_frames: int = 2000) -> tuple[bool, int]:
+async def _wait_for_navmesh(max_frames: int = 2000, force_rebake: bool = False) -> tuple[bool, int]:
     """Bake/wait beyond IRA's 100-frame helper limit for real factory stages."""
     import omni.anim.navigation.core as nav
     import omni.kit.app
 
     interface = nav.acquire_interface()
-    if interface.get_navmesh() is not None:
+    if interface.get_navmesh() is not None and not force_rebake:
         return True, 0
-    if not interface.is_navmesh_baking() and not interface.start_navmesh_baking():
-        return False, 0
     app = omni.kit.app.get_app()
+    # Navigation Core's own 110.1 tests allow five application updates after
+    # authoring a NavMeshVolume before asking the native interface to bake.
+    # Without this notice-processing window start_navmesh_baking() rejects a
+    # newly authored volume even though USD read-back already sees it.
+    for _ in range(5):
+        await app.next_update_async()
+    if not interface.is_navmesh_baking():
+        # Some Navigation Core 110.1 Python builds start the asynchronous bake
+        # but return None despite the generated stub advertising bool. Only an
+        # explicit False is a rejection; readiness/baking is proven below.
+        interface.start_navmesh_baking()
     for frame in range(1, max_frames + 1):
         await app.next_update_async()
         if interface.get_navmesh() is not None:
@@ -188,6 +334,433 @@ async def _refresh_behavior_agents(stage: Any, character_paths: Sequence[str]) -
     await app.next_update_async()
     await app.next_update_async()
     return refreshed
+
+
+def _describe_human(stage: Any, prim: Any, marker: Optional[dict[str, Any]], agent_paths: Sequence[str]) -> dict[str, Any]:
+    path = str(prim.GetPath())
+    item: dict[str, Any] = {
+        "human_path": path,
+        "name": prim.GetName(),
+        "mcp_owned": bool(marker),
+        "marker_schema": marker.get("schema") if marker else None,
+        "behavior": marker.get("behavior") if marker else None,
+        "group_path": marker.get("group_path") if marker else str(prim.GetParent().GetPath()),
+        "behavior_agent_paths": list(agent_paths),
+        "behavior_agent_ready": False,
+    }
+    agent, agent_path = _acquire_behavior_agent(agent_paths)
+    if agent:
+        item["behavior_agent_ready"] = True
+        item["runtime"] = _agent_snapshot(agent, agent_path)
+    return item
+
+
+def list_humans(
+    adapter: IsaacAdapterBase,
+    root_prim_path: str = "/World/Characters",
+    include_external: bool = True,
+) -> Dict[str, Any]:
+    try:
+        if not _valid_absolute_prim_path(root_prim_path):
+            return _error("INVALID_HUMAN_REQUEST", "root_prim_path must be an absolute USD prim path")
+        stage = adapter.get_stage()
+        if stage is None:
+            return _error("NO_STAGE", "No USD stage is open")
+        root = stage.GetPrimAtPath(root_prim_path)
+        if not root or not root.IsValid():
+            return {"status": "success", "humans": [], "count": 0, "root_prim_path": root_prim_path}
+
+        humans: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for prim in stage.TraverseAll():
+            path = str(prim.GetPath())
+            if path != root_prim_path and not path.startswith(root_prim_path.rstrip("/") + "/"):
+                continue
+            marker = _human_marker(prim)
+            if marker:
+                agent_paths = _find_behavior_agent_paths(prim)
+                humans.append(_describe_human(stage, prim, marker, agent_paths))
+                seen.update(agent_paths)
+        if include_external:
+            import BehaviorSchema
+
+            for prim in stage.TraverseAll():
+                path = str(prim.GetPath())
+                if path in seen or not path.startswith(root_prim_path.rstrip("/") + "/"):
+                    continue
+                if prim.HasAPI(BehaviorSchema.BehaviorAgentAPI):
+                    humans.append(_describe_human(stage, prim, None, [path]))
+        humans.sort(key=lambda item: item["human_path"])
+        return {"status": "success", "humans": humans, "count": len(humans), "root_prim_path": root_prim_path}
+    except Exception as exc:
+        return _error("HUMAN_QUERY_FAILED", str(exc))
+
+
+def get_human(adapter: IsaacAdapterBase, human_path: str) -> Dict[str, Any]:
+    try:
+        stage = adapter.get_stage()
+        if stage is None:
+            return _error("NO_STAGE", "No USD stage is open")
+        prim, marker, agent_paths = _resolve_human(stage, human_path)
+        if not agent_paths:
+            return _error("HUMAN_AGENT_NOT_FOUND", f"No BehaviorAgentAPI was found below {human_path}")
+        return {"status": "success", "human": _describe_human(stage, prim, marker, agent_paths)}
+    except ValueError as exc:
+        return _error("INVALID_HUMAN_REQUEST", str(exc))
+    except LookupError as exc:
+        return _error("HUMAN_NOT_FOUND", str(exc))
+    except Exception as exc:
+        return _error("HUMAN_QUERY_FAILED", str(exc))
+
+
+def _control_context(
+    adapter: IsaacAdapterBase, human_path: str, *, require_agent: bool = True
+) -> tuple[Any, Any, dict[str, Any], list[str], Any, str]:
+    stage = adapter.get_stage()
+    if stage is None:
+        raise RuntimeError("No USD stage is open")
+    prim, marker, agent_paths = _resolve_human(stage, human_path)
+    if not marker:
+        raise PermissionError("Runtime control is limited to humans created by this MCP")
+    if not agent_paths:
+        raise LookupError(f"No BehaviorAgentAPI was found below {human_path}")
+    agent, agent_path = _acquire_behavior_agent(agent_paths)
+    if not agent and require_agent:
+        raise RuntimeError("Behavior Agent is not ready; play the timeline and wait for initialization")
+    return stage, prim, marker, agent_paths, agent, agent_path
+
+
+def _control_error(exc: Exception) -> Dict[str, Any]:
+    if isinstance(exc, _TimelineStateConflict):
+        return _error("TIMELINE_STATE_CONFLICT", str(exc))
+    if isinstance(exc, _HumanTaskRejected):
+        return _error("HUMAN_TASK_REJECTED", str(exc))
+    if isinstance(exc, ValueError):
+        return _error("INVALID_HUMAN_REQUEST", str(exc))
+    if isinstance(exc, PermissionError):
+        return _error("HUMAN_NOT_OWNED", str(exc))
+    if isinstance(exc, LookupError):
+        message = str(exc)
+        return _error("HUMAN_NOT_FOUND" if "does not exist" in message else "HUMAN_AGENT_NOT_FOUND", message)
+    return _error("HUMAN_PREREQUISITE_MISSING", str(exc))
+
+
+def _require_playing(adapter: IsaacAdapterBase) -> None:
+    if adapter.get_simulation_state().get("timeline_state") != "playing":
+        raise _TimelineStateConflict("Play the timeline before issuing a Behavior Agent task")
+
+
+def set_human_target(
+    adapter: IsaacAdapterBase,
+    human_path: str,
+    target_position: Optional[Sequence[float]] = None,
+    target_prim_path: Optional[str] = None,
+    speed_mps: Optional[float] = None,
+    auto_brake: bool = True,
+    preview: bool = True,
+) -> Dict[str, Any]:
+    try:
+        if not preview:
+            _require_playing(adapter)
+        stage, prim, marker, agent_paths, agent, agent_path = _control_context(
+            adapter, human_path, require_agent=not preview
+        )
+        target = _one_target(target_position, target_prim_path, "target_position")
+        if speed_mps is not None and (not isinstance(speed_mps, (int, float)) or speed_mps <= 0):
+            raise ValueError("speed_mps must be a positive number")
+        if target_prim_path and not stage.GetPrimAtPath(target_prim_path).IsValid():
+            raise ValueError(f"Target prim does not exist: {target_prim_path}")
+        plan = {"operation": "move_to", "human_path": str(prim.GetPath()), "target": target_prim_path or list(target_position)}
+        if preview:
+            return {"status": "success", "preview": True, "plan": plan}
+        _require_playing(adapter)
+        original_speed = float(agent.get_speed())
+        if speed_mps is not None:
+            from pxr import UsdGeom
+
+            meters_per_unit = float(UsdGeom.GetStageMetersPerUnit(stage) or 1.0)
+            agent.set_speed(float(speed_mps) / meters_per_unit)
+        try:
+            task = _task_snapshot(agent, agent.move_to(target, bool(auto_brake)))
+        except Exception:
+            if speed_mps is not None:
+                agent.set_speed(original_speed)
+            raise
+        return {
+            "status": "success",
+            "preview": False,
+            "operation": "move_to",
+            "task": task,
+            "readback": _agent_snapshot(agent, agent_path),
+        }
+    except Exception as exc:
+        return _control_error(exc)
+
+
+def set_human_look_at(
+    adapter: IsaacAdapterBase,
+    human_path: str,
+    target_position: Optional[Sequence[float]] = None,
+    target_prim_path: Optional[str] = None,
+    duration_seconds: float = 0.0,
+    preview: bool = True,
+) -> Dict[str, Any]:
+    try:
+        if not preview:
+            _require_playing(adapter)
+        stage, prim, marker, agent_paths, agent, agent_path = _control_context(
+            adapter, human_path, require_agent=not preview
+        )
+        target = _one_target(target_position, target_prim_path, "target_position")
+        if not isinstance(duration_seconds, (int, float)) or duration_seconds < 0:
+            raise ValueError("duration_seconds must be a non-negative number")
+        if target_prim_path and not stage.GetPrimAtPath(target_prim_path).IsValid():
+            raise ValueError(f"Target prim does not exist: {target_prim_path}")
+        if preview:
+            return {
+                "status": "success",
+                "preview": True,
+                "plan": {"operation": "look_at", "human_path": str(prim.GetPath()), "duration_seconds": duration_seconds},
+            }
+        _require_playing(adapter)
+        task = _task_snapshot(agent, agent.look_at(target, float(duration_seconds)))
+        return {"status": "success", "preview": False, "task": task, "readback": _agent_snapshot(agent, agent_path)}
+    except Exception as exc:
+        return _control_error(exc)
+
+
+def set_human_idle(
+    adapter: IsaacAdapterBase,
+    human_path: str,
+    facing_position: Optional[Sequence[float]] = None,
+    facing_prim_path: Optional[str] = None,
+    preview: bool = True,
+) -> Dict[str, Any]:
+    try:
+        if not preview:
+            _require_playing(adapter)
+        stage, prim, marker, agent_paths, agent, agent_path = _control_context(
+            adapter, human_path, require_agent=not preview
+        )
+        facing = None
+        if facing_position is not None or facing_prim_path is not None:
+            facing = _one_target(facing_position, facing_prim_path, "facing_position")
+        if facing_prim_path and not stage.GetPrimAtPath(facing_prim_path).IsValid():
+            raise ValueError(f"Facing prim does not exist: {facing_prim_path}")
+        if preview:
+            return {"status": "success", "preview": True, "plan": {"operation": "idle", "human_path": str(prim.GetPath())}}
+        _require_playing(adapter)
+        task_id = agent.idle(facing) if facing is not None else agent.idle()
+        task = _task_snapshot(agent, task_id)
+        return {"status": "success", "preview": False, "task": task, "readback": _agent_snapshot(agent, agent_path)}
+    except Exception as exc:
+        return _control_error(exc)
+
+
+def set_human_behavior(
+    adapter: IsaacAdapterBase,
+    human_path: str,
+    enabled: Optional[bool] = None,
+    speed_mps: Optional[float] = None,
+    navigation_areas: Optional[Sequence[str]] = None,
+    obstacle_avoidance_enabled: Optional[bool] = None,
+    auto_avoidance_enabled: Optional[bool] = None,
+    preview: bool = True,
+) -> Dict[str, Any]:
+    try:
+        stage, prim, marker, agent_paths, agent, agent_path = _control_context(
+            adapter, human_path, require_agent=not preview
+        )
+        changes: dict[str, Any] = {}
+        for name, value in {
+            "enabled": enabled,
+            "obstacle_avoidance_enabled": obstacle_avoidance_enabled,
+            "auto_avoidance_enabled": auto_avoidance_enabled,
+        }.items():
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"{name} must be a boolean")
+            if value is not None:
+                changes[name] = value
+        if speed_mps is not None:
+            if not isinstance(speed_mps, (int, float)) or speed_mps <= 0:
+                raise ValueError("speed_mps must be a positive number")
+            changes["speed_mps"] = float(speed_mps)
+        if navigation_areas is not None:
+            if not all(isinstance(area, str) and area.strip() for area in navigation_areas):
+                raise ValueError("navigation_areas must contain non-empty strings")
+            changes["navigation_areas"] = list(navigation_areas)
+        if not changes:
+            raise ValueError("At least one behavior setting must be provided")
+        if preview:
+            return {"status": "success", "preview": True, "plan": {"human_path": str(prim.GetPath()), "changes": changes}}
+
+        before = _agent_snapshot(agent, agent_path)
+        try:
+            if enabled is not None:
+                agent.set_enabled(enabled)
+            if speed_mps is not None:
+                from pxr import UsdGeom
+
+                meters_per_unit = float(UsdGeom.GetStageMetersPerUnit(stage) or 1.0)
+                agent.set_speed(float(speed_mps) / meters_per_unit)
+            if navigation_areas is not None:
+                agent.set_navmesh_areas_allowed(list(navigation_areas))
+            if obstacle_avoidance_enabled is not None:
+                agent.set_obstacle_avoidance_enabled(obstacle_avoidance_enabled)
+            if auto_avoidance_enabled is not None:
+                agent.set_auto_avoidance_enabled(auto_avoidance_enabled)
+            readback = _agent_snapshot(agent, agent_path)
+            mismatches = []
+            if enabled is not None and readback["enabled"] is not enabled:
+                mismatches.append("enabled")
+            if speed_mps is not None:
+                expected_speed = float(speed_mps) / meters_per_unit
+                if abs(readback["speed_stage_units_per_second"] - expected_speed) > 1e-5:
+                    mismatches.append("speed_mps")
+            if navigation_areas is not None and readback["navigation_areas"] != list(navigation_areas):
+                mismatches.append("navigation_areas")
+            if (
+                obstacle_avoidance_enabled is not None
+                and readback["obstacle_avoidance_enabled"] is not obstacle_avoidance_enabled
+            ):
+                mismatches.append("obstacle_avoidance_enabled")
+            if auto_avoidance_enabled is not None and readback["auto_avoidance_enabled"] is not auto_avoidance_enabled:
+                mismatches.append("auto_avoidance_enabled")
+            if mismatches:
+                raise RuntimeError(f"Behavior setting read-back mismatch: {', '.join(mismatches)}")
+        except Exception:
+            agent.set_enabled(before["enabled"])
+            agent.set_speed(before["speed_stage_units_per_second"])
+            agent.set_navmesh_areas_allowed(before["navigation_areas"])
+            agent.set_obstacle_avoidance_enabled(before["obstacle_avoidance_enabled"])
+            agent.set_auto_avoidance_enabled(before["auto_avoidance_enabled"])
+            raise
+        return {"status": "success", "preview": False, "changes": changes, "readback": readback}
+    except Exception as exc:
+        return _control_error(exc)
+
+
+def get_navmesh_status(adapter: IsaacAdapterBase) -> Dict[str, Any]:
+    try:
+        stage = adapter.get_stage()
+        if stage is None:
+            return _error("NO_STAGE", "No USD stage is open")
+        import omni.anim.navigation.core as nav
+
+        interface = nav.acquire_interface()
+        volumes = sorted(str(prim.GetPath()) for prim in stage.TraverseAll() if prim.GetTypeName() == "NavMeshVolume")
+        navmesh = interface.get_navmesh()
+        return {
+            "status": "success",
+            "ready": navmesh is not None,
+            "baking": bool(interface.is_navmesh_baking()),
+            "volume_paths": volumes,
+            "volume_count": len(volumes),
+            "area_names": list(interface.get_area_names()),
+            "prerequisites": {
+                "has_volume": bool(volumes),
+                "timeline_should_be_stopped_for_bake": True,
+            },
+        }
+    except Exception as exc:
+        return _error("NAVMESH_STATUS_FAILED", str(exc))
+
+
+async def bake_navmesh(adapter: IsaacAdapterBase, max_frames: int = 2000, preview: bool = True) -> Dict[str, Any]:
+    try:
+        if not isinstance(max_frames, int) or not 1 <= max_frames <= 10000:
+            return _error("INVALID_HUMAN_REQUEST", "max_frames must be an integer from 1 to 10000")
+        stage = adapter.get_stage()
+        if stage is None:
+            return _error("NO_STAGE", "No USD stage is open")
+        volumes = sorted(str(prim.GetPath()) for prim in stage.TraverseAll() if prim.GetTypeName() == "NavMeshVolume")
+        if not volumes:
+            return _error(
+                "NAVMESH_VOLUME_NOT_FOUND",
+                "No NavMeshVolume exists. Create one that overlaps walkable collision geometry before baking.",
+            )
+        if adapter.get_simulation_state().get("timeline_state") == "playing":
+            return _error("TIMELINE_STATE_CONFLICT", "Stop or pause the timeline before baking the NavMesh")
+        if preview:
+            return {
+                "status": "success",
+                "preview": True,
+                "plan": {"operation": "bake_navmesh", "max_frames": max_frames, "volume_paths": volumes},
+            }
+        ready, frames = await _wait_for_navmesh(max_frames=max_frames, force_rebake=True)
+        if not ready:
+            return _error(
+                "NAVMESH_BAKE_FAILED",
+                f"NavMesh baking did not produce a NavMesh after {frames} update frames",
+                readback={"ready": False, "bake_frames": frames, "volume_paths": volumes},
+            )
+        return {
+            "status": "success",
+            "preview": False,
+            "message": "NavMesh bake completed",
+            "readback": {"ready": True, "bake_frames": frames, "volume_paths": volumes},
+        }
+    except Exception as exc:
+        return _error("NAVMESH_BAKE_FAILED", str(exc))
+
+
+def delete_human(
+    adapter: IsaacAdapterBase,
+    human_path: str,
+    delete_empty_group: bool = True,
+    preview: bool = True,
+) -> Dict[str, Any]:
+    try:
+        stage = adapter.get_stage()
+        if stage is None:
+            return _error("NO_STAGE", "No USD stage is open")
+        prim, marker, agent_paths = _resolve_human(stage, human_path)
+        if not marker:
+            return _error("HUMAN_NOT_OWNED", "Delete is limited to humans created by this MCP")
+        exact_path = str(prim.GetPath())
+        parent_path = str(prim.GetParent().GetPath())
+        group_path = str(marker.get("group_path") or parent_path)
+        if group_path != parent_path:
+            return _error("HUMAN_OWNERSHIP_MISMATCH", "The ownership marker group_path does not match the human parent")
+        if adapter.get_simulation_state().get("timeline_state") == "playing":
+            return _error("TIMELINE_STATE_CONFLICT", "Stop or pause the timeline before deleting a human")
+        if preview:
+            return {
+                "status": "success",
+                "preview": True,
+                "plan": {"delete_paths": [exact_path], "delete_empty_group": delete_empty_group, "group_path": group_path},
+            }
+
+        import omni.kit.commands
+
+        agent, _ = _acquire_behavior_agent(agent_paths)
+        if agent:
+            task_id = int(agent.get_action_task_id())
+            if task_id >= 0 and agent.is_task_running(task_id):
+                agent.cancel_task(task_id)
+            agent.set_enabled(False)
+        success, _ = omni.kit.commands.execute("DeletePrims", paths=[exact_path], destructive=False)
+        if success is False or stage.GetPrimAtPath(exact_path).IsValid():
+            return _error("HUMAN_DELETE_FAILED", f"Delete read-back failed for {exact_path}")
+
+        deleted_group = False
+        group = stage.GetPrimAtPath(group_path)
+        if delete_empty_group and group and group.IsValid() and not list(group.GetChildren()):
+            group_success, _ = omni.kit.commands.execute("DeletePrims", paths=[group_path], destructive=False)
+            deleted_group = group_success is not False and not stage.GetPrimAtPath(group_path).IsValid()
+        return {
+            "status": "success",
+            "preview": False,
+            "deleted_human_path": exact_path,
+            "deleted_empty_group": deleted_group,
+            "readback": {"human_absent": not stage.GetPrimAtPath(exact_path).IsValid()},
+        }
+    except ValueError as exc:
+        return _error("INVALID_HUMAN_REQUEST", str(exc))
+    except LookupError as exc:
+        return _error("HUMAN_NOT_FOUND", str(exc))
+    except Exception as exc:
+        return _error("HUMAN_DELETE_FAILED", str(exc))
 
 
 async def spawn(
@@ -331,6 +904,19 @@ async def spawn(
             }
 
         behavior_agent_paths = await _refresh_behavior_agents(stage, created)
+
+        for created_path in created:
+            created_prim = stage.GetPrimAtPath(created_path)
+            if created_prim and created_prim.IsValid():
+                created_prim.SetCustomDataByKey(
+                    _MCP_HUMAN_KEY,
+                    {
+                        "schema": _MCP_HUMAN_SCHEMA,
+                        "owner": "isaacsim-mcp",
+                        "group_path": group_path,
+                        "behavior": behavior.lower().strip(),
+                    },
+                )
 
         if exact_position is not None or exact_rotation is not None:
             adapter.set_prim_transform(created[0], position=exact_position, rotation=exact_rotation)
