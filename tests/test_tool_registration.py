@@ -38,6 +38,7 @@ EXPECTED_MODULES = [
     "replicator.py",
     "ros2.py",
     "humans.py",
+    "jobs.py",
     "lighting.py",
     "robots.py",
     "motion.py",
@@ -76,6 +77,7 @@ def test_init_imports_all_modules():
         "replicator",
         "ros2",
         "humans",
+        "jobs",
         "lighting",
         "robots",
         "sensors",
@@ -86,7 +88,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_124_unique_names():
+def test_named_tool_inventory_has_128_unique_names():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -103,8 +105,9 @@ def test_named_tool_inventory_has_124_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 124
+    assert len(names) == 128
     assert len(names) == len(set(names))
+    assert {"start_job", "get_job_status", "cancel_job", "list_jobs"} <= set(names)
     assert "get_capabilities" in names
     assert {
         "compute_ik",

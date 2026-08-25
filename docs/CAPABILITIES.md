@@ -244,13 +244,22 @@ client 應先檢查 outer `schema_version` 與 `capability_schema_version`，再
 
 ## 5.1 Script policy 與 5.2 command governance
 
-- current registry：124 named tools；新增 `get_script_policy`、`get_script_audit_log`。
+- Task 5.1/5.2 registry：124 named tools；新增 `get_script_policy`、`get_script_audit_log`。
 - script policy：enabled、allowed roots、source bytes、cooperative timeout、stdout/stderr bytes 與 background scheduling 都有明確上限；禁用、cwd/file escape、timeout 與 output overflow fail closed。audit 僅保存 SHA-256 與 bounded metadata。
 - command metadata：每個 tool schema 接受 optional `command_id`／`idempotency_key`。extension response 的 `data.command` 回報 command type、read/write、apply state、readback state 與 replay state。
 - idempotency：同 key+canonical payload 只 apply 一次；replay 保留原 result 並標示 original command ID。key+不同 payload 回 `IDEMPOTENCY_KEY_CONFLICT`。ledger 限 256 entries／600 seconds，Kit restart 後清除。
 - transaction：`apply_stage_batch` 是可證明完整 snapshot/restore 的原子 transaction；跨 Stage/runtime/filesystem 的通用 batch 不宣稱原子性。
 - verifier：`scripts/verify_command_governance_live.py`；固定使用 `/World/MCP_Task_5_1_5_2`，驗證 timeout 後 prim absent、idempotent create、collision、`BATCH_ROLLED_BACK`、audit、cleanup 與 TCP health。
 - live（2026-08-25）：Isaac Sim `6.0.1-rc.7`／PhysX／124 commands；cwd/background/output/timeout 四種 fail-closed、timeout target absent、same-payload replay、different-payload conflict、batch rollback probe absent 均通過。scratch root absent、timeline stopped、TCP `8766`、final-restart Kit PID `15848` Responding、新增 dump `0`、bounded `[Error]`／GPU crash signature `0`；safe offline suite `374 passed`。
+
+## Task 5.3/5.4 — unified jobs、transport bounds 與 diagnostics
+
+- current registry：128 named tools；新增 `start_job`、`get_job_status`、`cancel_job`、`list_jobs`。
+- managed asset/sensor jobs：64 筆 retained cap、1..300000 ms deadline、terminal result/artifacts、cooperative cancel；motion/SDG ID 由相同 status/cancel tools 委派既有 provider。
+- transport：request 1 MiB、response 16 MiB、socket wait 300 s，皆可由環境變數明確 override；超限 fail closed。
+- diagnostics：dispatcher start/result 與 command-window Kit warning/error 共用 command ID；1000-record buffer、200-record/256 KiB query、8 KiB message，credential-like values 在 buffer 前 redaction。
+- live（2026-08-25）：Isaac Sim `6.0.1-rc.7`／PhysX／128 commands。managed Camera job 在 client disconnect 後重連查得 `succeeded`，重查 result 相同；100-frame SDG 由共用 cancel 在第 3 frame 進入 `cancelled`，三項 cleanup 全 true。intentional warning/stdout 得到 dispatcher/Kit/stdout 4 筆 correlated records，structured/legacy log 的 synthetic token raw value都 absent。scratch root absent、timeline stopped、TCP `8766` PID `31576` Responding、新增 dump `0`；safe suite `384 passed, 1 deselected`。
+- 完整契約與 verifier：`docs/JOB_DIAGNOSTICS.md`、`scripts/verify_job_diagnostics_live.py`；不可用 offline tests 取代 live fixture。
 
 2026-08-23 完成多 GPU Timeline Stop 防護驗證：
 

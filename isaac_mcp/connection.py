@@ -39,6 +39,17 @@ from isaac_mcp.responses import normalize_response
 logger = logging.getLogger("IsaacMCPServer")
 
 DEFAULT_PORT = 8766
+DEFAULT_TIMEOUT_SECONDS = 300.0
+DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024
+DEFAULT_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+def _positive_env_number(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+        return value if value > 0 else default
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass
@@ -118,7 +129,9 @@ class IsaacConnection:
     def receive_full_response(self, sock: socket.socket, buffer_size: int = 16384) -> bytes:
         chunks = []
         timed_out = False
-        sock.settimeout(300.0)
+        timeout_seconds = _positive_env_number("ISAAC_MCP_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)
+        max_response_bytes = int(_positive_env_number("ISAAC_MCP_MAX_RESPONSE_BYTES", DEFAULT_MAX_RESPONSE_BYTES))
+        sock.settimeout(timeout_seconds)
         try:
             while True:
                 try:
@@ -128,6 +141,8 @@ class IsaacConnection:
                             raise Exception("Connection closed before receiving any data")
                         break
                     chunks.append(chunk)
+                    if sum(len(item) for item in chunks) > max_response_bytes:
+                        raise ValueError(f"Isaac response exceeds {max_response_bytes} bytes")
                     try:
                         data = b"".join(chunks)
                         json.loads(data.decode("utf-8"))
@@ -173,8 +188,19 @@ class IsaacConnection:
         if effective_key is not None:
             command["idempotency_key"] = str(effective_key)
         try:
-            self.sock.sendall(json.dumps(command).encode("utf-8"))
-            self.sock.settimeout(300.0)
+            encoded_command = json.dumps(command).encode("utf-8")
+            max_request_bytes = int(_positive_env_number("ISAAC_MCP_MAX_REQUEST_BYTES", DEFAULT_MAX_REQUEST_BYTES))
+            if len(encoded_command) > max_request_bytes:
+                return normalize_response(
+                    {
+                        "status": "error",
+                        "code": "REQUEST_TOO_LARGE",
+                        "message": f"Request exceeds {max_request_bytes} bytes",
+                    },
+                    command_id=command_id,
+                )
+            self.sock.sendall(encoded_command)
+            self.sock.settimeout(_positive_env_number("ISAAC_MCP_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
             response_data = self.receive_full_response(self.sock)
             response = json.loads(response_data.decode("utf-8"))
 

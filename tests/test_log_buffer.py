@@ -64,6 +64,13 @@ def test_append_and_mark_boundary_scopes_new_run(monkeypatch):
     assert result["logs"] == ["[PRINT] new"]
 
 
+def test_legacy_print_buffer_is_redacted_before_storage(monkeypatch):
+    monkeypatch.setattr(sim, "_log_buffer", [], raising=False)
+    monkeypatch.setattr(sim, "_play_boundary", 0, raising=False)
+    sim.append_log("[PRINT] token=must-not-remain")
+    assert sim._log_buffer == ["[PRINT] token=[REDACTED]"]
+
+
 def test_no_python_log_consumer_is_installed():
     """Regression guard for the Isaac Sim 5.1 deadlock.
 

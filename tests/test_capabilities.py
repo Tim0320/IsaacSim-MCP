@@ -212,6 +212,15 @@ def test_handler_returns_stable_runtime_capability_contract():
         "single_active_job": True,
         "cleanup_readback": True,
     }
+    assert result["feature_flags"]["job.lifecycle"]["tools"] == [
+        "start_job",
+        "get_job_status",
+        "cancel_job",
+        "list_jobs",
+    ]
+    assert result["feature_flags"]["job.lifecycle"]["cancellation"] == "cooperative"
+    assert result["feature_flags"]["diagnostics.correlation"]["sensitive_value_redaction"] is True
+    assert result["feature_flags"]["transport.limits"]["default_response_bytes"] == 16777216
     assert result["feature_flags"]["sensor.lifecycle"] == {
         "state": "supported",
         "delete_tool": "delete_sensor",

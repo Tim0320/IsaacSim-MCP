@@ -315,17 +315,24 @@
   > transaction：沿用並納入共同契約的 `apply_stage_batch`，限定可完整 snapshot/restore 的 Stage composition writes。`BATCH_ROLLED_BACK` 必須回 `readback.rolled_back=true`；跨 sensor/ROS/Replicator/motion/filesystem 的通用 batch 明確 unsupported，不誤稱可原子 rollback。ledger 僅存在目前 Kit runtime，restart 後不宣稱 durable dedup。
   > live 驗收（2026-08-25）：`objects.create` 使用相同 key/payload 重送，第二次回 `replayed=true`、`original_command_id=task-5-create-1` 且 Stage 只有 exact prim；相同 key/不同 size 在 apply 前回 `IDEMPOTENCY_KEY_CONFLICT`。錯誤 Stage batch 回 `BATCH_ROLLED_BACK` 與 `readback.rolled_back=true`，rollback probe attribute absent。最後 scratch root absent、timeline stopped、TCP `8766` 存活；final-restart Kit PID `15848` Responding、新增 native dump `0`。bounded log 共 24 筆既知 warnings，`[Error]`／GPU crash signature 均為 `0`。safe offline suite `374 passed`。
 
-- [ ] 22. Timeout、取消、job status 與 response limits
+- [x] 22. Timeout、取消、job status 與 response limits
   > 現況：長時間 motion、SDG、資產載入與 sensor capture 缺一致的非同步 job 與取消模型。
   > 缺漏位置：protocol、server dispatcher、long-running handlers。
   > 實作：`start/get_status/cancel` 契約、deadline、progress、result artifact；限制 request/response/log 大小。
   > 驗收：client 斷線或取消後工作能進入可預期終態；同一 job 可重查且結果不重複執行。
+  > 已實作：新增 `start_job`、`get_job_status`、`cancel_job`、`list_jobs`，registry `124→128`。Asset/Sensor eligible commands 使用 64-entry bounded retained registry、1..300000 ms deadline、progress、terminal result/artifacts 與 cooperative cancellation；`motion-*`／`sdg-*` ID 經同一 status/cancel tools 委派既有 provider。相同 start request 可搭配 dispatcher idempotency key replay 原 job ID，不重新執行。
+  > transport：server/client request 預設 1 MiB、response 16 MiB、socket wait 300 s，皆可用 `ISAAC_MCP_*` 環境變數 explicit override；超限回 bounded `REQUEST_TOO_LARGE`／`RESPONSE_TOO_LARGE`。native Kit call 只能在回到 Python 後觀察 deadline/cancel，明確不宣稱強制 preemption。
+  > live 驗收（2026-08-25）：managed Camera metadata job 在 client socket 主動斷線後由新 connection 以同一 job ID 查得 `succeeded`；重查 result 完全相同。100-frame SDG 以共用 `cancel_job` 在第 `3` frame 取消，terminal=`cancelled`，writer/render product/trigger cleanup 全 true。scratch root absent、timeline stopped、TCP `8766` owner PID `31576` Responding、新增 `.dmp/.dump=0`。
 
-- [ ] 23. Log correlation 與診斷資訊
+- [x] 23. Log correlation 與診斷資訊
   > 現況：已有 Kit log/print 擷取，但尚未對所有 tool 統一關聯 command、stage、frame、backend 與 extension 狀態。
   > 缺漏位置：simulation log buffer、dispatcher、tool response metadata。
   > 實作：每筆 log 帶 command ID、timestamp、severity、source；提供 bounded query，敏感值遮罩。
   > 驗收：故意觸發錯誤時，可由 MCP response 追到對應 Kit warning/error；log 不包含 credential 或無上限 stdout。
+  > 已實作：`get_isaac_logs` 保留 legacy string logs 並新增 structured records；每筆含 timestamp/severity/source/command ID/type/stage/frame/backend/extension。dispatcher 記錄 start/result，並用 command-window Kit log offset 關聯該 command 期間的 Warning/Error；不安裝可能造成 physics/GIL deadlock 的 Python carb consumer。
+  > bounds/redaction：runtime 1000 records、query 200 records/256 KiB、message 8 KiB；支援 `filter_command_id`、severity、source。常見 api key/token/password/authorization/bearer 值在進 buffer 前遮罩。
+  > live 驗收（2026-08-25）：intentional `carb.log_warn` 與 captured stdout 由同一 command ID 查得 dispatcher/kit/stdout 三種 source；structured records 與 legacy logs 的 synthetic `token=` 值都只出現 `[REDACTED]`，raw value absent。final-restart 專用 verifier 回 4 筆 correlated records，無 GPU crash signature；fixture/timeline/port/dump health 同 Task 22。完整契約與 verifier：`docs/JOB_DIAGNOSTICS.md`、`scripts/verify_job_diagnostics_live.py`。
+  > offline 驗收：focused lifecycle/transport/log/schema contracts `46 passed`；完整 safe suite（排除 destructive live integration 與固定 Windows Bash launcher）`384 passed, 1 deselected`；Ruff、compile、`git diff --check` 通過。
 
 ## Phase 6：測試、報告與發布
 

@@ -235,3 +235,25 @@ def test_send_command_forwards_explicit_command_and_idempotency_ids():
         }
     ]
     assert result["command_id"] == "caller-command"
+
+
+def test_send_command_rejects_oversized_request_before_send(monkeypatch):
+    sent = []
+    monkeypatch.setenv("ISAAC_MCP_MAX_REQUEST_BYTES", "64")
+    conn = IsaacConnection(host="127.0.0.1", port=8766)
+    conn.connect = lambda: True
+    conn.sock = type(
+        "_Socket",
+        (),
+        {
+            "sendall": lambda self, data: sent.append(data),
+            "settimeout": lambda self, _timeout: None,
+        },
+    )()
+
+    result = conn.send_command("scene.open", {"path": "x" * 200}, command_id="oversized")
+
+    assert result["status"] == "error"
+    assert result["code"] == "REQUEST_TOO_LARGE"
+    assert result["command_id"] == "oversized"
+    assert sent == []

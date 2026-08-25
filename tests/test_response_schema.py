@@ -67,11 +67,11 @@ class _Connection:
         )
 
 
-def test_all_124_named_tools_are_registered_through_schema_wrapper():
+def test_all_128_named_tools_are_registered_through_schema_wrapper():
     mcp = _FakeMCP()
     register_all_tools(mcp, lambda: _Connection())
 
-    assert len(mcp.tools) == 124
+    assert len(mcp.tools) == 128
     for name, function in mcp.tools.items():
         signature = inspect.signature(function)
         assert signature, name

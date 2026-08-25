@@ -2,7 +2,7 @@
 
 用 Model Context Protocol（MCP）控制 NVIDIA Isaac Sim。AI 助理可以建立工廠場景、載入 NVIDIA 資產、操作機器人與人物、讀取感測器、控制模擬，以及建立 Action Graph。
 
-此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 122 個 MCP tools、Replicator synthetic-data jobs、NVIDIA Replicator Agent 人物 lifecycle、ROS 2 publisher workflows、NVIDIA 資產目錄，以及工廠配置與互動範例。
+此版本以 Windows 與 **Isaac Sim 6.0.1** 為主要驗證環境，包含 128 個 MCP tools、Replicator synthetic-data jobs、NVIDIA Replicator Agent 人物 lifecycle、ROS 2 publisher workflows、NVIDIA 資產目錄，以及工廠配置與互動範例。
 
 > 本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。原始作者與後續貢獻者資訊保留於 `LICENSE` 及原始檔案標頭。
 
@@ -111,6 +111,8 @@ ScriptNode 必須指定 exact `graph_path` 與 `node_path`。`inline` 與 `file`
 4.3 新增 7 個 Replicator SDG tools。Job 使用 bounded `BasicWriter`、manual trigger、固定 seed 與 typed transform/light randomization；start 非阻塞，cancel 只在 completed-frame safe point 生效。Terminal manifest 只有在 writer、render product、trigger、原始 attributes 與 artifact ingestion 全部完成 cleanup 後才可讀取。2026-08-25 的 Replicator `1.13.27` live run 以相同 seed `4317` 取得一致的兩輪 RGB／semantic trace，並驗證 100-frame job bounded cancel、job registry 清空與 stopped timeline。GPU renderer hash 只作完整性證據，不宣稱跨機器 bitwise deterministic。
 
 4.4 將既有 `spawn_human` 擴充為 10 個 Human tools。Read tools 可描述 external human，但控制與刪除只接受 schema `1.0` MCP-owned character；MoveTo／LookAt／Idle 要求 Timeline Play，NavMesh bake 與 delete 要求 stopped/paused。`speed_mps` 依 Stage `metersPerUnit` 轉換並回傳 runtime stage-unit read-back。2026-08-25 live run 驗證 IRA `1.6.8`、Behavior／Navigation Core `110.1.4`、NavMesh ready、stopped rejection、MoveTo task 與 `0.2639` stage-unit 位移、LookAt、Idle、exact delete、fixture/list restore 與 stopped timeline。Task accepted 不代表已抵達，後續仍須用 `get_human` 驗 position/task state。
+
+5.3/5.4 新增 4 個共用 job tools，為 asset/sensor 長操作提供 bounded retained lifecycle，並讓 motion/SDG job 共用 status/cancel 入口。TCP request/response 與 socket wait 有 fail-closed 上限；`get_isaac_logs` 新增 command-correlated structured records、bounded filters 與 sensitive-value redaction。2026-08-25 live run 證明 Camera job 不依賴 client socket 存活、同 job 重查不重跑、SDG 共用取消與完整 cleanup，以及 dispatcher/Kit/stdout 同 command ID 追蹤。完整契約見 [`docs/JOB_DIAGNOSTICS.md`](docs/JOB_DIAGNOSTICS.md)。
 
 後續 agent 處理 4.x 時，依序讀取：
 
@@ -239,7 +241,7 @@ get_scene_info
 `get_capabilities` 會回傳 Isaac Sim 版本、adapter、physics backend、extension states、feature flags 與不支援參數；
 `get_scene_info` 會回傳目前 Stage、asset root 與 prim 數量。capability schema `1.1` 也包含 adapter-owned PhysX/Newton 逐功能 matrix；完整 schema 與 backend 分流契約請見 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) 與 [`docs/BACKEND_CAPABILITY_MATRIX.md`](docs/BACKEND_CAPABILITY_MATRIX.md)。
 
-全部 124 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。所有 tools 也接受 caller `command_id`／`idempotency_key`；script policy、replay ledger 與 transaction 邊界見 [`docs/COMMAND_GOVERNANCE.md`](docs/COMMAND_GOVERNANCE.md)，response 欄位見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
+全部 128 個 tools 都使用固定 response envelope，包含 `status`、`code`、`data`、`command_id`、timing、artifact 與 read-back 欄位。所有 tools 也接受 caller `command_id`／`idempotency_key`；script policy、replay ledger 與 transaction 邊界見 [`docs/COMMAND_GOVERNANCE.md`](docs/COMMAND_GOVERNANCE.md)，共用 job、transport 與診斷契約見 [`docs/JOB_DIAGNOSTICS.md`](docs/JOB_DIAGNOSTICS.md)，response 欄位見 [`docs/RESPONSE_SCHEMA.md`](docs/RESPONSE_SCHEMA.md)。
 
 `capture_image` 支援 `metadata|artifact|inline`。預設輸出具備 dimensions、dtype、frame/timestamp 與 SHA-256 的受控 PNG artifact；完整契約請見 [`docs/CAMERA_RGB.md`](docs/CAMERA_RGB.md)。
 
@@ -255,7 +257,7 @@ Replicator SDG 支援 bounded BasicWriter job、manual trigger、固定 seed、t
 
 ## MCP Tools
 
-目前共 124 個 tools：
+目前共 128 個 tools：
 
 | 類別 | Tools |
 |---|---|
@@ -277,6 +279,7 @@ Replicator SDG 支援 bounded BasicWriter job、manual trigger、固定 seed、t
 | Action Graph | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` |
 | ROS 2 | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` |
 | Replicator SDG | `get_replicator_status`, `create_sdg_job`, `start_sdg_job`, `get_sdg_job_status`, `cancel_sdg_job`, `get_sdg_manifest`, `delete_sdg_job` |
+| 共用 jobs | `start_job`, `get_job_status`, `cancel_job`, `list_jobs` |
 
 ## 基本使用範例
 

@@ -79,3 +79,9 @@ def register_all_handlers(registry: Dict[str, Any], adapter: IsaacAdapterBase) -
         graphs,
     ]:
         module.register(registry, adapter)
+
+    # Register last so the job router can safely delegate to the completed
+    # command registry without allowing recursive job commands.
+    from . import jobs
+
+    jobs.register(registry, adapter)

@@ -143,7 +143,14 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             return json.dumps({"status": "error", "message": str(e)})
 
     @mcp.tool("get_isaac_logs")
-    def get_isaac_logs(clear: bool = False, count: int = 100, since_last_play: bool = True) -> str:
+    def get_isaac_logs(
+        clear: bool = False,
+        count: int = 100,
+        since_last_play: bool = True,
+        filter_command_id: Optional[str] = None,
+        severity: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> str:
         """Diagnostic tool: recent WARN/ERROR logs plus captured print() output.
 
         Captures carb.log_*/omni.log WARN+ERROR and stdout from execute_script /
@@ -159,12 +166,22 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             count: Maximum number of log entries to return.
             since_last_play: If True (default), return only entries since the last
                 timeline Play. Set False for the full buffer.
+            filter_command_id: Return only structured records for this command.
+            severity: Optional structured-record severity filter.
+            source: Optional structured-record source filter (for example kit or dispatcher).
         """
         try:
             conn = get_connection()
             result = conn.send_command(
                 "simulation.get_logs",
-                {"clear": clear, "count": count, "since_last_play": since_last_play},
+                {
+                    "clear": clear,
+                    "count": count,
+                    "since_last_play": since_last_play,
+                    "filter_command_id": filter_command_id,
+                    "severity": severity,
+                    "source": source,
+                },
             )
             return json.dumps(result, indent=2)
         except Exception as e:

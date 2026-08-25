@@ -744,6 +744,40 @@ def _feature_flags(
             "atomic_rollback": True,
             "write_lifecycle_metadata": True,
         },
+        "job.lifecycle": {
+            "state": "supported",
+            "tools": ["start_job", "get_job_status", "cancel_job", "list_jobs"],
+            "managed_commands": [
+                "assets.import_urdf",
+                "assets.load_usd",
+                "assets.spawn_nvidia",
+                "sensors.capture_image",
+                "sensors.capture_camera_output",
+                "sensors.get_point_cloud",
+            ],
+            "provider_routes": ["motion", "replicator_sdg"],
+            "terminal_states": ["succeeded", "failed", "cancelled", "timed_out"],
+            "max_retained_jobs": 64,
+            "max_deadline_ms": 300000,
+            "cancellation": "cooperative",
+        },
+        "diagnostics.correlation": {
+            "state": "supported",
+            "tool": "get_isaac_logs",
+            "fields": ["command_id", "timestamp", "severity", "source", "stage", "frame", "backend", "extension"],
+            "max_records": 1000,
+            "max_query_count": 200,
+            "max_query_bytes": 262144,
+            "max_message_bytes": 8192,
+            "sensitive_value_redaction": True,
+        },
+        "transport.limits": {
+            "state": "supported",
+            "default_request_bytes": 1048576,
+            "default_response_bytes": 16777216,
+            "default_timeout_seconds": 300,
+            "environment_overrides": True,
+        },
     }
 
 

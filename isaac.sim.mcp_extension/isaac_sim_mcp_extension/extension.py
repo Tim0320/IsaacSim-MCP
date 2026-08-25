@@ -50,6 +50,8 @@ from .command_governance import (
     validate_command_id,
     validate_idempotency_key,
 )
+from .diagnostics import capture_kit_messages, kit_log_offset
+from .diagnostics import record as record_diagnostic
 from .handlers import register_all_handlers
 from .responses import new_command_id, normalize_response
 from .socket_server import SocketServer
@@ -242,6 +244,13 @@ class MCPExtension(omni.ext.IExt):
             )
         if handler:
             token = current_command_id.set(command_id)
+            log_offset = kit_log_offset()
+            record_diagnostic(
+                "Command started",
+                source="dispatcher",
+                command_id=command_id,
+                command_type=cmd_type,
+            )
             try:
                 result = handler(**params)
                 if inspect.isawaitable(result):
@@ -259,6 +268,7 @@ class MCPExtension(omni.ext.IExt):
                     timing={"extension_ms": round((time.perf_counter() - started) * 1000, 3)},
                 )
             finally:
+                capture_kit_messages(log_offset, command_id=command_id, command_type=cmd_type)
                 current_command_id.reset(token)
             response = attach_command_metadata(
                 response,
@@ -269,6 +279,16 @@ class MCPExtension(omni.ext.IExt):
             )
             if idempotency_key is not None:
                 self._idempotency.store(idempotency_key, fingerprint, response, command_id)
+            record_diagnostic(
+                response.get("message", "Command completed"),
+                severity="error" if response.get("status") in {"error", "timeout"} else "warning"
+                if response.get("status") in {"partial", "unsupported", "cancelled"}
+                else "info",
+                source="dispatcher",
+                command_id=command_id,
+                command_type=cmd_type,
+                details={"status": response.get("status"), "code": response.get("code")},
+            )
             return response
         response = normalize_response(
             {"status": "error", "code": "UNKNOWN_COMMAND", "message": f"Unknown command: {cmd_type}"},

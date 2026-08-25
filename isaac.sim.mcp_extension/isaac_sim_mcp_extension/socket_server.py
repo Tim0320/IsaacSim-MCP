@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import socket
 import threading
 import time
@@ -34,6 +35,33 @@ import traceback
 from typing import Any, Awaitable, Callable, Dict, Union
 
 from .responses import normalize_response
+
+DEFAULT_MAX_REQUEST_BYTES = 1024 * 1024
+DEFAULT_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+def _positive_env_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, default))
+        return value if value > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def encode_bounded_response(response: Dict[str, Any], max_bytes: int, command_id: Any = None) -> bytes:
+    encoded = json.dumps(response).encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return encoded
+    bounded = normalize_response(
+        {
+            "status": "error",
+            "code": "RESPONSE_TOO_LARGE",
+            "message": f"Response exceeds {max_bytes} bytes; request a bounded query or artifact handle",
+            "data": {"response_bytes": len(encoded), "max_response_bytes": max_bytes},
+        },
+        command_id=command_id,
+    )
+    return json.dumps(bounded).encode("utf-8")
 
 
 class SocketServer:
@@ -61,6 +89,8 @@ class SocketServer:
         self.running: bool = False
         self._socket: socket.socket | None = None
         self._server_thread: threading.Thread | None = None
+        self.max_request_bytes = _positive_env_int("ISAAC_MCP_MAX_REQUEST_BYTES", DEFAULT_MAX_REQUEST_BYTES)
+        self.max_response_bytes = _positive_env_int("ISAAC_MCP_MAX_RESPONSE_BYTES", DEFAULT_MAX_RESPONSE_BYTES)
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -120,6 +150,16 @@ class SocketServer:
                 if not data:
                     break
                 buffer += data
+                if len(buffer) > self.max_request_bytes:
+                    response = normalize_response(
+                        {
+                            "status": "error",
+                            "code": "REQUEST_TOO_LARGE",
+                            "message": f"Request exceeds {self.max_request_bytes} bytes",
+                        }
+                    )
+                    client.sendall(json.dumps(response).encode("utf-8"))
+                    break
                 try:
                     command = json.loads(buffer.decode("utf-8"))
                     buffer = b""
@@ -144,9 +184,9 @@ class SocketServer:
                 response = self._command_handler(command)
                 if inspect.isawaitable(response):
                     response = await response
-                response_json = json.dumps(response)
+                encoded = encode_bounded_response(response, self.max_response_bytes, command.get("command_id"))
                 try:
-                    client.sendall(response_json.encode("utf-8"))
+                    client.sendall(encoded)
                 except Exception:
                     print("Failed to send response — client disconnected")
             except Exception as e:

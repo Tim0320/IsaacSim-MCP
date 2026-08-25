@@ -1,5 +1,13 @@
 # Changelog
 
+### Added — unified jobs, transport bounds, and correlated diagnostics
+
+- Added `start_job`, `get_job_status`, `cancel_job`, and `list_jobs`; the named-tool inventory is now 128.
+- Added a bounded retained lifecycle for eligible asset/sensor work and unified status/cancel routing for motion and SDG job IDs.
+- Added request/response/socket-wait limits with fail-closed oversized envelopes.
+- Added bounded structured diagnostics with command/stage/source correlation, Kit warning/error capture windows, filters, and sensitive-value redaction.
+- Documented the contract in `docs/JOB_DIAGNOSTICS.md` and added focused lifecycle/redaction tests.
+
 All notable changes to the isaacsim-mcp-server project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

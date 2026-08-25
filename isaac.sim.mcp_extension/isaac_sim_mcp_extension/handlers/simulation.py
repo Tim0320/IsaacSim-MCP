@@ -32,6 +32,11 @@ import time
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 from ..adapters.base import IsaacAdapterBase, PhysicsParamsApplyError
+from ..command_governance import current_command_id
+from ..diagnostics import clear as clear_diagnostics
+from ..diagnostics import query as query_diagnostics
+from ..diagnostics import record as record_diagnostic
+from ..diagnostics import redact
 from ..script_policy import SCRIPT_POLICY
 
 
@@ -373,7 +378,14 @@ _kit_log_play_offset: int = 0
 
 def append_log(entry: str) -> None:
     """Append an entry to the shared log buffer, trimming to the cap."""
+    entry = str(redact(entry))
     _log_buffer.append(entry)
+    record_diagnostic(
+        entry,
+        severity="info",
+        source="stdout",
+        command_id=current_command_id.get(),
+    )
     if len(_log_buffer) > _MAX_LOG_BUFFER:
         # Keep the boundary consistent when we drop from the front.
         global _play_boundary
@@ -471,12 +483,22 @@ def _read_kit_log_warnings(since_offset: int, count: int) -> Tuple[list, int]:
             new_offset = f.tell()
     except Exception:
         return [], since_offset
-    entries = [ln.rstrip("\n") for ln in chunk.splitlines() if ("[Warning]" in ln or "[Error]" in ln)]
+    entries = [
+        str(redact(ln.rstrip("\n")))
+        for ln in chunk.splitlines()
+        if ("[Warning]" in ln or "[Error]" in ln)
+    ]
     return entries[-count:], new_offset
 
 
 def get_logs(
-    adapter: IsaacAdapterBase, clear: bool = False, count: int = 100, since_last_play: bool = True
+    adapter: IsaacAdapterBase,
+    clear: bool = False,
+    count: int = 100,
+    since_last_play: bool = True,
+    filter_command_id: Optional[str] = None,
+    severity: Optional[str] = None,
+    source: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return recent WARN/ERROR + [PRINT] log messages, scoped to the current run.
 
@@ -489,13 +511,23 @@ def get_logs(
         prints = _select_logs(_log_buffer, _play_boundary, since_last_play, count)
         warnings, _ = _read_kit_log_warnings(_kit_log_play_offset if since_last_play else 0, count)
         logs = (warnings + prints)[-count:]
+        records = query_diagnostics(
+            count=count,
+            command_id=filter_command_id,
+            severity=severity,
+            source=source,
+        )
         if clear:
             _log_buffer.clear()
+            clear_diagnostics()
             mark_play_boundary()
         return {
             "status": "success",
             "log_count": len(logs),
             "logs": logs,
+            "record_count": len(records),
+            "records": records,
+            "limits": {"max_count": 200, "max_query_bytes": 262144, "max_message_bytes": 8192},
             "kit_log_file": get_kit_log_path(),
         }
     except Exception as e:
