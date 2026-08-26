@@ -82,7 +82,7 @@ def test_v6_arm_reset_point_lands_the_transition_before_returning():
     # Import before swapping: the package __init__ pulls omni.ext, which the
     # conftest stub provides. _arm_reset_point imports omni.timeline /
     # omni.kit.app at call time, so the swap only has to cover the call.
-    import isaac_sim_mcp_extension.adapters.v6 as v6_mod
+    from isaac_sim_mcp_extension.adapters.v6_runtime.physics import PhysicsRuntime
 
     fake_omni = types.ModuleType("omni")
     fake_kit = types.ModuleType("omni.kit")
@@ -97,7 +97,7 @@ def test_v6_arm_reset_point_lands_the_transition_before_returning():
     sys.modules["omni.kit.app"] = fake_app_mod
     sys.modules["omni.timeline"] = fake_timeline_mod
     try:
-        v6_mod.IsaacAdapterV6._arm_reset_point(object.__new__(v6_mod.IsaacAdapterV6))
+        PhysicsRuntime._arm_reset_point(object.__new__(PhysicsRuntime))
     finally:
         for k, v in saved.items():
             if v is None:

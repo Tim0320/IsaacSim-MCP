@@ -42,5 +42,6 @@
 - [Historical 42-tool report](research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md)
 - [Capability verification history](research/CAPABILITY_HISTORY.md)
 - [Transport and V6 adapter refactor research](research/TRANSPORT_AND_V6_REFACTOR_PLAN.md)
+- [Phase D V6 adapter decomposition task](research/ISAACSIM_MCP_V6_ADAPTER_DECOMPOSITION_TASK.md)
 
 Research 檔案保存有日期的 evidence。要宣稱目前 running Isaac Sim 的能力，必須重新讀取 `get_capabilities` 並執行 guarded live verification。

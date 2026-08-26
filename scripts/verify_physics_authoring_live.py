@@ -8,6 +8,7 @@ import json
 from isaac_mcp.connection import IsaacConnection
 
 ROOT = "/World/MCP_Task_3_3"
+GROUND_PLANE = "/World/groundPlane"
 
 
 def _data(response: dict) -> dict:
@@ -24,8 +25,16 @@ def _readback(response: dict) -> dict:
 def main() -> int:
     connection = IsaacConnection(port=8766)
     evidence = {}
+    remove_generated_ground_plane = False
     try:
         _data(connection.send_command("simulation.stop"))
+        ground_plane_before = connection.send_command("scene.get_prim_info", {"prim_path": GROUND_PLANE})
+        if ground_plane_before["status"] == "success":
+            evidence["ground_plane_preexisting"] = True
+        else:
+            assert "Prim not found" in ground_plane_before.get("message", ""), ground_plane_before
+            evidence["ground_plane_preexisting"] = False
+            remove_generated_ground_plane = True
         existing = connection.send_command("scene.get_prim_info", {"prim_path": ROOT})
         if existing["status"] == "success":
             _data(connection.send_command("objects.delete", {"prim_path": ROOT}))
@@ -161,6 +170,13 @@ print(json.dumps({"root": str(root.GetPath()), "mesh": str(mesh.GetPath())}))
         assert deleted["status"] == "success", deleted
         survivor = connection.send_command("scene.get_prim_info", {"prim_path": ROOT})
         assert survivor["status"] == "error", survivor
+        if remove_generated_ground_plane:
+            generated_ground_plane = connection.send_command("scene.get_prim_info", {"prim_path": GROUND_PLANE})
+            if generated_ground_plane["status"] == "success":
+                deleted_ground_plane = connection.send_command("objects.delete", {"prim_path": GROUND_PLANE})
+                assert deleted_ground_plane["status"] == "success", deleted_ground_plane
+            ground_plane_survivor = connection.send_command("scene.get_prim_info", {"prim_path": GROUND_PLANE})
+            assert ground_plane_survivor["status"] == "error", ground_plane_survivor
 
 
 if __name__ == "__main__":

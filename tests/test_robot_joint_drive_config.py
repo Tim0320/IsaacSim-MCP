@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from isaac_sim_mcp_extension.adapters.base import JointDriveConfigApplyError
 from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+from isaac_sim_mcp_extension.adapters.v6_runtime import CapabilityRuntime
 from isaac_sim_mcp_extension.handlers.robots import set_joint_drive_config
 
 from isaac_mcp.tools.robots import register_tools
@@ -279,6 +280,8 @@ class _DriveAdapter(IsaacAdapterV6):
         self.art = art
         self.engine = engine
         self.stage = stage
+        context = type("Context", (), {"active_backend": property(lambda _context: self._engine)})()
+        self._capability_runtime = CapabilityRuntime(context, self._backend_capability)
 
     @property
     def _engine(self):

@@ -183,7 +183,7 @@ def test_v6_ensure_physics_world_calls_simulation_manager(monkeypatch):
     adapter = v6_mod.IsaacAdapterV6()
     # Physics warming is guarded on a live stage (see
     # test_v6_never_warms_physics_without_a_stage), so provide one.
-    monkeypatch.setattr(adapter, "get_stage", lambda: object())
+    monkeypatch.setattr(adapter._scene_runtime, "get_stage", lambda: object())
     adapter._ensure_physics_world()
     assert ("setup_simulation", None) in sm_calls
     assert ("initialize_physics",) in sm_calls
@@ -268,6 +268,7 @@ def test_v6_joint_command_uses_dof_subset_for_all_modes(monkeypatch):
             calls.append(("effort", values, dof_indices))
 
     fake_warp_mod = types.ModuleType("warp")
+
     def fake_array(data, dtype=None, device=None):
         allocations.append((dtype, device))
         return list(data)
@@ -506,11 +507,9 @@ def test_v6_configure_physics_applies_dual_readback_and_rolls_back(monkeypatch):
     from isaac_sim_mcp_extension.adapters.base import PhysicsParamsApplyError
     from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
 
-    monkeypatch.setattr(IsaacAdapterV6, "_engine", property(lambda _self: "physx"))
     adapter = object.__new__(IsaacAdapterV6)
     adapter.get_stage = lambda: _Stage()
     adapter.get_simulation_state = lambda: {"timeline_state": "stopped"}
-    adapter.create_physics_scene = lambda **_kwargs: "/World/PhysicsScene"
 
     def apply_gravity(_path, gravity):
         attrs["physics:gravityDirection"].Set([0.0, 0.0, -1.0])
@@ -518,6 +517,15 @@ def test_v6_configure_physics_applies_dual_readback_and_rolls_back(monkeypatch):
         return True
 
     adapter._apply_gravity = apply_gravity
+    from isaac_sim_mcp_extension.adapters.v6_runtime import PhysicsPolicyBridge, PhysicsRuntime
+
+    physics_runtime = PhysicsRuntime(
+        types.SimpleNamespace(active_backend="physx"),
+        types.SimpleNamespace(get_stage=adapter.get_stage),
+        PhysicsPolicyBridge(adapter),
+    )
+    physics_runtime.create_physics_scene = lambda *_args, **_kwargs: "/World/PhysicsScene"
+    adapter._physics_runtime = physics_runtime
     result = adapter.configure_physics(gravity=[0.0, 0.0, -3.72], time_step=1.0 / 120.0, gpu_enabled=True)
     assert result["applied"] == ["gravity", "time_step", "gpu_enabled"]
     assert result["readback"]["usd"]["time_steps_per_second"] == 120
@@ -949,7 +957,7 @@ def test_v6_never_warms_physics_without_a_stage(monkeypatch):
     """
     calls = []
     adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
-    monkeypatch.setattr(adapter, "get_stage", lambda: None)
+    monkeypatch.setattr(adapter._scene_runtime, "get_stage", lambda: None)
 
     adapter._ensure_physics_world()
 
@@ -960,7 +968,7 @@ def test_v6_warms_physics_once_a_stage_exists(monkeypatch):
     """The guard must not disable normal warming — only the no-stage case."""
     calls = []
     adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
-    monkeypatch.setattr(adapter, "get_stage", lambda: object())
+    monkeypatch.setattr(adapter._scene_runtime, "get_stage", lambda: object())
 
     adapter._ensure_physics_world()
 

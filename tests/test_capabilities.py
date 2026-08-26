@@ -14,6 +14,7 @@ except ModuleNotFoundError:  # Python 3.10
 from isaac_sim_mcp_extension import __version__ as extension_version
 from isaac_sim_mcp_extension.adapters.base import IsaacAdapterBase
 from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+from isaac_sim_mcp_extension.adapters.v6_runtime import CapabilityRuntime
 from isaac_sim_mcp_extension.handlers.capabilities import get_capabilities
 
 from isaac_mcp import __version__ as server_version
@@ -26,6 +27,8 @@ class _AdapterV6:
     def __init__(self) -> None:
         self._camera_sensors = {"/World/Camera": object()}
         self._lidar_sensors = {}
+        context = type("Context", (), {"active_backend": property(lambda _context: self._engine)})()
+        self._capability_runtime = CapabilityRuntime(context, self._backend_capability)
 
     def get_simulation_state(self):
         return {"engine": "physx", "isaacsim_version": "6.0.1-rc.7"}

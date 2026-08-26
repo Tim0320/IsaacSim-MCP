@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Both adapters must route prim transforms through the shared helper.
+"""Both adapter runtimes must route prim transforms through the shared helper.
 
 The rotation bug was that ``set_prim_transform`` only ever wrote
 ``xformOp:rotateXYZ``, so on a prim carrying ``xformOp:orient`` the requested
@@ -54,14 +54,14 @@ def _func(filename, name):
 
 
 def test_both_adapters_write_transforms_through_the_helper():
-    for filename in ("v5.py", "v6.py"):
+    for filename in ("v5.py", os.path.join("v6_runtime", "scene.py")):
         body = _func(filename, "set_prim_transform")
         assert "set_transform(" in body, f"{filename} does not use the shared writer"
         assert "AddRotateXYZOp" not in body, f"{filename} still hand-rolls the rotate op"
 
 
 def test_both_adapters_read_transforms_through_the_helper():
-    for filename in ("v5.py", "v6.py"):
+    for filename in ("v5.py", os.path.join("v6_runtime", "scene.py")):
         body = _func(filename, "get_prim_transform")
         assert "read_transform(" in body, f"{filename} does not use the shared reader"
 

@@ -82,7 +82,13 @@ def test_v6_does_not_use_usd_velocity_attributes():
     import os
 
     v6_path = os.path.join(
-        os.path.dirname(__file__), "..", "isaac.sim.mcp_extension", "isaac_sim_mcp_extension", "adapters", "v6.py"
+        os.path.dirname(__file__),
+        "..",
+        "isaac.sim.mcp_extension",
+        "isaac_sim_mcp_extension",
+        "adapters",
+        "v6_runtime",
+        "physics.py",
     )
     with open(v6_path) as f:
         text = f.read()
@@ -91,7 +97,7 @@ def test_v6_does_not_use_usd_velocity_attributes():
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "get_physics_state":
             src = ast.get_source_segment(text, node)
-    assert src, "v6 get_physics_state not found"
+    assert src, "V6 PhysicsRuntime.get_physics_state not found"
     assert "physics:velocity" not in src, "V6/Newton must not read PhysX USD write-back attributes"
     assert "get_velocities" in src, "V6 should read velocities from the physics tensors view"
 
