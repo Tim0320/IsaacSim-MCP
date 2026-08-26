@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,11 @@ import pytest
 SCRIPT = Path(__file__).parents[1] / "scripts" / "backup_project.ps1"
 PWSH = shutil.which("pwsh")
 
-pytestmark = pytest.mark.skipif(PWSH is None, reason="PowerShell 7 is required")
+pytestmark = [
+    pytest.mark.windows_launcher,
+    pytest.mark.skipif(sys.platform != "win32", reason="Windows-only integration test"),
+    pytest.mark.skipif(PWSH is None, reason="PowerShell 7 is required"),
+]
 
 
 def _run(command: list[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:

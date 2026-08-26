@@ -13,6 +13,7 @@ def test_ci_covers_declared_python_versions_and_launchers() -> None:
     assert 'python-version: ["3.10", "3.11", "3.12"]' in WORKFLOW
     assert "windows-launcher:" in WORKFLOW
     assert "linux-launcher:" in WORKFLOW
+    assert "tests/test_run_isaac_sim_windows.py tests/test_backup_project_script.py" in WORKFLOW
 
 
 def test_ci_checks_generated_metadata_and_clean_wheel() -> None:

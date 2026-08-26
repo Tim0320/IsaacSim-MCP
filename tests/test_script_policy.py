@@ -50,12 +50,19 @@ def test_disabled_policy_rejects_before_adapter_execution():
     adapter.execute_script.assert_not_called()
 
 
-def test_cwd_escape_and_background_scheduling_fail_closed():
-    SCRIPT_POLICY.policy = _policy()
+def test_cwd_escape_and_background_scheduling_fail_closed(tmp_path: Path):
+    allowed_root = tmp_path / "allowed"
+    outside_root = tmp_path / "outside"
+    allowed_root.mkdir()
+    outside_root.mkdir()
+
+    SCRIPT_POLICY.policy = _policy(allowed_roots=(str(allowed_root),))
     adapter = MagicMock()
 
-    cwd = simulation.execute_script(adapter, code="result = 1", cwd="C:\\Windows")
-    background = simulation.execute_script(adapter, code="import threading\nthreading.Thread(target=lambda: None).start()")
+    cwd = simulation.execute_script(adapter, code="result = 1", cwd=str(outside_root))
+    background = simulation.execute_script(
+        adapter, code="import threading\nthreading.Thread(target=lambda: None).start()"
+    )
 
     assert cwd["code"] == "SCRIPT_POLICY_DENIED"
     assert background["code"] == "SCRIPT_POLICY_DENIED"
