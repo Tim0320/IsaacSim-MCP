@@ -205,7 +205,7 @@ function Get-FileState {
                 })
             continue
         }
-        $item = Get-Item -LiteralPath $absolutePath
+        $item = Get-Item -LiteralPath $absolutePath -Force
         $states.Add([pscustomobject]@{
                 path   = $relativePath
                 exists = $true
@@ -339,7 +339,7 @@ try {
             $excludedUntracked.Add([pscustomobject]@{ path = $relativePath; reason = "not_a_regular_file" })
             continue
         }
-        $length = (Get-Item -LiteralPath $absolutePath).Length
+        $length = (Get-Item -LiteralPath $absolutePath -Force).Length
         $reason = Get-UntrackedExclusionReason -RelativePath $relativePath -Length $length -MaximumBytes $MaxUntrackedFileBytes
         if ($reason) {
             $excludedUntracked.Add([pscustomobject]@{ path = $relativePath; reason = $reason })

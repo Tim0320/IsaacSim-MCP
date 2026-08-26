@@ -8,7 +8,7 @@ import os
 import time
 from collections import deque
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, Iterable, Optional
 
 from .command_governance import current_command_id
@@ -123,6 +123,8 @@ class ScriptPolicyManager:
         return timeout, output
 
     def require_path(self, value: str, field: str, *, require_file: bool = False) -> str:
+        if os.name != "nt" and PureWindowsPath(value).is_absolute():
+            raise PermissionError(f"{field} is outside allowed_roots")
         resolved = Path(value).expanduser().resolve()
         allowed = any(resolved == Path(root) or Path(root) in resolved.parents for root in self.policy.allowed_roots)
         if not allowed:
