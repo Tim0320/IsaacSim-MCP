@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .base import IsaacAdapterBase
+from .base import IsaacAdapterBase, SensorLifecycleState
 from .transforms import read_transform, set_transform
 from .units import limit_units, normalize_limit
 
@@ -83,12 +83,16 @@ class IsaacAdapterV5(IsaacAdapterBase):
         # and initialize() must run exactly once per camera, since each call
         # creates a render product, attaches annotators and registers three
         # event subscriptions. See capture_camera_image.
-        self._camera_sensors: Dict[str, Any] = {}
-        self._initialized_cameras: set = set()
+        self._sensor_state = SensorLifecycleState(initialized_cameras=set())
+        self._camera_sensors = self._sensor_state.camera_sensors
+        self._initialized_cameras = self._sensor_state.initialized_cameras
         # Lidars need the same treatment as cameras, and for the same reason:
         # the annotator must be attached before initialize() and survives only
         # as long as the wrapper does. See get_lidar_point_cloud.
-        self._lidar_sensors: Dict[str, Any] = {}
+        self._lidar_sensors = self._sensor_state.lidar_sensors
+
+    def _sensor_lifecycle_state(self) -> SensorLifecycleState:
+        return self._sensor_state
 
     # ── Scene ──────────────────────────────────────────────
 
@@ -989,9 +993,7 @@ class IsaacAdapterV5(IsaacAdapterBase):
         material = UsdShade.Material(stage.GetPrimAtPath(material_path))
         target = stage.GetPrimAtPath(target_prim_path)
         purpose_token = "physics" if material_purpose == "physics" else UsdShade.Tokens.allPurpose
-        UsdShade.MaterialBindingAPI.Apply(target).Bind(
-            material, UsdShade.Tokens.weakerThanDescendants, purpose_token
-        )
+        UsdShade.MaterialBindingAPI.Apply(target).Bind(material, UsdShade.Tokens.weakerThanDescendants, purpose_token)
         return self.get_material_binding(target_prim_path, material_purpose)
 
     # ── Lighting ───────────────────────────────────────────

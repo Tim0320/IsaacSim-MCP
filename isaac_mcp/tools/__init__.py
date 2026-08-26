@@ -31,7 +31,7 @@ import inspect
 import json
 import time
 from inspect import Parameter, Signature
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, get_type_hints
 
 from isaac_mcp.command_context import command_id_var, idempotency_key_var
 from isaac_mcp.responses import normalize_response
@@ -149,7 +149,14 @@ def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
         wrapped = sync_wrapped
 
     original = inspect.signature(function)
-    parameters = list(original.parameters.values())
+    try:
+        resolved_hints = get_type_hints(function)
+    except (NameError, TypeError):
+        resolved_hints = {}
+    parameters = [
+        parameter.replace(annotation=resolved_hints.get(parameter.name, parameter.annotation))
+        for parameter in original.parameters.values()
+    ]
     insertion = len(parameters)
     for index, parameter in enumerate(parameters):
         if parameter.kind in (Parameter.VAR_KEYWORD,):
@@ -159,7 +166,10 @@ def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
         Parameter("command_id", kind=Parameter.KEYWORD_ONLY, default=None, annotation=Optional[str]),
         Parameter("idempotency_key", kind=Parameter.KEYWORD_ONLY, default=None, annotation=Optional[str]),
     ]
-    wrapped.__signature__ = Signature(parameters[:insertion] + metadata + parameters[insertion:], return_annotation=str)
+    wrapped.__signature__ = Signature(
+        parameters[:insertion] + metadata + parameters[insertion:],
+        return_annotation=resolved_hints.get("return", str),
+    )
     return wrapped
 
 

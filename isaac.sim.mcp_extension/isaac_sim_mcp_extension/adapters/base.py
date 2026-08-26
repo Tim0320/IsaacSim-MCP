@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -43,6 +44,17 @@ class SensorLifecycleError(RuntimeError):
     def __init__(self, message: str, report: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(message)
         self.report = report or {}
+
+
+@dataclass
+class SensorLifecycleState:
+    """Explicit sensor cache ownership consumed by shared teardown policy."""
+
+    camera_sensors: Dict[str, Any] = field(default_factory=dict)
+    lidar_sensors: Dict[str, Any] = field(default_factory=dict)
+    lidar_actual_paths: Dict[str, str] = field(default_factory=dict)
+    lidar_config_metadata: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    initialized_cameras: Optional[set] = None
 
 
 class JointDriveConfigApplyError(RuntimeError):
@@ -403,6 +415,10 @@ class IsaacAdapterBase(ABC):
 
     # ── Sensor lifecycle ───────────────────────────────────
 
+    def _sensor_lifecycle_state(self) -> SensorLifecycleState:
+        """Return explicit adapter-owned caches used by shared teardown."""
+        return SensorLifecycleState()
+
     def release_sensor(self, prim_path: str, *, evict_metadata: bool = True) -> Dict[str, Any]:
         """Destroy and forget one cached RTX sensor with auditable teardown.
 
@@ -413,14 +429,17 @@ class IsaacAdapterBase(ABC):
         leaves the render product alive, so lifecycle errors must remain
         explicit and the cache reference must remain available for a retry.
         """
-        actual_paths = getattr(self, "_lidar_actual_paths", None)
-        actual_prim_path = actual_paths.get(prim_path, prim_path) if actual_paths is not None else prim_path
+        state = self._sensor_lifecycle_state()
+        actual_paths = state.lidar_actual_paths
+        actual_prim_path = actual_paths.get(prim_path, prim_path)
         sensor = None
         sensor_type = None
         cache = None
-        for cache_name, candidate_type in (("_camera_sensors", "camera"), ("_lidar_sensors", "lidar")):
-            candidate_cache = getattr(self, cache_name, None)
-            if candidate_cache is not None and prim_path in candidate_cache:
+        for candidate_cache, candidate_type in (
+            (state.camera_sensors, "camera"),
+            (state.lidar_sensors, "lidar"),
+        ):
+            if prim_path in candidate_cache:
                 sensor = candidate_cache[prim_path]
                 sensor_type = candidate_type
                 cache = candidate_cache
@@ -485,14 +504,14 @@ class IsaacAdapterBase(ABC):
             writers_after = []
             texture_after = None
 
-        initialized = getattr(self, "_initialized_cameras", None)
+        initialized = state.initialized_cameras
         if initialized is not None:
             initialized.discard(prim_path)
 
-        if evict_metadata and actual_paths is not None:
+        if evict_metadata:
             actual_paths.pop(prim_path, None)
-        config_metadata = getattr(self, "_lidar_config_metadata", None)
-        if evict_metadata and config_metadata is not None:
+        config_metadata = state.lidar_config_metadata
+        if evict_metadata:
             config_metadata.pop(prim_path, None)
 
         report.update(
@@ -500,15 +519,10 @@ class IsaacAdapterBase(ABC):
                 "annotators_after": annotators_after,
                 "writers_after": writers_after,
                 "render_product_released": texture_after is None,
-                "cache_evicted": all(
-                    prim_path not in (getattr(self, cache_name, None) or {})
-                    for cache_name in ("_camera_sensors", "_lidar_sensors")
-                ),
+                "cache_evicted": prim_path not in state.camera_sensors and prim_path not in state.lidar_sensors,
                 "metadata_evicted": evict_metadata
-                and (
-                    prim_path not in (getattr(self, "_lidar_actual_paths", None) or {})
-                    and prim_path not in (getattr(self, "_lidar_config_metadata", None) or {})
-                ),
+                and prim_path not in state.lidar_actual_paths
+                and prim_path not in state.lidar_config_metadata,
             }
         )
         return report
@@ -516,8 +530,8 @@ class IsaacAdapterBase(ABC):
     def release_all_sensors(self, *, evict_metadata: bool = True) -> List[Dict[str, Any]]:
         """Release every cached sensor — used when clearing the whole scene."""
         reports = []
-        for cache_name in ("_camera_sensors", "_lidar_sensors"):
-            cache = getattr(self, cache_name, None) or {}
+        state = self._sensor_lifecycle_state()
+        for cache in (state.camera_sensors, state.lidar_sensors):
             for prim_path in list(cache):
                 reports.append(self.release_sensor(prim_path, evict_metadata=evict_metadata))
         return reports

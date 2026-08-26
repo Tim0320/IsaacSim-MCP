@@ -27,6 +27,7 @@ import ast
 import os
 
 from isaac_mcp.tool_inventory import tool_names
+from isaac_mcp.tools import register_all_tools
 
 TOOLS_DIR = os.path.join(os.path.dirname(__file__), "..", "isaac_mcp", "tools")
 
@@ -172,3 +173,13 @@ def test_named_tool_inventory_matches_authoritative_source_inventory():
         "configure_script_node",
         "reload_script_node",
     } <= set(names)
+
+
+def test_real_fastmcp_registration_resolves_deferred_tool_annotations():
+    from mcp.server.fastmcp import FastMCP
+
+    mcp = FastMCP("registration-contract")
+
+    register_all_tools(mcp, lambda: None)
+
+    assert len(mcp._tool_manager.list_tools()) == len(tool_names())

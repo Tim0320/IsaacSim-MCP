@@ -7,7 +7,7 @@ import sys
 import types
 
 import pytest
-from isaac_sim_mcp_extension.adapters.base import IsaacAdapterBase, SensorLifecycleError
+from isaac_sim_mcp_extension.adapters.base import IsaacAdapterBase, SensorLifecycleError, SensorLifecycleState
 from isaac_sim_mcp_extension.handlers import objects, sensors
 
 
@@ -49,15 +49,17 @@ class _DestroyRuntimeSensor:
 
 def _adapter() -> IsaacAdapterBase:
     class _LifecycleAdapter(IsaacAdapterBase):
-        pass
+        def _sensor_lifecycle_state(self):
+            return self.sensor_state
 
     _LifecycleAdapter.__abstractmethods__ = frozenset()
     adapter = _LifecycleAdapter()
-    adapter._camera_sensors = {}
-    adapter._lidar_sensors = {}
-    adapter._initialized_cameras = set()
-    adapter._lidar_actual_paths = {}
-    adapter._lidar_config_metadata = {}
+    adapter.sensor_state = SensorLifecycleState(initialized_cameras=set())
+    adapter._camera_sensors = adapter.sensor_state.camera_sensors
+    adapter._lidar_sensors = adapter.sensor_state.lidar_sensors
+    adapter._initialized_cameras = adapter.sensor_state.initialized_cameras
+    adapter._lidar_actual_paths = adapter.sensor_state.lidar_actual_paths
+    adapter._lidar_config_metadata = adapter.sensor_state.lidar_config_metadata
     return adapter
 
 

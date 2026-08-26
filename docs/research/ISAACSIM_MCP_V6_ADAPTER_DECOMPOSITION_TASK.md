@@ -157,20 +157,54 @@ D.4 execution evidence：
 
 ## D.5 SensorRuntime
 
-- [ ] 先解開 `IsaacAdapterBase.release_sensor` 對 facade cache names的隱性依賴。
-- [ ] Camera/LiDAR cache、metadata、render request與lifecycle整組搬移。
-- [ ] 保留 timeline Stop teardown、sensor warm-up、frame readiness與annotator timing。
-- [ ] Facade 保留全部 Camera/LiDAR public signatures與 sentinel behavior。
-- [ ] 執行 Camera/LiDAR/artifact/sensor lifecycle offline tests。
-- [ ] 執行 guarded sensor live verifier，包含 Stop後 updates、cleanup、TCP/Kit/log/dump evidence。
+- [x] 先解開 `IsaacAdapterBase.release_sensor` 對 facade cache names的隱性依賴。
+- [x] Camera/LiDAR cache、metadata、render request與lifecycle整組搬移。
+- [x] 保留 timeline Stop teardown、sensor warm-up、frame readiness與annotator timing。
+- [x] Facade 保留全部 Camera/LiDAR public signatures與 sentinel behavior。
+- [x] 執行 Camera/LiDAR/artifact/sensor lifecycle offline tests。
+- [x] 執行 guarded sensor live verifier，包含 Stop後 updates、cleanup、TCP/Kit/log/dump evidence。
+
+D.5 execution evidence：
+
+| Item | Result |
+|---|---|
+| Added | `v6_runtime/sensors.py`, `test_v6_runtime_sensors.py`；`SensorLifecycleState` 成為base與runtime間的explicit teardown state contract |
+| State owner | Camera/LiDAR wrapper cache、actual-path/config metadata與pending render request全部由`SensorRuntime`持有；facade只保留handler compatibility views與explicit forwarding |
+| Lifecycle boundary | `IsaacAdapterBase.release_sensor/release_all_sensors` 只讀取`_sensor_lifecycle_state()`，不再以`getattr`猜測facade cache names；V5以同一state contract保留行為 |
+| Focused tests | 141 passed；另有facade forwarding、runtime ownership與無facade hidden cache field teardown測試 |
+| Full offline after D.5 | 449 passed / 70 deselected |
+| Stdio server gate | 修正deferred annotation在真實FastMCP/Pydantic註冊時無法解析的既有問題，新增real FastMCP 128-tool registration regression；`mcp 1.27.0`與`1.29.1`均驗證，fake registry不再是唯一驗證 |
+| Dependency authority | `uv.lock`由不符合`pyproject.toml (mcp>=1.28.1,<2)`的1.27.0更新為1.29.1；完整offline suite在locked 1.29.1重跑通過 |
+| Live reload | Isaac Sim `6.0.1-rc.7` / PhysX，重新載入SensorRuntime並註冊128 handlers |
+| Sensor live | `verify_sensor_lifecycle_live.py`兩循環通過；Camera frame=`48×64×3`、LiDAR point count=2；`delete_sensor`與`delete_object`均釋放annotators/render product/cache，same-path recreate通過 |
+| Cleanup | 4個scratch paths全部absent、timeline stopped；Replicator自動建立的global `/Render/*`與`/Orchestrator` scaffold保留，精確`RemovePrim`後會於下一update重建，未把它誤報為scratch leak |
+| Health | Kit PID 35476 responding、TCP 8766 listening；current log tail中`PhysXGpu_64.dll`、fatal/segfault/unhandled、sensor teardown failure皆0 matches；20:55後new dump/zip/TOML crash artifacts=0 |
+| Pre-live backup | `E:\碩士論文\backups\isaacsim-mcp\20260826-205528-384-pre-live-phase-d5`；restore comparison通過，277 files、2 untracked |
 
 ## D.6 RobotRuntime
 
-- [ ] articulation cache、joint helpers與drive helpers整組搬移。
-- [ ] 保留 timeline Stop cache invalidation與 runtime articulation refresh timing。
-- [ ] RobotRuntime 不管理 motion trajectory/job state。
-- [ ] 執行 robot joint/state/command/drive/controller tests。
-- [ ] 執行 guarded robot live verifier與 operation-specific read-back。
+- [x] articulation cache、joint helpers與drive helpers整組搬移。
+- [x] 保留 timeline Stop cache invalidation與 runtime articulation refresh timing。
+- [x] RobotRuntime 不管理 motion trajectory/job state。
+- [x] 執行 robot joint/state/command/drive/controller tests。
+- [x] 執行 guarded robot live verifier與 operation-specific read-back。
+
+D.6 execution evidence：
+
+| Item | Result |
+|---|---|
+| Added | `v6_runtime/robots.py`, `test_v6_runtime_robots.py` |
+| Moved operations | robot discovery/create、articulation refresh、joint info/positions/state/command、holonomic wheel velocity、typed drive read/write/rollback與joint config |
+| State/dependency | articulation cache唯一owner為`RobotRuntime`；dependency為`SceneRuntime`, `PhysicsRuntime`, `RobotPolicyBridge`，backend/capability/timeline policy仍由facade bridge提供 |
+| Motion exclusion | `_motion_trajectories`、`_motion_jobs`、update subscription與IK/trajectory methods仍在facade；專屬測試明確確認RobotRuntime不含這些state |
+| Timeline lifecycle | facade STOP observer呼叫`RobotRuntime.clear_runtime_cache()`；stale pre-Play tensor wrapper refresh semantics測試保留 |
+| Focused tests | 127 passed，涵蓋facade forwarding、cache ownership、robot/joint/drive/controller與atomic rollback |
+| Full offline after D.6 | 469 passed / 70 deselected |
+| Joint live | `verify_robot_joint_control_live.py`通過9-DOF Franka；position/velocity/effort immediate target與step後measured read-back通過，missing joint原子拒絕 |
+| Drive live | `verify_robot_joint_drive_config_live.py`通過stiffness/damping/max force/max velocity/drive type apply-readback；invalid value/name與playing timeline均未套用 |
+| Cleanup / health | 兩個scratch robot exact paths absent、timeline stopped、Kit PID 35476 responding、TCP 8766 listening；global Replicator scaffold不視為robot-owned |
+| Pre-live backup | `E:\碩士論文\backups\isaacsim-mcp\20260826-210636-104-pre-live-phase-d6`；restore comparison通過，279 files、4 untracked |
+| Facade size after D.6 | `v6.py` 1,402 lines / 62,649 bytes；baseline為3,366 / 163,385 |
 
 ## D.7 MotionRuntime
 

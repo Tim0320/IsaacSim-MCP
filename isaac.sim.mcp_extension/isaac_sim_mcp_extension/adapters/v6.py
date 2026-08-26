@@ -32,23 +32,21 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .base import IsaacAdapterBase, JointDriveConfigApplyError
-from .units import limit_units, normalize_limit
-from .v6_runtime import CapabilityRuntime, PhysicsPolicyBridge, PhysicsRuntime, RuntimeContext, SceneRuntime
+from .base import IsaacAdapterBase, SensorLifecycleState
+from .v6_runtime import (
+    CapabilityRuntime,
+    PhysicsPolicyBridge,
+    PhysicsRuntime,
+    RobotPolicyBridge,
+    RobotRuntime,
+    RuntimeContext,
+    SceneRuntime,
+    SensorPolicyBridge,
+    SensorRuntime,
+)
 
 if TYPE_CHECKING:
     from pxr import Usd
-
-CAMERA_ANNOTATORS = [
-    "rgb",
-    "distance_to_camera",
-    "distance_to_image_plane",
-    "semantic_segmentation",
-    "instance_segmentation",
-    "instance_id_segmentation",
-    "normals",
-    "motion_vectors",
-]
 
 
 def _recompile_scriptnodes_for_file(abs_path: str) -> list:
@@ -98,36 +96,28 @@ class IsaacAdapterV6(IsaacAdapterBase):
             self._scene_runtime,
             PhysicsPolicyBridge(self),
         )
+        self._robot_runtime = RobotRuntime(
+            self._scene_runtime,
+            self._physics_runtime,
+            RobotPolicyBridge(self),
+        )
+        self._sensor_runtime = SensorRuntime(self._scene_runtime, SensorPolicyBridge(self))
         # Preserve the existing attribute read by capability reporting.
         self._isaacsim_version = self._runtime_context.isaac_version
-        # Articulation cache keyed by prim_path. Tensor-backed Articulations
-        # bind to the current omni.physics.tensors SimulationView; that view
-        # is destroyed and recreated on every timeline stop→play cycle, so the
-        # cache is cleared on STOP. See _on_timeline_stop.
-        self._articulations: Dict[str, Any] = {}
-        # Sensor wrappers keyed by prim_path. Replicator annotators fill with
-        # data on every render tick — discarding and recreating the wrapper
-        # on each capture call (the 5.x pattern) means every call sees a
-        # freshly-registered annotator with no accumulated frames, so
-        # `get_data()` returns None. Long-lived wrappers let kit's normal
-        # update tick populate the annotator between MCP calls.
-        self._camera_sensors: Dict[str, Any] = {}
-        self._lidar_sensors: Dict[str, Any] = {}
-        self._lidar_actual_paths: Dict[str, str] = {}
-        self._lidar_config_metadata: Dict[str, Dict[str, Any]] = {}
+        # Motion state remains facade-owned until the independent D.7 slice.
         self._motion_trajectories: Dict[str, Dict[str, Any]] = {}
         self._motion_jobs: Dict[str, Dict[str, Any]] = {}
         self._motion_update_subscription = None
-        # Pending Replicator render request, so repeated captures on an empty
-        # sensor do not queue one task per call. See _request_render_frame.
-        self._render_request = None
+        # Cross-domain timeline coordination remains in the composition root.
         self._timeline_stop_subscription = None
         try:
             import carb.eventdispatcher
             import omni.timeline
 
             def _on_timeline_stop(_event):
-                self._articulations.clear()
+                # Tensor-backed wrappers are bound to the SimulationView that
+                # Timeline Stop destroys; the next Play must bind fresh ones.
+                self._robot_runtime.clear_runtime_cache()
                 # Sensor wrappers hold annotator subscriptions and a render
                 # product; release them on stop so a fresh play cycle
                 # re-registers cleanly. Dropping the dict entry is not enough --
@@ -232,177 +222,31 @@ class IsaacAdapterV6(IsaacAdapterBase):
     # ── Robots ─────────────────────────────────────────────
 
     def create_xform_prim(self, prim_path: str) -> Any:
-        from isaacsim.core.experimental.prims import XformPrim
-
-        return XformPrim(paths=[prim_path])
+        return self._robot_runtime.create_xform_prim(prim_path)
 
     def create_articulation(self, prim_path: str, name: str) -> Any:
-        from isaacsim.core.experimental.prims import Articulation
+        return self._robot_runtime.create_articulation(prim_path, name)
 
-        return Articulation(paths=[prim_path])
+    @property
+    def _articulations(self) -> Dict[str, Any]:
+        """Compatibility view; RobotRuntime owns the articulation cache."""
+        return self._robot_runtime._articulations
+
+    @_articulations.setter
+    def _articulations(self, value: Dict[str, Any]) -> None:
+        self._robot_runtime._articulations = value
 
     def _new_articulation(self, prim_path: str) -> Any:
-        from isaacsim.core.experimental.prims import Articulation
-
-        cached = self._articulations.get(prim_path)
-        if cached is not None:
-            return cached
-        art = Articulation(paths=[prim_path])
-        self._articulations[prim_path] = art
-        return art
+        return self._robot_runtime._new_articulation(prim_path)
 
     def _runtime_articulation(self, prim_path: str) -> Any:
-        """Return an articulation bound to the current physics tensor view.
-
-        Robot discovery can create and cache a USD-backed wrapper before the
-        first Play. Once physics starts, that wrapper may remain USD-valid but
-        have no valid tensor entity. Runtime state and command calls must evict
-        it and bind a fresh wrapper to the active SimulationView.
-        """
-        art = self._new_articulation(prim_path)
-        try:
-            tensor_valid = bool(art.is_physics_tensor_entity_valid())
-        except Exception:
-            tensor_valid = False
-        if tensor_valid:
-            return art
-        self._articulations.pop(prim_path, None)
-        return self._new_articulation(prim_path)
+        return self._robot_runtime._runtime_articulation(prim_path)
 
     def discover_robots(self) -> Dict[str, Dict[str, str]]:
-        """Scan the Isaac Sim asset server for all available robot USD files."""
-        import omni.client
-        from isaacsim.storage.native import get_assets_root_path
-
-        root = get_assets_root_path()
-        robots_base = root + "/Isaac/Robots/"
-        discovered: Dict[str, Dict[str, str]] = {}
-
-        result, manufacturers = omni.client.list(robots_base)
-        if result != omni.client.Result.OK:
-            return discovered
-
-        # The walk is a few hundred directory listings over three levels. Run
-        # each level concurrently: the calls are network round-trips against the
-        # asset server, so they are latency bound, not CPU bound. Sequentially
-        # they cost ~45 s on a cold omni.client cache on 6.0.1 — and kit's main
-        # loop is blocked for the whole of it, so the app is frozen. Ordering is
-        # preserved by mapping over the input list, so the key-preference rules
-        # below behave exactly as they did sequentially.
-        def _list_dir(path: str):
-            try:
-                res, entries = omni.client.list(path)
-                return entries if res == omni.client.Result.OK else []
-            except Exception:
-                return []
-
-        def _map(paths):
-            if len(paths) < 2:
-                return [_list_dir(p) for p in paths]
-            try:
-                from concurrent.futures import ThreadPoolExecutor
-
-                with ThreadPoolExecutor(max_workers=min(16, len(paths))) as pool:
-                    return list(pool.map(_list_dir, paths))
-            except Exception:
-                # Any threading problem: fall back to the sequential walk.
-                return [_list_dir(p) for p in paths]
-
-        mfr_names = [m.relative_path.rstrip("/") for m in manufacturers]
-        mfr_models = _map([robots_base + n + "/" for n in mfr_names])
-
-        # Flatten to (manufacturer, model) pairs, then list every model dir at once.
-        # Skip hidden directories: every manufacturer keeps a ".thumbs" folder of
-        # "<model>.thumb.usd" preview files, which otherwise register as a robot
-        # named ".thumbs" pointing at a thumbnail.
-        pairs = [
-            (mfr_name, model_entry.relative_path.rstrip("/"))
-            for mfr_name, models in zip(mfr_names, mfr_models)
-            for model_entry in models
-            if not model_entry.relative_path.lstrip("/").startswith(".")
-        ]
-        model_files = _map([f"{robots_base}{mfr}/{model}/" for mfr, model in pairs])
-
-        for (mfr_name, model_name), files in zip(pairs, model_files):
-            for file_entry in files:
-                fname = file_entry.relative_path
-                if not (fname.endswith(".usd") or fname.endswith(".usda")):
-                    continue
-                if fname.endswith(".thumb.usd"):
-                    continue  # preview image, not a robot
-                asset_rel = f"/Isaac/Robots/{mfr_name}/{model_name}/{fname}"
-
-                key = model_name.lower().replace(" ", "_")
-                if key in discovered:
-                    # Keep the simpler filename (shorter name wins). Rewrite the
-                    # whole record, not just the path: two manufacturers can ship
-                    # the same model directory name, and updating the path alone
-                    # left entries describing one vendor while pointing at
-                    # another's asset.
-                    if len(fname) < len(discovered[key]["asset_path"].split("/")[-1]):
-                        discovered[key] = {
-                            "asset_path": asset_rel,
-                            "description": f"{mfr_name} {model_name}",
-                            "manufacturer": mfr_name,
-                        }
-                else:
-                    discovered[key] = {
-                        "asset_path": asset_rel,
-                        "description": f"{mfr_name} {model_name}",
-                        "manufacturer": mfr_name,
-                    }
-        return discovered
+        return self._robot_runtime.discover_robots()
 
     def get_robot_joint_info(self, prim_path: str) -> Dict[str, Any]:
-        import traceback
-
-        from pxr import Usd, UsdPhysics
-
-        joint_names: List[str] = []
-        num_dof = 0
-        try:
-            self._ensure_physics_world()
-            art = self._runtime_articulation(prim_path)
-            joint_names = list(art.dof_names) if art.dof_names else []
-            num_dof = int(art.num_dofs) if art.num_dofs else 0
-        except Exception as e:
-            print(f"v6.get_robot_joint_info: tensor API failed for {prim_path}: {e}")
-            traceback.print_exc()
-
-        stage = self.get_stage()
-        root_prim = stage.GetPrimAtPath(prim_path)
-        if not joint_names and root_prim.IsValid():
-            for desc in Usd.PrimRange(root_prim):
-                if desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint):
-                    joint_names.append(desc.GetName())
-            num_dof = len(joint_names)
-
-        joint_limits = []
-        for jname in joint_names:
-            limit_entry: Dict[str, Any] = {"name": jname}
-            for desc in Usd.PrimRange(root_prim):
-                if desc.GetName() != jname:
-                    continue
-                if desc.IsA(UsdPhysics.RevoluteJoint):
-                    rev = UsdPhysics.RevoluteJoint(desc)
-                    lo = rev.GetLowerLimitAttr().Get()
-                    hi = rev.GetUpperLimitAttr().Get()
-                    limit_entry["type"] = "revolute"
-                    limit_entry["lower"] = normalize_limit(lo, "revolute")
-                    limit_entry["upper"] = normalize_limit(hi, "revolute")
-                    limit_entry["units"] = limit_units("revolute")
-                    break
-                if desc.IsA(UsdPhysics.PrismaticJoint):
-                    pris = UsdPhysics.PrismaticJoint(desc)
-                    lo = pris.GetLowerLimitAttr().Get()
-                    hi = pris.GetUpperLimitAttr().Get()
-                    limit_entry["type"] = "prismatic"
-                    limit_entry["lower"] = normalize_limit(lo, "prismatic")
-                    limit_entry["upper"] = normalize_limit(hi, "prismatic")
-                    limit_entry["units"] = limit_units("prismatic")
-                    break
-            joint_limits.append(limit_entry)
-        return {"joint_names": joint_names, "num_dof": num_dof, "joint_limits": joint_limits}
+        return self._robot_runtime.get_robot_joint_info(prim_path)
 
     def set_joint_positions(
         self,
@@ -410,23 +254,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
         positions: Sequence[float],
         joint_indices: Optional[List[int]] = None,
     ) -> None:
-        import warp as wp
-
-        try:
-            self._ensure_physics_world()
-            art = self._runtime_articulation(prim_path)
-            array_kwargs = {"device": art._device} if getattr(art, "_device", None) is not None else {}
-            positions_arr = wp.array(np.asarray([list(positions)], dtype=np.float32), dtype=wp.float32, **array_kwargs)
-            if joint_indices is not None:
-                idx_arr = wp.array(np.asarray(joint_indices, dtype=np.int32), dtype=wp.int32, **array_kwargs)
-                art.set_dof_position_targets(positions_arr, dof_indices=idx_arr)
-            else:
-                art.set_dof_position_targets(positions_arr)
-            return
-        except Exception:
-            pass
-        # USD-drive fallback (sim stopped / articulation not yet initialised)
-        self._set_joint_drive_targets(prim_path, positions, joint_indices)
+        self._robot_runtime.set_joint_positions(prim_path, positions, joint_indices)
 
     def _set_joint_drive_targets(
         self,
@@ -434,153 +262,24 @@ class IsaacAdapterV6(IsaacAdapterBase):
         positions: Sequence[float],
         joint_indices: Optional[List[int]] = None,
     ) -> None:
-        # Identical to V5 — pure pxr.UsdPhysics.
-        from pxr import Usd, UsdPhysics
-
-        stage = self.get_stage()
-        root_prim = stage.GetPrimAtPath(prim_path)
-        if not root_prim.IsValid():
-            raise ValueError(f"Prim not found: {prim_path}")
-        joints = []
-        for desc in Usd.PrimRange(root_prim):
-            if desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint):
-                joints.append(desc)
-        if joint_indices is not None:
-            targets = list(zip(joint_indices, positions))
-        else:
-            targets = list(enumerate(positions))
-        for idx, value in targets:
-            if idx >= len(joints):
-                continue
-            joint_prim = joints[idx]
-            is_revolute = joint_prim.IsA(UsdPhysics.RevoluteJoint)
-            drive_type = "angular" if is_revolute else "linear"
-            drive = UsdPhysics.DriveAPI.Get(joint_prim, drive_type)
-            if not drive:
-                drive = UsdPhysics.DriveAPI.Apply(joint_prim, drive_type)
-            if is_revolute:
-                drive.GetTargetPositionAttr().Set(float(np.degrees(value)))
-            else:
-                drive.GetTargetPositionAttr().Set(float(value * 100.0))
+        self._robot_runtime._set_joint_drive_targets(prim_path, positions, joint_indices)
 
     def _get_joint_names(self, prim_path: str) -> List[str]:
-        try:
-            self._ensure_physics_world()
-            art = self._new_articulation(prim_path)
-            if art.dof_names:
-                return list(art.dof_names)
-        except Exception:
-            pass
-        from pxr import Usd, UsdPhysics
-
-        stage = self.get_stage()
-        root_prim = stage.GetPrimAtPath(prim_path)
-        if not root_prim.IsValid():
-            return []
-        names: List[str] = []
-        for desc in Usd.PrimRange(root_prim):
-            if desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint):
-                names.append(desc.GetName())
-        return names
+        return self._robot_runtime._get_joint_names(prim_path)
 
     def get_joint_positions(self, prim_path: str) -> List[float]:
-        try:
-            self._ensure_physics_world()
-            art = self._runtime_articulation(prim_path)
-            positions = art.get_dof_positions()
-            if positions is not None:
-                # batched (1, num_dofs) wp.array → flat list
-                arr = positions.numpy() if hasattr(positions, "numpy") else np.asarray(positions)
-                return arr.reshape(-1).tolist()
-        except Exception:
-            pass
-        # USD fallback identical to V5
-        from pxr import Usd, UsdPhysics
-
-        stage = self.get_stage()
-        root_prim = stage.GetPrimAtPath(prim_path)
-        if not root_prim.IsValid():
-            return []
-        positions_list: List[float] = []
-        for desc in Usd.PrimRange(root_prim):
-            if not (desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint)):
-                continue
-            is_revolute = desc.IsA(UsdPhysics.RevoluteJoint)
-            drive_type = "angular" if is_revolute else "linear"
-            drive = UsdPhysics.DriveAPI.Get(desc, drive_type)
-            if drive:
-                target = drive.GetTargetPositionAttr().Get()
-                if target is not None:
-                    if is_revolute:
-                        positions_list.append(float(np.radians(target)))
-                    else:
-                        positions_list.append(float(target / 100.0))
-                else:
-                    positions_list.append(0.0)
-            else:
-                positions_list.append(0.0)
-        return positions_list
+        return self._robot_runtime.get_joint_positions(prim_path)
 
     @staticmethod
     def _flatten_joint_values(values: Any) -> List[float]:
-        if values is None:
-            return []
-        if hasattr(values, "numpy"):
-            values = values.numpy()
-        if hasattr(values, "reshape"):
-            reshaped = values.reshape(-1)
-            if hasattr(reshaped, "tolist"):
-                return [float(value) for value in reshaped.tolist()]
-        if isinstance(values, (list, tuple)):
-            flattened: List[float] = []
-            for value in values:
-                if isinstance(value, (list, tuple)):
-                    flattened.extend(float(item) for item in value)
-                else:
-                    flattened.append(float(value))
-            return flattened
-        return [float(value) for value in values]
+        return RobotRuntime._flatten_joint_values(values)
 
     @staticmethod
     def _joint_type_name(value: Any) -> str:
-        normalized = str(value).lower()
-        if "translation" in normalized:
-            return "prismatic"
-        if "rotation" in normalized:
-            return "revolute"
-        return "unknown"
+        return RobotRuntime._joint_type_name(value)
 
     def get_joint_state(self, prim_path: str) -> Dict[str, Any]:
-        """Read tensor-backed measured state and all active command targets."""
-        self._ensure_physics_world()
-        art = self._runtime_articulation(prim_path)
-        names = list(art.dof_names or [])
-        if not names:
-            raise ValueError(f"No articulation DOFs found at {prim_path}")
-
-        state = {
-            "prim_path": prim_path,
-            "joint_names": names,
-            "joint_types": [self._joint_type_name(value) for value in list(art.dof_types or [])],
-            "positions": self._flatten_joint_values(art.get_dof_positions()),
-            "velocities": self._flatten_joint_values(art.get_dof_velocities()),
-            "efforts": self._flatten_joint_values(art.get_dof_projected_joint_forces()),
-            "position_targets": self._flatten_joint_values(art.get_dof_position_targets()),
-            "velocity_targets": self._flatten_joint_values(art.get_dof_velocity_targets()),
-            "effort_targets": self._flatten_joint_values(art.get_dof_efforts()),
-        }
-        for key in (
-            "joint_types",
-            "positions",
-            "velocities",
-            "efforts",
-            "position_targets",
-            "velocity_targets",
-            "effort_targets",
-        ):
-            if len(state[key]) != len(names):
-                raise RuntimeError(f"Articulation returned {len(state[key])} {key} entries for {len(names)} joints")
-        return state
+        return self._robot_runtime.get_joint_state(prim_path)
 
     def set_joint_command(
         self,
@@ -589,29 +288,7 @@ class IsaacAdapterV6(IsaacAdapterBase):
         values: Sequence[float],
         joint_indices: Optional[List[int]] = None,
     ) -> None:
-        """Apply one V6 Articulation command using DOF subset semantics."""
-        import warp as wp
-
-        self._ensure_physics_world()
-        art = self._runtime_articulation(prim_path)
-        count = len(list(art.dof_names or []))
-        selected = list(range(count)) if joint_indices is None else list(joint_indices)
-        if not selected or len(values) != len(selected):
-            raise ValueError("Joint command value count must match the selected DOFs")
-        if len(set(selected)) != len(selected) or any(index < 0 or index >= count for index in selected):
-            raise ValueError("Joint command contains an invalid or duplicate DOF index")
-
-        array_kwargs = {"device": art._device} if getattr(art, "_device", None) is not None else {}
-        values_arr = wp.array(np.asarray([list(values)], dtype=np.float32), dtype=wp.float32, **array_kwargs)
-        indices_arr = wp.array(np.asarray(selected, dtype=np.int32), dtype=wp.int32, **array_kwargs)
-        if mode == "position":
-            art.set_dof_position_targets(values_arr, dof_indices=indices_arr)
-        elif mode == "velocity":
-            art.set_dof_velocity_targets(values_arr, dof_indices=indices_arr)
-        elif mode == "effort":
-            art.set_dof_efforts(values_arr, dof_indices=indices_arr)
-        else:
-            raise ValueError(f"Unsupported joint command mode: {mode}")
+        self._robot_runtime.set_joint_command(prim_path, mode, values, joint_indices)
 
     # ── Motion generation and bounded job lifecycle ─────────────────────
 
@@ -974,121 +651,22 @@ class IsaacAdapterV6(IsaacAdapterBase):
         command: Sequence[float],
         joint_names: Sequence[str],
     ) -> List[float]:
-        """Use NVIDIA's V6 USD setup and QP controller for a Kaya profile."""
-        from isaacsim.robot.experimental.wheeled_robots.controllers import HolonomicController
-        from isaacsim.robot.experimental.wheeled_robots.robots import HolonomicRobotUsdSetup
-
-        stage = self.get_stage()
-        if not stage.GetPrimAtPath(prim_path).IsValid():
-            raise ValueError(f"Prim not found: {prim_path}")
-        if not stage.GetPrimAtPath(com_prim_path).IsValid():
-            raise ValueError(f"Holonomic center-of-mass prim not found: {com_prim_path}")
-        setup = HolonomicRobotUsdSetup(robot_prim_path=prim_path, com_prim_path=com_prim_path)
-        wheel_radius, wheel_positions, wheel_orientations, mecanum_angles, wheel_axis, up_axis = (
-            setup.get_holonomic_controller_params()
+        return self._robot_runtime.compute_holonomic_wheel_velocities(
+            prim_path,
+            com_prim_path,
+            command,
+            joint_names,
         )
-        controller = HolonomicController(
-            wheel_radius=wheel_radius,
-            wheel_positions=wheel_positions,
-            wheel_orientations=wheel_orientations,
-            mecanum_angles=mecanum_angles,
-            wheel_axis=wheel_axis,
-            up_axis=up_axis,
-        )
-        action = controller.forward(np.asarray(command, dtype=np.float64))
-        # Isaac Sim 6 experimental HolonomicController returns an ndarray;
-        # older controller variants wrap it in ArticulationAction.
-        values = getattr(action, "joint_velocities", action)
-        if values is None or len(values) != len(wheel_positions):
-            raise RuntimeError("HolonomicController returned an invalid wheel velocity vector")
-        setup_names = list(setup.get_articulation_controller_params())
-        if len(set(setup_names)) != len(setup_names) or set(setup_names) != set(joint_names):
-            raise ValueError(
-                f"USD mecanum joint names {setup_names} do not exactly match profile joints {list(joint_names)}"
-            )
-        by_name = dict(zip(setup_names, values))
-        return [float(by_name[name]) for name in joint_names]
 
     @staticmethod
     def _drive_units(joint_type: str) -> Dict[str, str]:
-        if joint_type == "revolute":
-            return {
-                "stiffness": "newton_meters_per_radian",
-                "damping": "newton_meter_seconds_per_radian",
-                "max_force": "newton_meters",
-                "max_velocity": "radians_per_second",
-            }
-        if joint_type == "prismatic":
-            return {
-                "stiffness": "newtons_per_meter",
-                "damping": "newton_seconds_per_meter",
-                "max_force": "newtons",
-                "max_velocity": "meters_per_second",
-            }
-        return {field: "unknown" for field in ("stiffness", "damping", "max_force", "max_velocity")}
+        return RobotRuntime._drive_units(joint_type)
 
     def _drive_config_articulation(self, prim_path: str) -> Any:
-        """Return a fresh USD-backed wrapper, avoiding stale tensor-view caches."""
-        from isaacsim.core.experimental.prims import Articulation
-
-        stage = self.get_stage()
-        prim = stage.GetPrimAtPath(prim_path)
-        if not prim.IsValid():
-            raise ValueError(f"Prim not found: {prim_path}")
-        art = Articulation(paths=[prim_path])
-        if not art.valid:
-            raise ValueError(f"Invalid articulation at {prim_path}")
-        return art
+        return self._robot_runtime._drive_config_articulation(prim_path)
 
     def get_joint_drive_config(self, prim_path: str) -> Dict[str, Any]:
-        """Read typed drive configuration using the V6 Articulation USD backend."""
-        self._ensure_physics_world()
-        art = self._drive_config_articulation(prim_path)
-        names = list(art.dof_names or [])
-        types = [self._joint_type_name(value) for value in list(art.dof_types or [])]
-        if not names:
-            raise ValueError(f"No articulation DOFs found at {prim_path}")
-
-        stiffnesses_raw, dampings_raw = art.get_dof_gains()
-        stiffnesses = self._flatten_joint_values(stiffnesses_raw)
-        dampings = self._flatten_joint_values(dampings_raw)
-        max_forces = self._flatten_joint_values(art.get_dof_max_efforts())
-        drive_types_raw = art.get_dof_drive_types()
-        drive_types = list(drive_types_raw[0]) if drive_types_raw else []
-        if self._engine == "newton":
-            max_velocities: List[Optional[float]] = [None] * len(names)
-        else:
-            max_velocities = self._flatten_joint_values(art.get_dof_max_velocities())
-
-        values_by_field = {
-            "joint_types": types,
-            "stiffness": stiffnesses,
-            "damping": dampings,
-            "max_force": max_forces,
-            "max_velocity": max_velocities,
-            "drive_type": drive_types,
-        }
-        for field, values in values_by_field.items():
-            if len(values) != len(names):
-                raise RuntimeError(f"Articulation returned {len(values)} {field} entries for {len(names)} joints")
-
-        joints = []
-        for index, name in enumerate(names):
-            joint_type = types[index]
-            joints.append(
-                {
-                    "index": index,
-                    "name": name,
-                    "type": joint_type,
-                    "stiffness": stiffnesses[index],
-                    "damping": dampings[index],
-                    "max_force": max_forces[index],
-                    "max_velocity": max_velocities[index],
-                    "drive_type": drive_types[index],
-                    "units": self._drive_units(joint_type),
-                }
-            )
-        return {"prim_path": prim_path, "joint_count": len(joints), "joints": joints}
+        return self._robot_runtime.get_joint_drive_config(prim_path)
 
     def set_joint_drive_config(
         self,
@@ -1096,207 +674,10 @@ class IsaacAdapterV6(IsaacAdapterBase):
         config: Dict[str, Any],
         joint_indices: Optional[List[int]] = None,
     ) -> None:
-        """Author selected USD drive fields and restore every changed opinion on failure."""
-        self._ensure_physics_world()
-        state = self.get_simulation_state()
-        if str(state.get("timeline_state", "unknown")).lower() != "stopped":
-            raise RuntimeError("Drive configuration requires a stopped timeline")
-        if "max_velocity" in config:
-            self.require_backend_capability("robot.joint_drive_config.max_velocity")
-
-        art = self._drive_config_articulation(prim_path)
-        count = len(list(art.dof_names or []))
-        selected = list(range(count)) if joint_indices is None else list(joint_indices)
-        if (
-            not selected
-            or len(set(selected)) != len(selected)
-            or any(index < 0 or index >= count for index in selected)
-        ):
-            raise ValueError("Drive configuration contains an invalid or duplicate DOF index")
-
-        from pxr import PhysxSchema, UsdPhysics
-
-        paths = list((art.dof_paths or [[]])[0])
-        joint_types = [self._joint_type_name(value) for value in list(art.dof_types or [])]
-        if len(paths) != count or len(joint_types) != count:
-            raise RuntimeError("Articulation DOF metadata is incomplete for drive authoring")
-
-        stage = self.get_stage()
-        snapshots: List[tuple[Any, bool, Any]] = []
-        newly_applied: List[tuple[Any, Any, Optional[str]]] = []
-
-        def _snapshot_and_set(attribute: Any, value: Any, label: str) -> None:
-            authored = bool(attribute.HasAuthoredValueOpinion())
-            previous = attribute.Get() if authored else None
-            snapshots.append((attribute, authored, previous))
-            if not attribute.Set(value):
-                raise RuntimeError(f"Failed to author {label}")
-
-        try:
-            for index in selected:
-                prim = stage.GetPrimAtPath(paths[index])
-                if not prim.IsValid():
-                    raise ValueError(f"Joint prim not found: {paths[index]}")
-                joint_type = joint_types[index]
-                if joint_type not in {"revolute", "prismatic"}:
-                    raise ValueError(f"Unsupported DOF type at index {index}: {joint_type}")
-                drive_axis = "angular" if joint_type == "revolute" else "linear"
-                drive = UsdPhysics.DriveAPI.Get(prim, drive_axis)
-                if not drive:
-                    drive = UsdPhysics.DriveAPI.Apply(prim, drive_axis)
-                    if not drive:
-                        raise RuntimeError(f"Could not apply {drive_axis} DriveAPI at {paths[index]}")
-                    newly_applied.append((prim, UsdPhysics.DriveAPI, drive_axis))
-
-                if "drive_type" in config:
-                    _snapshot_and_set(drive.GetTypeAttr(), config["drive_type"], f"drive_type[{index}]")
-                if "stiffness" in config:
-                    value = config["stiffness"]
-                    if joint_type == "revolute":
-                        value *= math.pi / 180.0
-                    _snapshot_and_set(drive.GetStiffnessAttr(), value, f"stiffness[{index}]")
-                if "damping" in config:
-                    value = config["damping"]
-                    if joint_type == "revolute":
-                        value *= math.pi / 180.0
-                    _snapshot_and_set(drive.GetDampingAttr(), value, f"damping[{index}]")
-                if "max_force" in config:
-                    _snapshot_and_set(drive.GetMaxForceAttr(), config["max_force"], f"max_force[{index}]")
-                if "max_velocity" in config:
-                    had_physx_api = prim.HasAPI(PhysxSchema.PhysxJointAPI)
-                    physx_joint = (
-                        PhysxSchema.PhysxJointAPI(prim) if had_physx_api else PhysxSchema.PhysxJointAPI.Apply(prim)
-                    )
-                    if not physx_joint:
-                        raise RuntimeError(f"Could not apply PhysxJointAPI at {paths[index]}")
-                    if not had_physx_api:
-                        newly_applied.append((prim, PhysxSchema.PhysxJointAPI, None))
-                    value = config["max_velocity"]
-                    if joint_type == "revolute":
-                        value *= 180.0 / math.pi
-                    _snapshot_and_set(
-                        physx_joint.GetMaxJointVelocityAttr(),
-                        value,
-                        f"max_velocity[{index}]",
-                    )
-        except Exception as apply_error:
-            rollback_errors = []
-            for attribute, authored, previous in reversed(snapshots):
-                try:
-                    restored = attribute.Set(previous) if authored else attribute.Clear()
-                    if not restored:
-                        rollback_errors.append(f"attribute {attribute.GetPath()}: restore returned false")
-                except Exception as exc:
-                    rollback_errors.append(f"attribute restore: {exc}")
-            for prim, schema, instance in reversed(newly_applied):
-                try:
-                    removed = prim.RemoveAPI(schema, instance) if instance is not None else prim.RemoveAPI(schema)
-                    if not removed:
-                        rollback_errors.append(f"API {schema}: remove returned false")
-                except Exception as exc:
-                    rollback_errors.append(f"API remove: {exc}")
-            if rollback_errors:
-                raise JointDriveConfigApplyError(
-                    f"Drive configuration failed: {apply_error}; rollback failed: {rollback_errors}",
-                    rollback_succeeded=False,
-                ) from apply_error
-            raise JointDriveConfigApplyError(
-                f"Drive configuration failed: {apply_error}; rollback succeeded",
-                rollback_succeeded=True,
-            ) from apply_error
+        self._robot_runtime.set_joint_drive_config(prim_path, config, joint_indices)
 
     def get_joint_config(self, prim_path: str) -> Dict[str, Any]:
-        from pxr import Usd, UsdPhysics
-
-        self._ensure_physics_world()
-        stage = self.get_stage()
-        prim = stage.GetPrimAtPath(prim_path)
-        if not prim.IsValid():
-            raise ValueError(f"Prim not found: {prim_path}")
-        joint_names = self._get_joint_names(prim_path)
-        current_pos_list = self.get_joint_positions(prim_path)
-        typed_drive = self.get_joint_drive_config(prim_path)
-        typed_drive_by_name = {joint["name"]: joint for joint in typed_drive["joints"]}
-
-        runtime_targets: List[float] = []
-        try:
-            art = self._new_articulation(prim_path)
-            targets = art.get_dof_position_targets()
-            if targets is not None:
-                arr = targets.numpy() if hasattr(targets, "numpy") else np.asarray(targets)
-                runtime_targets = arr.reshape(-1).tolist()
-        except Exception:
-            pass
-
-        joints_info = []
-        for desc in Usd.PrimRange(prim):
-            if desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint):
-                joint_data: Dict[str, Any] = {"name": desc.GetName()}
-                if desc.IsA(UsdPhysics.RevoluteJoint):
-                    joint_data["type"] = "revolute"
-                    joint_api = UsdPhysics.RevoluteJoint(desc)
-                else:
-                    joint_data["type"] = "prismatic"
-                    joint_api = UsdPhysics.PrismaticJoint(desc)
-                lower_attr = joint_api.GetLowerLimitAttr()
-                upper_attr = joint_api.GetUpperLimitAttr()
-                # USD keeps revolute limits in degrees; positions below are in
-                # radians. See adapters/units.py.
-                joint_type = joint_data["type"]
-                joint_data["lower_limit"] = normalize_limit(lower_attr.Get() if lower_attr else None, joint_type)
-                joint_data["upper_limit"] = normalize_limit(upper_attr.Get() if upper_attr else None, joint_type)
-                joint_data["limit_units"] = limit_units(joint_type)
-                for drive_type in ["angular", "linear"]:
-                    drive_api = UsdPhysics.DriveAPI.Get(desc, drive_type)
-                    if drive_api:
-                        joint_data["drive_type"] = drive_type
-                        stiffness_attr = drive_api.GetStiffnessAttr()
-                        damping_attr = drive_api.GetDampingAttr()
-                        target_attr = drive_api.GetTargetPositionAttr()
-                        joint_data["stiffness"] = stiffness_attr.Get() if stiffness_attr else None
-                        joint_data["damping"] = damping_attr.Get() if damping_attr else None
-                        joint_data["target_position"] = target_attr.Get() if target_attr else None
-                        break
-                jname = desc.GetName()
-                if jname in typed_drive_by_name:
-                    typed = typed_drive_by_name[jname]
-                    joint_data.update(
-                        {
-                            "stiffness": typed["stiffness"],
-                            "damping": typed["damping"],
-                            "max_force": typed["max_force"],
-                            "max_velocity": typed["max_velocity"],
-                            "drive_type": typed["drive_type"],
-                            "drive_units": typed["units"],
-                        }
-                    )
-                if jname in joint_names:
-                    idx = joint_names.index(jname)
-                    if idx < len(current_pos_list):
-                        joint_data["actual_position"] = current_pos_list[idx]
-                    if idx < len(runtime_targets):
-                        joint_data["target_position"] = float(runtime_targets[idx])
-                    if joint_data.get("target_position") is not None and "actual_position" in joint_data:
-                        joint_data["position_error"] = joint_data["target_position"] - joint_data["actual_position"]
-                joints_info.append(joint_data)
-
-        warnings = []
-        for j in joints_info:
-            stiff = j.get("stiffness")
-            damp = j.get("damping")
-            if stiff is not None and stiff == 0 and (damp is None or damp == 0):
-                warnings.append(
-                    f"Joint '{j['name']}' has stiffness=0 and damping=0 — "
-                    f"its drive is effectively disabled and will not respond to position targets."
-                )
-        result: Dict[str, Any] = {
-            "prim_path": prim_path,
-            "joint_count": len(joints_info),
-            "joints": joints_info,
-        }
-        if warnings:
-            result["warnings"] = warnings
-        return result
+        return self._robot_runtime.get_joint_config(prim_path)
 
     # ── Physics ────────────────────────────────────────────
 
@@ -1396,536 +777,62 @@ class IsaacAdapterV6(IsaacAdapterBase):
 
     # ── Sensors ────────────────────────────────────────────
 
+    def _sensor_lifecycle_state(self) -> SensorLifecycleState:
+        return self._sensor_runtime.lifecycle_state
+
+    @property
+    def _camera_sensors(self) -> Dict[str, Any]:
+        """Compatibility view for handlers; SensorRuntime remains the owner."""
+        return self._sensor_runtime.lifecycle_state.camera_sensors
+
+    @property
+    def _lidar_sensors(self) -> Dict[str, Any]:
+        """Compatibility view for handlers; SensorRuntime remains the owner."""
+        return self._sensor_runtime.lifecycle_state.lidar_sensors
+
+    @property
+    def _lidar_actual_paths(self) -> Dict[str, str]:
+        """Compatibility view for handlers; SensorRuntime remains the owner."""
+        return self._sensor_runtime.lifecycle_state.lidar_actual_paths
+
+    @property
+    def _lidar_config_metadata(self) -> Dict[str, Dict[str, Any]]:
+        """Compatibility view for handlers; SensorRuntime remains the owner."""
+        return self._sensor_runtime.lifecycle_state.lidar_config_metadata
+
     def _request_render_frame(self) -> bool:
-        """Ask Replicator to render one frame, without starting the timeline.
-
-        RTX sensor data comes from Replicator's orchestrator, which by default
-        only captures while the timeline plays (/omni/replicator/captureOnPlay).
-        The documented debug loop is step-only and never plays, so on 6.0.1 the
-        orchestrator sat at STOPPED and every camera returned an empty frame
-        forever.
-
-        Two obvious remedies are wrong here:
-
-          * orchestrator.run() starts the timeline. Measured on 6.0.1: from a
-            stopped timeline it left playing=True, which turns the sim loose and
-            destroys the frame-exact stepping step_simulation exists to provide.
-          * The synchronous orchestrator.step() is refused outright by
-            Replicator from inside kit — "Synchronous call to `step` can only be
-            performed in a standalone workflow ... Please use the async function
-            `step_async`" — which matches the rule that handlers must not pump
-            kit's event loop.
-
-        So schedule step_async and return immediately. It runs on kit's loop
-        once this handler is done, captures a single frame with pause_timeline
-        set, and leaves the timeline exactly as it found it. Measured: timeline
-        stayed stopped, orchestrator reached STEPPED, the next capture returned
-        a real image, and the kit log recorded no reentry errors.
-
-        The frame is therefore ready on the *next* call, not this one — the
-        caller is told to retry rather than being handed a blank image.
-        """
-        try:
-            import asyncio
-
-            import omni.replicator.core as rep
-
-            # While Play is active, Kit's normal update loop is already
-            # producing render frames. Calling step_async(pause_timeline=True)
-            # here would stop that run and fire GLOBAL_EVENT_STOP, which releases
-            # the long-lived CameraSensor before its first non-RGB frame arrives.
-            try:
-                import omni.timeline
-
-                if omni.timeline.get_timeline_interface().is_playing():
-                    return True
-            except Exception:
-                pass
-
-            pending = self._render_request
-            if pending is not None and not pending.done():
-                return True
-            self._render_request = asyncio.ensure_future(rep.orchestrator.step_async(pause_timeline=True))
-            return True
-        except Exception:
-            return False
+        return self._sensor_runtime._request_render_frame()
 
     def _apply_sensor_schema(self, prim_path: str) -> None:
-        """Make an already-present prim acceptable to the RTX sensor wrappers.
-
-        No-op when the prim does not exist yet — the wrapper will create it with
-        the right schema itself. See create_camera for why this is needed.
-        """
-        try:
-            prim = self.get_stage().GetPrimAtPath(prim_path)
-            if prim and prim.IsValid() and "OmniSensorAPI" not in prim.GetAppliedSchemas():
-                prim.ApplyAPI("OmniSensorAPI")
-        except Exception:
-            # Leave it to the sensor wrapper to raise a meaningful error.
-            pass
+        self._sensor_runtime._apply_sensor_schema(prim_path)
 
     def create_camera(self, prim_path: str, resolution: Tuple[int, int] = (1280, 720), **kwargs) -> Any:
-        # 6.0 RtxCamera takes a single `path: str` — the 5.x batched
-        # (`prim_paths=[...], resolutions=[...]`) signature was removed.
-        # Also stand up the CameraSensor runtime + RGB annotator now so kit's
-        # background render ticks start filling the annotator immediately;
-        # later capture_image calls read accumulated frames from the cache.
-        from isaacsim.sensors.experimental.rtx import CameraSensor, RtxCamera
-
-        # RtxCamera adopts an existing prim rather than redefining it, and it
-        # does not apply OmniSensorAPI to one it did not create. Pointing
-        # create_camera at a path that already holds a plain UsdGeom.Camera —
-        # which imported USD scenes routinely ship — therefore failed with
-        # "Prim at <path> does not have the 'OmniSensorAPI' schema", while the
-        # same call on a fresh path succeeded. Reproduced on 6.0.1: fresh path
-        # OK, plain Camera at the path FAIL, existing RTX camera OK.
-        #
-        # Apply the schema first so an existing camera prim reaches RtxCamera in
-        # the same shape a newly created one would. A prim that does not exist
-        # yet needs nothing: RtxCamera creates it correctly.
-        if prim_path in self._camera_sensors:
-            self.release_sensor(prim_path, evict_metadata=False)
-        self._apply_sensor_schema(prim_path)
-        camera = RtxCamera(path=prim_path)
-        # CameraSensor expects (height, width). Adapter callers historically
-        # pass (width, height) — translate so the cached resolution is sane.
-        h, w = (resolution[1], resolution[0]) if len(resolution) == 2 else (720, 1280)
-        self._camera_sensors[prim_path] = CameraSensor(
-            path=prim_path,
-            resolution=(h, w),
-            annotators=CAMERA_ANNOTATORS,
-        )
-        return camera
+        return self._sensor_runtime.create_camera(prim_path, resolution, **kwargs)
 
     def capture_camera_image(self, prim_path: str) -> np.ndarray:
-        # Reuse the wrapper cached by create_camera. Building a fresh
-        # CameraSensor on every call re-registers the annotator with the
-        # render pipeline and discards any frames produced since the prim
-        # was created, so `get_data` returns None — that was the root cause
-        # of the "empty data" symptom. With a long-lived wrapper, kit's
-        # background update tick fills the annotator between MCP commands
-        # and get_data returns the latest rendered frame.
-        from isaacsim.sensors.experimental.rtx import CameraSensor
-
-        sensor = self._camera_sensors.get(prim_path)
-        if sensor is None:
-            sensor = CameraSensor(path=prim_path, resolution=(720, 1280), annotators=CAMERA_ANNOTATORS)
-            self._camera_sensors[prim_path] = sensor
-        data, _info = sensor.get_data("rgb")
-        if data is None:
-            # Nothing rendered yet. Ask Replicator for a frame so the next call
-            # succeeds, instead of leaving cameras permanently blank in the
-            # step-only debug loop.
-            self._request_render_frame()
-            return np.zeros((0,), dtype=np.uint8)
-        return data.numpy() if hasattr(data, "numpy") else np.asarray(data)
+        return self._sensor_runtime.capture_camera_image(prim_path)
 
     def capture_camera_output(self, prim_path: str, annotator: str) -> tuple[np.ndarray, Dict[str, Any]]:
-        """Return one Isaac Sim 6.x CameraSensor annotator frame.
-
-        Annotators are attached lazily to the long-lived CameraSensor. Reusing
-        the same render product is required: replacing the wrapper here would
-        discard every frame accumulated between MCP calls.
-        """
-        from isaacsim.sensors.experimental.rtx import CameraSensor
-
-        sensor = self._camera_sensors.get(prim_path)
-        if sensor is None:
-            sensor = CameraSensor(path=prim_path, resolution=(720, 1280), annotators=CAMERA_ANNOTATORS)
-            self._camera_sensors[prim_path] = sensor
-        elif annotator not in getattr(sensor, "_annotators", {}):
-            sensor.attach_annotators(annotator)
-
-        data, info = sensor.get_data(annotator)
-        if data is None:
-            self._request_render_frame()
-            return np.zeros((0,), dtype=np.uint8), {}
-        array = data.numpy() if hasattr(data, "numpy") else np.asarray(data)
-        return array, info or {}
+        return self._sensor_runtime.capture_camera_output(prim_path, annotator)
 
     def get_camera_calibration(self, prim_path: str) -> Dict[str, Any]:
-        """Read a pinhole calibration contract from the USD camera and sensor."""
-        from pxr import Usd, UsdGeom
-
-        stage = self.get_stage()
-        if stage is None:
-            raise RuntimeError("USD stage is not available")
-        prim = stage.GetPrimAtPath(prim_path)
-        if not prim or not prim.IsValid() or not prim.IsA(UsdGeom.Camera):
-            raise ValueError(f"Camera prim not found at {prim_path}")
-
-        sensor = self._camera_sensors.get(prim_path)
-        if sensor is None:
-            raise RuntimeError(
-                f"Camera resolution is unavailable for {prim_path}; create_camera must initialize it in this session"
-            )
-        height, width = (int(value) for value in sensor.resolution)
-
-        camera = UsdGeom.Camera(prim)
-        focal_length = float(camera.GetFocalLengthAttr().Get())
-        horizontal_aperture = float(camera.GetHorizontalApertureAttr().Get())
-        vertical_aperture = float(camera.GetVerticalApertureAttr().Get())
-        horizontal_offset = float(camera.GetHorizontalApertureOffsetAttr().Get() or 0.0)
-        vertical_offset = float(camera.GetVerticalApertureOffsetAttr().Get() or 0.0)
-        projection = str(camera.GetProjectionAttr().Get())
-        clipping = camera.GetClippingRangeAttr().Get()
-        if horizontal_aperture <= 0 or vertical_aperture <= 0:
-            raise ValueError("Camera aperture must be positive to calculate intrinsics")
-
-        intrinsic_matrix = None
-        if projection == "perspective":
-            fx = width * focal_length / horizontal_aperture
-            fy = height * focal_length / vertical_aperture
-            cx = width * (0.5 + horizontal_offset / horizontal_aperture)
-            cy = height * (0.5 + vertical_offset / vertical_aperture)
-            intrinsic_matrix = [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]]
-
-        camera_to_world_matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-        world_to_camera_matrix = camera_to_world_matrix.GetInverse()
-
-        def matrix_rows(matrix):
-            return [[float(matrix[row][column]) for column in range(4)] for row in range(4)]
-
-        meters_per_unit = float(UsdGeom.GetStageMetersPerUnit(stage))
-        return {
-            "camera_prim": prim_path,
-            "resolution": {"width": width, "height": height},
-            "projection": projection,
-            "intrinsic_matrix": intrinsic_matrix,
-            "intrinsic_convention": "pixels; origin top-left; x right; y down",
-            "camera_to_world": matrix_rows(camera_to_world_matrix),
-            "world_to_camera": matrix_rows(world_to_camera_matrix),
-            "extrinsic_convention": "USD row-vector matrix; camera looks along local -Z with +Y up",
-            "focal_length": focal_length,
-            "horizontal_aperture": horizontal_aperture,
-            "vertical_aperture": vertical_aperture,
-            "horizontal_aperture_offset": horizontal_offset,
-            "vertical_aperture_offset": vertical_offset,
-            "optical_attribute_units": "tenths_of_stage_unit",
-            "clipping_range": {"near": float(clipping[0]), "far": float(clipping[1]), "units": "stage_units"},
-            "depth_units": "meters",
-            "stage_units": "meters_per_unit",
-            "meters_per_unit": meters_per_unit,
-        }
+        return self._sensor_runtime.get_camera_calibration(prim_path)
 
     def create_lidar(self, prim_path: str, config: Optional[str] = None, **kwargs) -> Any:
-        """Create a preset or validated generic Isaac Sim 6 RTX LiDAR."""
-        from isaacsim.sensors.experimental.rtx import Lidar, LidarSensor
-
-        from .lidar_config import build_generic_lidar_config
-
-        if prim_path in self._lidar_sensors:
-            self.release_sensor(prim_path, evict_metadata=False)
-        variant = kwargs.pop("variant", None)
-        custom_names = (
-            "horizontal_fov_deg",
-            "vertical_fov_deg",
-            "horizontal_resolution_deg",
-            "vertical_resolution_deg",
-            "rotation_rate_hz",
-            "min_range_m",
-            "max_range_m",
-        )
-        custom_values = {name: kwargs.pop(name, None) for name in custom_names}
-        if kwargs:
-            raise ValueError("Unsupported LiDAR settings: " + ", ".join(sorted(kwargs)))
-        if config is not None and any(value is not None for value in custom_values.values()):
-            from .lidar_config import LidarConfigError
-
-            raise LidarConfigError(
-                "LIDAR_PRESET_CUSTOM_CONFIG_CONFLICT",
-                "Named config presets cannot be combined with generic FOV, resolution, rate, or range settings",
-            )
-        if variant is not None and config is None:
-            from .lidar_config import LidarConfigError
-
-            raise LidarConfigError("LIDAR_VARIANT_REQUIRES_PRESET", "variant requires a named config preset")
-
-        if config is not None:
-            lidar = Lidar.create(
-                path=prim_path,
-                config=config,
-                variant=variant,
-                aux_output_level="FULL",
-            )
-            source_metadata = {"source": "preset", "config": config, "variant": variant}
-        else:
-            attributes, effective = build_generic_lidar_config(**custom_values)
-            # Replicator's functional authoring path expands a plain Python
-            # list into positional Vt array constructor arguments. Isaac Sim
-            # 6.0.1 then raises FloatArray.__init__(FloatArray, float, ...).
-            # Supply the exact USD value types at the adapter boundary.
-            try:
-                from pxr import Vt
-
-                float_arrays = (
-                    "omni:sensor:Core:emitterState:s001:azimuthDeg",
-                    "omni:sensor:Core:emitterState:s001:elevationDeg",
-                )
-                uint_arrays = (
-                    "omni:sensor:Core:numRaysPerLine",
-                    "omni:sensor:Core:emitterState:s001:channelId",
-                    "omni:sensor:Core:emitterState:s001:fireTimeNs",
-                )
-                for name in float_arrays:
-                    attributes[name] = Vt.FloatArray(attributes[name])
-                for name in uint_arrays:
-                    attributes[name] = Vt.UIntArray(attributes[name])
-            except (ImportError, AttributeError):
-                # Offline unit tests intentionally run without pxr. Production
-                # Kit always provides Vt, and the live harness covers this path.
-                pass
-            lidar = Lidar(
-                path=prim_path,
-                # A partial valid-azimuth window does not publish a completed
-                # frame reliably when the model accumulates a full rotary
-                # scan. Stream each sensor tick so callers can observe the
-                # configured partial FOV while the timeline is running.
-                accumulate_outputs=False,
-                aux_output_level="FULL",
-                attributes=attributes,
-            )
-            source_metadata = {"source": "generic", "requested": effective}
-
-        actual_path = str(getattr(lidar, "paths", [prim_path])[0])
-        self._lidar_actual_paths[prim_path] = actual_path
-        self._lidar_config_metadata[prim_path] = source_metadata
-        self._lidar_sensors[prim_path] = LidarSensor(
-            lidar,
-            annotators=["generic-model-output", "stable-id-map"],
-        )
-        return lidar
+        return self._sensor_runtime.create_lidar(prim_path, config, **kwargs)
 
     def get_lidar_config(self, prim_path: str) -> Dict[str, Any]:
-        """Read back the effective Core schema values from the USD prim."""
-        actual_path = self._lidar_actual_paths.get(prim_path, prim_path)
-        stage = self.get_stage()
-        prim = stage.GetPrimAtPath(actual_path)
-        if not prim.IsValid():
-            raise ValueError(f"Prim not found: {actual_path}")
-
-        attribute_names = {
-            "valid_start_azimuth_deg": "omni:sensor:Core:validStartAzimuthDeg",
-            "valid_end_azimuth_deg": "omni:sensor:Core:validEndAzimuthDeg",
-            "start_azimuth_offset_deg": "omni:sensor:Core:startAzimuthOffsetDeg",
-            "scan_rate_base_hz": "omni:sensor:Core:scanRateBaseHz",
-            "tick_rate_hz": "omni:sensor:tickRate",
-            "pattern_firing_rate_hz": "omni:sensor:Core:patternFiringRateHz",
-            "near_range_m": "omni:sensor:Core:nearRangeM",
-            "far_range_m": "omni:sensor:Core:farRangeM",
-            "number_of_channels": "omni:sensor:Core:numberOfChannels",
-            "number_of_emitters": "omni:sensor:Core:numberOfEmitters",
-            "elevation_deg": "omni:sensor:Core:emitterState:s001:elevationDeg",
-        }
-        raw: Dict[str, Any] = {}
-        for name, usd_name in attribute_names.items():
-            attribute = prim.GetAttribute(usd_name)
-            if not attribute.IsValid():
-                raw[name] = None
-                continue
-            value = attribute.Get()
-            if hasattr(value, "__iter__") and not isinstance(value, (str, bytes)):
-                value = [float(item) for item in value]
-            raw[name] = value
-
-        start = float(raw["valid_start_azimuth_deg"])
-        end = float(raw["valid_end_azimuth_deg"])
-        scan_rate = float(raw["scan_rate_base_hz"])
-        firing_rate = float(raw["pattern_firing_rate_hz"])
-        horizontal_fov = end - start
-        horizontal_samples = int(round(firing_rate / scan_rate)) if scan_rate > 0 else 0
-        elevations = sorted(set(float(value) for value in (raw["elevation_deg"] or [])))
-        vertical_fov = elevations[-1] - elevations[0] if len(elevations) > 1 else 0.0
-        gaps = [b - a for a, b in zip(elevations, elevations[1:])]
-        vertical_resolution = gaps[0] if gaps and all(abs(value - gaps[0]) <= 1e-6 for value in gaps) else None
-        effective = {
-            "horizontal_fov_deg": horizontal_fov,
-            "vertical_fov_deg": vertical_fov,
-            "horizontal_resolution_deg": horizontal_fov / horizontal_samples if horizontal_samples else None,
-            "vertical_resolution_deg": vertical_resolution,
-            "rotation_rate_hz": scan_rate,
-            "min_range_m": float(raw["near_range_m"]),
-            "max_range_m": float(raw["far_range_m"]),
-            "horizontal_samples": horizontal_samples,
-            "vertical_channels": len(elevations),
-        }
-        return {
-            "requested_prim_path": prim_path,
-            "actual_prim_path": actual_path,
-            **self._lidar_config_metadata.get(prim_path, {"source": "existing"}),
-            "effective": effective,
-            "schema_attributes": raw,
-        }
+        return self._sensor_runtime.get_lidar_config(prim_path)
 
     def get_lidar_point_cloud(self, prim_path: str) -> np.ndarray:
-        frame = self.get_lidar_point_cloud_frame(prim_path)
-        return frame["fields"]["points"]["data"]
+        return self._sensor_runtime.get_lidar_point_cloud(prim_path)
 
     def get_lidar_point_cloud_frame(self, prim_path: str) -> Dict[str, Any]:
-        """Decode one V6 GenericModelOutput frame into typed point fields."""
-        # 6.0 LidarSensor uses the unified "generic-model-output" annotator;
-        # the 5.x `RtxSensorCpu+IsaacComputeRTXLidarPointCloud` chain is gone.
-        # See `capture_camera_image` for the caching rationale.
-        import math
-
-        from isaacsim.sensors.experimental.rtx import LidarSensor, parse_generic_model_output_data
-
-        try:
-            from isaacsim.sensors.experimental.rtx import parse_object_ids, parse_stable_id_map_data
-        except ImportError:
-            parse_object_ids = None
-            parse_stable_id_map_data = None
-
-        sensor = self._lidar_sensors.get(prim_path)
-        if sensor is None:
-            from isaacsim.sensors.experimental.rtx import Lidar
-
-            actual_path = self._lidar_actual_paths.get(prim_path, prim_path)
-            lidar = Lidar(path=actual_path, aux_output_level="FULL")
-            sensor = LidarSensor(lidar, annotators=["generic-model-output", "stable-id-map"])
-            self._lidar_sensors[prim_path] = sensor
-        data, info = sensor.get_data("generic-model-output")
-        array = None
-        if data is not None:
-            array = data.numpy() if hasattr(data, "numpy") else np.asarray(data)
-        # LidarSensor signals "nothing rendered yet" with an empty array rather
-        # than None (measured on 6.0.1: shape (0,), info {}), unlike CameraSensor
-        # which returns None — so testing only for None missed the empty case.
-        #
-        # Deliberately no _request_render_frame() here. A single Replicator frame
-        # fills a camera but not a lidar: measured on 6.0.1 with the orchestrator
-        # at STEPPED and the request completed, the sensor was still empty, and
-        # only play_simulation produced data. Requesting one would just make the
-        # caller retry forever.
-        if array is None or getattr(array, "size", 0) == 0:
-            return self._empty_lidar_frame()
-
-        # The "generic-model-output" annotator returns a packed GenericModelOutput
-        # struct, not points: a uint8 buffer whose first four bytes are the magic
-        # 0x4E474D4F ("OMGN"). Returning it raw meant callers received bytes and
-        # the handler reported len(buffer) as a point count — 19,353,864 for one
-        # frame on 6.0.1, which is the byte length.
-        #
-        # 5.x had a point-cloud annotator that needed no decoding; 6.0 replaced it
-        # with this unified buffer plus parse_generic_model_output_data, and the
-        # port kept the new annotator without adopting the decode.
-        gmo = parse_generic_model_output_data(data)
-        count = int(getattr(gmo, "numElements", 0) or 0)
-        if count <= 0:
-            return self._empty_lidar_frame()
-
-        raw_x = list(np.asarray(gmo.x)[:count])
-        raw_y = list(np.asarray(gmo.y)[:count])
-        raw_z = list(np.asarray(gmo.z)[:count])
-        coords_value = getattr(gmo, "elementsCoordsType", "CARTESIAN")
-        coords_name = str(getattr(coords_value, "name", coords_value)).upper()
-        spherical = "SPHERICAL" in coords_name
-
-        if spherical:
-            azimuth = [float(value) for value in raw_x]
-            elevation = [float(value) for value in raw_y]
-            ranges = [float(value) for value in raw_z]
-            point_x = []
-            point_y = []
-            point_z = []
-            for azimuth_deg, elevation_deg, range_m in zip(azimuth, elevation, ranges):
-                azimuth_rad = math.radians(azimuth_deg)
-                elevation_rad = math.radians(elevation_deg)
-                range_xy = range_m * math.cos(elevation_rad)
-                point_x.append(range_xy * math.cos(azimuth_rad))
-                point_y.append(range_xy * math.sin(azimuth_rad))
-                point_z.append(range_m * math.sin(elevation_rad))
-            points = np.stack([point_x, point_y, point_z], axis=-1).astype(np.float32)
-        else:
-            point_x = [float(value) for value in raw_x]
-            point_y = [float(value) for value in raw_y]
-            point_z = [float(value) for value in raw_z]
-            points = np.stack([point_x, point_y, point_z], axis=-1).astype(np.float32)
-            ranges = [math.sqrt(x * x + y * y + z * z) for x, y, z in zip(point_x, point_y, point_z)]
-            azimuth = [math.degrees(math.atan2(y, x)) for x, y in zip(point_x, point_y)]
-            elevation = [
-                math.degrees(math.atan2(z, math.sqrt(x * x + y * y))) for x, y, z in zip(point_x, point_y, point_z)
-            ]
-
-        fields: Dict[str, Dict[str, Any]] = {
-            "points": {"data": points, "dtype": "float32", "units": "meters"},
-            "range": {"data": np.asarray(ranges, dtype=np.float32), "dtype": "float32", "units": "meters"},
-            "azimuth": {"data": np.asarray(azimuth, dtype=np.float32), "dtype": "float32", "units": "degrees"},
-            "elevation": {"data": np.asarray(elevation, dtype=np.float32), "dtype": "float32", "units": "degrees"},
-        }
-        unavailable = ["semantic_id"]
-
-        intensity = getattr(gmo, "scalar", None)
-        if intensity is not None and len(intensity) >= count:
-            fields["intensity"] = {
-                "data": np.asarray(intensity[:count], dtype=np.float32),
-                "dtype": "float32",
-                "units": "normalized_return_strength",
-            }
-        else:
-            unavailable.append("intensity")
-
-        object_id_map: Dict[str, str] = {}
-        object_ids = None
-        if parse_object_ids is not None:
-            try:
-                object_ids = parse_object_ids(gmo.objId)[:count]
-            except Exception:
-                object_ids = None
-        if object_ids is not None and len(object_ids) == count:
-            mask = (1 << 64) - 1
-            fields["object_id_low"] = {
-                "data": np.asarray([int(value) & mask for value in object_ids], dtype=np.uint64),
-                "dtype": "uint64",
-                "units": "stable_object_id_low64",
-            }
-            fields["object_id_high"] = {
-                "data": np.asarray([int(value) >> 64 for value in object_ids], dtype=np.uint64),
-                "dtype": "uint64",
-                "units": "stable_object_id_high64",
-            }
-            if parse_stable_id_map_data is not None:
-                try:
-                    stable_data, _stable_info = sensor.get_data("stable-id-map")
-                    if stable_data is not None and getattr(stable_data, "size", 0) > 0:
-                        stable_map = parse_stable_id_map_data(stable_data)
-                        object_id_map = {f"{int(key):032x}": str(value) for key, value in stable_map.items()}
-                except Exception:
-                    object_id_map = {}
-        else:
-            unavailable.append("object_id")
-
-        frame_value = getattr(gmo, "frameOfReference", "unknown")
-        frame_name = str(getattr(frame_value, "name", frame_value)).lower()
-        try:
-            sensor_pose = self.get_prim_transform(self._lidar_actual_paths.get(prim_path, prim_path))
-        except Exception:
-            sensor_pose = None
-
-        return {
-            "fields": fields,
-            "coordinate_type": "spherical" if spherical else "cartesian",
-            "coordinate_frame": frame_name,
-            "sensor_pose": sensor_pose,
-            "sensor_timestamp_ns": int(getattr(gmo, "timestampNs", 0) or 0),
-            "sensor_frame_id": int(getattr(gmo, "frameId", 0) or 0),
-            "object_id_map": object_id_map,
-            "unavailable_fields": unavailable,
-        }
+        return self._sensor_runtime.get_lidar_point_cloud_frame(prim_path)
 
     @staticmethod
     def _empty_lidar_frame() -> Dict[str, Any]:
-        return {
-            "fields": {
-                "points": {
-                    "data": np.zeros((0, 3), dtype=np.float32),
-                    "dtype": "float32",
-                    "units": "meters",
-                }
-            },
-            "coordinate_frame": "unknown",
-            "unavailable_fields": ["intensity", "range", "azimuth", "elevation", "object_id", "semantic_id"],
-        }
+        return SensorRuntime._empty_lidar_frame()
 
     # ── Materials ──────────────────────────────────────────
 

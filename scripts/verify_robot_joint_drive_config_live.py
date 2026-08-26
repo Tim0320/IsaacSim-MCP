@@ -73,6 +73,8 @@ for prim in stage.TraverseAll():
         path == "/World"
         or path == "/PhysicsScene"
         or path.startswith("/Render")
+        or path == "/Orchestrator"
+        or path.startswith("/Orchestrator/")
         or path.startswith("/OmniverseKit")
         or path == "/Environment"
         or path.startswith("/Environment/")
@@ -137,7 +139,7 @@ async def main() -> int:
                 assert data["runtime"]["isaac_sim_version"].startswith("6.0.1")
                 assert data["runtime"]["adapter"] == "IsaacAdapterV6"
                 assert data["runtime"]["physics_backend"] == "physx"
-                assert data["extension"]["command_count"] == 57
+                assert data["extension"]["command_count"] == len(tools)
                 drive_capability = data["feature_flags"]["robot.joint_drive_config"]
                 assert drive_capability["state"] == "supported", drive_capability
                 assert set(drive_capability["fields"].values()) == {"supported"}, drive_capability

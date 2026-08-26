@@ -41,7 +41,7 @@ def _adapter_src(name):
 
 
 V5 = _adapter_src("v5.py")
-V6 = _adapter_src("v6.py")
+V6 = os.path.join(os.path.dirname(V5), "v6_runtime", "robots.py")
 
 # Both adapters walk the same asset server and must behave identically. V6
 # originally shipped a plain nested-loop walk without either guard: on 6.0.1 it

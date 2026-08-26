@@ -77,9 +77,9 @@ def test_neither_adapter_returns_a_raw_usd_limit():
     get_joint_config and get_robot_info read the same USD attributes; when only
     one of them converted, the two tools disagreed about the same joint.
     """
-    for filename in ("v5.py", "v6.py"):
+    for filename in ("v5.py", os.path.join("v6_runtime", "robots.py")):
         src = _source(filename)
-        assert "from .units import" in src, f"{filename} does not use the shared units helper"
+        assert "units import" in src, f"{filename} does not use the shared units helper"
         tree = ast.parse(src)
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef) or node.name not in ("get_joint_config", "get_robot_joint_info"):

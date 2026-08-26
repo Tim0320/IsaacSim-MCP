@@ -269,7 +269,7 @@ async def main() -> int:
                 capabilities = _payload(await session.call_tool("get_capabilities", {}))
                 data = capabilities["data"]
                 assert data["runtime"]["isaac_sim_version"].startswith("6.0.1")
-                assert data["extension"]["command_count"] == 54
+                assert data["extension"]["command_count"] == len(tools)
                 assert data["feature_flags"]["sensor.lifecycle"]["state"] == "supported"
 
                 target = _payload(

@@ -279,10 +279,12 @@ def test_v6_joint_command_uses_dof_subset_for_all_modes(monkeypatch):
     monkeypatch.setitem(sys.modules, "warp", fake_warp_mod)
 
     from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+    from isaac_sim_mcp_extension.adapters.v6_runtime import RobotRuntime
 
     adapter = object.__new__(IsaacAdapterV6)
-    adapter._ensure_physics_world = lambda: None
-    adapter._new_articulation = lambda _path: _Articulation()
+    adapter._robot_runtime = RobotRuntime(object(), object(), object())
+    adapter._robot_runtime._ensure_physics_world = lambda: None
+    adapter._robot_runtime._runtime_articulation = lambda _path: _Articulation()
 
     for mode in ("position", "velocity", "effort"):
         adapter.set_joint_command("/World/Robot", mode, [1.0, 2.0], [0, 2])
@@ -331,9 +333,11 @@ def test_v6_holonomic_accepts_experimental_sequence_and_reorders_names(monkeypat
             return True
 
     from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+    from isaac_sim_mcp_extension.adapters.v6_runtime import RobotRuntime
 
     adapter = object.__new__(IsaacAdapterV6)
-    adapter.get_stage = lambda: types.SimpleNamespace(GetPrimAtPath=lambda _path: _Prim())
+    scene = types.SimpleNamespace(get_stage=lambda: types.SimpleNamespace(GetPrimAtPath=lambda _path: _Prim()))
+    adapter._robot_runtime = RobotRuntime(scene, object(), object())
     result = adapter.compute_holonomic_wheel_velocities(
         "/World/Kaya",
         "/World/Kaya/base_link/control_offset",
@@ -585,10 +589,12 @@ def test_v6_joint_state_reads_measured_and_target_arrays():
             return [[1.0, 2.0]]
 
     from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+    from isaac_sim_mcp_extension.adapters.v6_runtime import RobotRuntime
 
     adapter = object.__new__(IsaacAdapterV6)
-    adapter._ensure_physics_world = lambda: None
-    adapter._new_articulation = lambda _path: _Articulation()
+    adapter._robot_runtime = RobotRuntime(object(), object(), object())
+    adapter._robot_runtime._ensure_physics_world = lambda: None
+    adapter._robot_runtime._runtime_articulation = lambda _path: _Articulation()
 
     state = adapter.get_joint_state("/World/Robot")
 
@@ -623,8 +629,10 @@ def test_v6_runtime_articulation_rebinds_stale_preplay_cache(monkeypatch):
     monkeypatch.setitem(sys.modules, "isaacsim.core.experimental.prims", fake_prims_mod)
 
     from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
+    from isaac_sim_mcp_extension.adapters.v6_runtime import RobotRuntime
 
     adapter = object.__new__(IsaacAdapterV6)
+    adapter._robot_runtime = RobotRuntime(object(), object(), object())
     adapter._articulations = {}
     stale = adapter._new_articulation("/World/Robot")
 
@@ -1203,7 +1211,11 @@ class _FakePrim:
 def _v6_with_stage_prim(monkeypatch, prim):
     calls = []
     adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
-    monkeypatch.setattr(adapter, "get_stage", lambda: types.SimpleNamespace(GetPrimAtPath=lambda _p: prim))
+    monkeypatch.setattr(
+        adapter._scene_runtime,
+        "get_stage",
+        lambda: types.SimpleNamespace(GetPrimAtPath=lambda _p: prim),
+    )
     return adapter
 
 
@@ -1281,7 +1293,7 @@ def test_v6_camera_output_attaches_annotator_once_and_reuses_sensor(monkeypatch)
 def test_v6_create_camera_registers_all_task_1_2_annotators_before_play(monkeypatch):
     calls = []
     adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
-    monkeypatch.setattr(adapter, "_apply_sensor_schema", lambda _path: None)
+    monkeypatch.setattr(adapter._sensor_runtime, "_apply_sensor_schema", lambda _path: None)
     sensor_factory = MagicMock(return_value=object())
     rtx = types.ModuleType("isaacsim.sensors.experimental.rtx")
     rtx.RtxCamera = MagicMock(return_value=object())
@@ -1290,7 +1302,7 @@ def test_v6_create_camera_registers_all_task_1_2_annotators_before_play(monkeypa
 
     adapter.create_camera("/World/Cam", resolution=(64, 48))
 
-    from isaac_sim_mcp_extension.adapters.v6 import CAMERA_ANNOTATORS
+    from isaac_sim_mcp_extension.adapters.v6_runtime.sensors import CAMERA_ANNOTATORS
 
     sensor_factory.assert_called_once_with(
         path="/World/Cam",
@@ -1312,7 +1324,7 @@ def test_v6_create_camera_registers_all_task_1_2_annotators_before_play(monkeypa
 def test_v6_recreating_camera_releases_the_previous_runtime(monkeypatch):
     calls = []
     adapter = _v6_with_stub_simulation_manager(monkeypatch, calls)
-    monkeypatch.setattr(adapter, "_apply_sensor_schema", lambda _path: None)
+    monkeypatch.setattr(adapter._sensor_runtime, "_apply_sensor_schema", lambda _path: None)
 
     class _OldSensor:
         def __init__(self):
@@ -1399,7 +1411,7 @@ def test_v6_camera_calibration_reads_intrinsics_extrinsics_and_units(monkeypatch
 
     prim = _Prim()
     stage = types.SimpleNamespace(GetPrimAtPath=lambda _path: prim)
-    adapter.get_stage = lambda: stage
+    adapter._scene_runtime.get_stage = lambda: stage
     adapter._camera_sensors["/World/Cam"] = types.SimpleNamespace(resolution=(480, 640))
 
     fake_usd = types.SimpleNamespace(TimeCode=types.SimpleNamespace(Default=lambda: object()))
@@ -1689,7 +1701,7 @@ def test_v6_get_lidar_config_derives_effective_values_from_usd(monkeypatch):
     adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
     adapter._lidar_config_metadata["/World/Lidar"] = {"source": "generic"}
     monkeypatch.setattr(
-        adapter,
+        adapter._scene_runtime,
         "get_stage",
         lambda: types.SimpleNamespace(GetPrimAtPath=lambda _path: _Prim()),
     )
@@ -1736,7 +1748,7 @@ def test_v6_lidar_spherical_gmo_converts_to_cartesian(monkeypatch):
     adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
     adapter._lidar_sensors["/World/TestLidar"] = types.SimpleNamespace(get_data=lambda _annotator: (_Data(), {}))
     monkeypatch.setattr(
-        adapter,
+        adapter._scene_runtime,
         "get_prim_transform",
         lambda _path: {"position": [0.0, 0.0, 1.0], "rotation": [0.0, 0.0, 0.0]},
     )
