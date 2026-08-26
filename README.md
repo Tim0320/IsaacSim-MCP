@@ -73,6 +73,26 @@ Launcher 會驗證 Isaac Sim 6.0.1、載入 `isaac.sim.mcp_extension`，並在 `
 
 先呼叫 `get_capabilities`，再呼叫 `get_scene_info`，確認 runtime 與 Stage 後才執行 write。完整安裝與疑難排解見 [Windows 安裝指南](docs/getting-started/INSTALLATION_WINDOWS.md)。
 
+### ChatGPT / Streamable HTTP
+
+本機 Codex／Claude Desktop 的 stdio transport 仍是預設；沒有設定
+`ISAAC_MCP_TRANSPORT` 時，原有啟動方式與 MCP client 設定不變。若要讓
+Secure MCP Tunnel 連到本機 MCP server，可在 Windows PowerShell 啟動
+Streamable HTTP：
+
+```powershell
+$env:ISAAC_MCP_TRANSPORT = "streamable-http"
+$env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
+$env:ISAAC_MCP_HTTP_PORT = "8000"
+
+.\.venv\Scripts\python.exe -m isaac_mcp.server
+```
+
+MCP HTTP endpoint 是 `http://127.0.0.1:8000/mcp`；`http` 也可作為
+`streamable-http` 的 alias。這個 `8000/mcp` endpoint 供 MCP client／tunnel
+連線，`127.0.0.1:8766` 則維持為 Python MCP Server 與 Isaac Sim Extension
+之間的 runtime TCP socket，兩者用途不同。
+
 ## 支援版本
 
 | Component | 狀態 |

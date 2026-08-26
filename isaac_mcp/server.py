@@ -27,6 +27,7 @@ Registers all tools from tools/ submodules and starts the FastMCP server.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict
 
@@ -119,17 +120,42 @@ author the include volume; use reload_script for reusable human interaction logi
   robot.initialize()).
 """
 
-mcp = FastMCP(
-    "IsaacSimMCP",
-    instructions=_INSTRUCTIONS,
-    lifespan=server_lifespan,
-)
+
+def _create_mcp() -> FastMCP:
+    """Create the MCP server with Streamable HTTP settings from the environment."""
+    return FastMCP(
+        "IsaacSimMCP",
+        instructions=_INSTRUCTIONS,
+        lifespan=server_lifespan,
+        host=os.getenv("ISAAC_MCP_HTTP_HOST", "127.0.0.1"),
+        port=int(os.getenv("ISAAC_MCP_HTTP_PORT", "8000")),
+        streamable_http_path="/mcp",
+    )
+
+
+mcp = _create_mcp()
 
 register_all_tools(mcp, get_isaac_connection)
 
 
 def main():
-    mcp.run()
+    transport = os.getenv("ISAAC_MCP_TRANSPORT", "stdio").strip().lower()
+
+    if transport == "stdio":
+        logger.info("Starting MCP using stdio transport")
+        mcp.run()
+    elif transport in {"http", "streamable-http"}:
+        logger.info(
+            "Starting MCP using Streamable HTTP at http://%s:%s%s",
+            mcp.settings.host,
+            mcp.settings.port,
+            mcp.settings.streamable_http_path,
+        )
+        mcp.run(transport="streamable-http")
+    else:
+        raise ValueError(
+            f"Unsupported ISAAC_MCP_TRANSPORT: {transport!r}; expected 'stdio', 'http', or 'streamable-http'"
+        )
 
 
 if __name__ == "__main__":

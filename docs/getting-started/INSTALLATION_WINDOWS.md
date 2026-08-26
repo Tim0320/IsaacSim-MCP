@@ -104,7 +104,30 @@ Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8766 -State Listen
 
 client 啟動後先呼叫 `get_capabilities`，再呼叫 `get_scene_info`。不要先執行 write，也不要把 documentation route 命名成 `isaac-sim-live`。
 
-## 6. 離線與 read-only 驗證
+## 6. ChatGPT / Streamable HTTP
+
+stdio 是預設 transport；未設定 `ISAAC_MCP_TRANSPORT` 時，前一節的 Codex／
+Claude Desktop 設定與啟動方式完全不變。若要讓 Secure MCP Tunnel 連到本機
+server，請在啟動 MCP server 的 PowerShell session 設定：
+
+```powershell
+$env:ISAAC_MCP_TRANSPORT = "streamable-http"
+$env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
+$env:ISAAC_MCP_HTTP_PORT = "8000"
+
+.\.venv\Scripts\python.exe -m isaac_mcp.server
+```
+
+預設 Streamable HTTP endpoint 是 `http://127.0.0.1:8000/mcp`；
+`ISAAC_MCP_TRANSPORT=http` 是相同模式的 alias。請保持兩條連線的用途分離：
+
+- `127.0.0.1:8000/mcp`：Secure MCP Tunnel／HTTP MCP client 連到 Python MCP Server。
+- `127.0.0.1:8766`：Python MCP Server 連到 Isaac Sim Extension 的 runtime TCP socket。
+
+HTTP transport 不會取代或變更 8766。若需從其他主機直接連入，還必須另行設計
+認證、TLS 與網路邊界；本專案預設只綁定 loopback，讓 tunnel 在本機終結連線。
+
+## 7. 離線與 read-only 驗證
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q -m "not live and not windows_launcher and not unix_launcher" -k "not test_detect_version_returns_zero_on_failure"
