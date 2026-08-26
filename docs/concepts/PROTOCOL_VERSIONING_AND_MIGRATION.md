@@ -22,7 +22,7 @@ IsaacSim-MCP 同時有 package、response、capability 與部分子契約版本�
 
 ## 0.6.0 client 必須遵守的 response 契約
 
-所有 128 個 named tools 回 JSON text。解析後 outer object 固定含：
+所有 source-registered named tools 回 JSON text。解析後 outer object 固定含：
 
 ```json
 {
@@ -73,14 +73,14 @@ client 必須以 `status` 與 `code` 判斷結果。`message` 只供人閱讀。
 |---|---|---|
 | Isaac Sim `6.0.1` + PhysX | 主要、live-verified | 仍需逐功能 prerequisites、scratch 與 read-back。 |
 | Isaac Sim `6.0.1` + Newton | fail-closed matrix | 目前沒有 Newton row 宣稱 live supported；`untested` 與 `unsupported` 分開。 |
-| Isaac Sim `5.1.x` | legacy adapter、非目前 release gate | 部分基本 API 可載入；128-tool 6.0.1 live 報告不適用。 |
+| Isaac Sim `5.1.x` | legacy adapter、非目前 release gate | 部分基本 API 可載入；目前 6.0.1 source-complete live 報告不適用。 |
 | 其他 6.x / 未知版本 | 未驗證 | 不可因 adapter major=6 就沿用 6.0.1 live 結論。 |
 
-完整逐功能狀態讀 [`CAPABILITIES.md`](CAPABILITIES.md) 與 [`BACKEND_CAPABILITY_MATRIX.md`](BACKEND_CAPABILITY_MATRIX.md)。
+完整逐功能狀態讀 [`CAPABILITIES.md`](../reference/CAPABILITIES.md) 與 [`BACKEND_CAPABILITY_MATRIX.md`](../reference/BACKEND_CAPABILITY_MATRIX.md)。
 
 ## Breaking-change checklist
 
-任何 release 若改動以下項目，必須更新 package/extension version、Changelog、README、response/schema 文件、128-tool artifact 與 migration：
+任何 release 若改動以下項目，必須更新 package/extension version、Changelog、response/schema 文件、generated tool inventory、source-complete evidence artifact 與 migration：
 
 - tool name、required parameter、default、units 或 return shape；
 - outer response field/status/code；

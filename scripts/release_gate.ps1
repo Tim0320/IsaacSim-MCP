@@ -203,9 +203,10 @@ try {
             $jsonLine = & $python "scripts\generate_all_tools_report.py" --live --check
             if ($LASTEXITCODE -ne 0) { throw "live matrix check failed" }
             $matrix = $jsonLine | ConvertFrom-Json
-            if ($matrix.tool_count -ne 128) { throw "expected 128 tools, found $($matrix.tool_count)" }
+            $toolCount = [int]$matrix.tool_count
+            if ($toolCount -le 0) { throw "source-derived tool inventory is empty" }
             if ($matrix.counts.fail -and $matrix.counts.fail -ne 0) { throw "live matrix contains failures" }
-            "tools=128; pass=$($matrix.counts.pass); blocked=$($matrix.counts.blocked); port_owner=$($listener[0].OwningProcess)"
+            "tools=$toolCount; pass=$($matrix.counts.pass); blocked=$($matrix.counts.blocked); port_owner=$($listener[0].OwningProcess)"
         }
     }
     else { Add-StepResult -Name "read-only Isaac Sim 6.0.1 live matrix" -Status "skipped" -Detail "-SkipLive" }

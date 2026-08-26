@@ -1,7 +1,7 @@
 # IsaacSim-MCP Physics and USD authoring 3.x
 
 Use this reference for completed Phase 3 work in
-`docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`. It is a navigation and safety
+`docs/research/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`. It is a navigation and safety
 index, not a substitute for the linked contract, verifier, tests, or current
 live read-back.
 
@@ -20,11 +20,11 @@ live read-back.
 
 | Research label | Task item | Capability | Named tools | Contract | Live verifier |
 | --- | --- | --- | --- | --- | --- |
-| 3.1 | Phase 3 item 11 | PhysicsScene gravity, integer-rate time step, GPU dynamics and broadphase | `set_physics_params` | `docs/PHYSICS_PARAMS.md` | `scripts/verify_physics_params_live.py` |
-| 3.2 | Phase 3 item 12 | Adapter-owned PhysX/Newton feature matrix and fail-closed guards | `get_capabilities` | `docs/BACKEND_CAPABILITY_MATRIX.md` | `scripts/verify_backend_capability_matrix_live.py` |
-| 3.3 | Phase 3 item 13 | Typed body, collider, mass/density, collision group, and joint authoring | `configure_physics_body`, `get_physics_body`, `create_collision_group`, `get_collision_group`, `create_physics_joint`, `get_physics_joint` | `docs/PHYSICS_AUTHORING.md` | `scripts/verify_physics_authoring_live.py` |
-| 3.4 | Phase 3 item 14 | PBR/physics materials, friction/restitution, purpose binding and read-back | `create_material`, `get_material`, `apply_material`, `get_material_binding` | `docs/PHYSICS_MATERIALS.md` | `scripts/verify_physics_material_live.py` |
-| 3.5 | Phase 3 item 15 | Guarded Stage lifecycle, layers, composition, variants, semantics, typed attributes, and batch rollback | `new_stage`, `open_stage`, `save_stage_as`, `get_stage_composition`, `edit_sublayer`, `edit_composition_arc`, `set_variant_selection`, `get_semantic_labels`, `set_semantic_labels`, `get_typed_attribute`, `set_typed_attribute`, `apply_stage_batch` | `docs/STAGE_COMPOSITION.md` | `scripts/verify_stage_composition_live.py` |
+| 3.1 | Phase 3 item 11 | PhysicsScene gravity, integer-rate time step, GPU dynamics and broadphase | `set_physics_params` | `docs/reference/PHYSICS_PARAMS.md` | `scripts/verify_physics_params_live.py` |
+| 3.2 | Phase 3 item 12 | Adapter-owned PhysX/Newton feature matrix and fail-closed guards | `get_capabilities` | `docs/reference/BACKEND_CAPABILITY_MATRIX.md` | `scripts/verify_backend_capability_matrix_live.py` |
+| 3.3 | Phase 3 item 13 | Typed body, collider, mass/density, collision group, and joint authoring | `configure_physics_body`, `get_physics_body`, `create_collision_group`, `get_collision_group`, `create_physics_joint`, `get_physics_joint` | `docs/reference/PHYSICS_AUTHORING.md` | `scripts/verify_physics_authoring_live.py` |
+| 3.4 | Phase 3 item 14 | PBR/physics materials, friction/restitution, purpose binding and read-back | `create_material`, `get_material`, `apply_material`, `get_material_binding` | `docs/reference/PHYSICS_MATERIALS.md` | `scripts/verify_physics_material_live.py` |
+| 3.5 | Phase 3 item 15 | Guarded Stage lifecycle, layers, composition, variants, semantics, typed attributes, and batch rollback | `new_stage`, `open_stage`, `save_stage_as`, `get_stage_composition`, `edit_sublayer`, `edit_composition_arc`, `set_variant_selection`, `get_semantic_labels`, `set_semantic_labels`, `get_typed_attribute`, `set_typed_attribute`, `apply_stage_batch` | `docs/reference/STAGE_COMPOSITION.md` | `scripts/verify_stage_composition_live.py` |
 
 ## Cross-task invariants
 

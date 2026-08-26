@@ -6,6 +6,7 @@ import inspect
 import json
 
 from isaac_mcp.responses import normalize_response
+from isaac_mcp.tool_inventory import tool_count
 from isaac_mcp.tools import register_all_tools
 
 REQUIRED_FIELDS = {
@@ -67,11 +68,11 @@ class _Connection:
         )
 
 
-def test_all_128_named_tools_are_registered_through_schema_wrapper():
+def test_all_source_named_tools_are_registered_through_schema_wrapper():
     mcp = _FakeMCP()
     register_all_tools(mcp, lambda: _Connection())
 
-    assert len(mcp.tools) == 128
+    assert len(mcp.tools) == tool_count()
     for name, function in mcp.tools.items():
         signature = inspect.signature(function)
         assert signature, name
@@ -91,9 +92,7 @@ def test_all_128_named_tools_are_registered_through_schema_wrapper():
             "cancelled",
         }, name
 
-    correlated = json.loads(
-        mcp.tools["get_scene_info"](command_id="caller-id", idempotency_key="read-scene-1")
-    )
+    correlated = json.loads(mcp.tools["get_scene_info"](command_id="caller-id", idempotency_key="read-scene-1"))
     assert correlated["status"] == "success"
 
 

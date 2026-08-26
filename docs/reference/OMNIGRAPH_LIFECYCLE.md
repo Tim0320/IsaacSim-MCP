@@ -202,7 +202,7 @@ rollback 本身失敗時使用 `GRAPH_ROLLBACK_FAILED` 與 `readback.rolled_back
 
 Offline 已完成 tool registration、98-name inventory、capability flag、schema/forwarding、preview default、timeline guard、mode validation 與 rollback structure tests；排除 Windows launcher 與 destructive live integration 的完整 safe suite 為 `322 passed`，Ruff lint 與 `git diff --check` 通過。
 
-2026-08-25 使用 [`verify_omnigraph_lifecycle_live.py`](../scripts/verify_omnigraph_lifecycle_live.py) 完成專用 scratch live 驗收：
+2026-08-25 使用 [`verify_omnigraph_lifecycle_live.py`](../../scripts/verify_omnigraph_lifecycle_live.py) 完成專用 scratch live 驗收：
 
 1. registry 為 98 commands；owned graph `/World/MCP_Task_4_1` 建立 3 nodes 與 1 條初始 edge。
 2. list/get 與 exact connect/disconnect read-back 通過；duplicate edge 回 `CONNECTION_ALREADY_EXISTS`。

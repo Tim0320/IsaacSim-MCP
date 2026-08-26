@@ -1,6 +1,6 @@
 # IsaacSim-MCP 安全、可靠性與可觀測性 5.x
 
-本 reference 對應 `docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md` 已完成的 Phase 5。它是後續 agent 的 retrieval 與安全索引；修改行為或宣稱目前 live support 前，仍須完整閱讀對應契約、測試與專用 verifier。
+本 reference 對應 `docs/research/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md` 已完成的 Phase 5。它是後續 agent 的 retrieval 與安全索引；修改行為或宣稱目前 live support 前，仍須完整閱讀對應契約、測試與專用 verifier。
 
 ## 讀取流程
 
@@ -14,10 +14,10 @@
 
 | 研究項目 | Task item | 能力 | Named tools／介面 | 契約 | Live verifier |
 | --- | --- | --- | --- | --- | --- |
-| 5.1 | Phase 5 item 20 | 限縮 `execute_script`／`reload_script` escape hatch | `execute_script`, `reload_script`, `get_script_policy`, `get_script_audit_log` | `docs/COMMAND_GOVERNANCE.md` | `scripts/verify_command_governance_live.py` |
-| 5.2 | Phase 5 item 21 | command ID、idempotency、write lifecycle、read-back 與有限 transaction | 所有 named tools 的 `command_id`／`idempotency_key`；`apply_stage_batch` | `docs/COMMAND_GOVERNANCE.md`、`docs/RESPONSE_SCHEMA.md` | `scripts/verify_command_governance_live.py` |
-| 5.3 | Phase 5 item 22 | 共用 job lifecycle、deadline、取消與 transport limits | `start_job`, `get_job_status`, `cancel_job`, `list_jobs` | `docs/JOB_DIAGNOSTICS.md` | `scripts/verify_job_diagnostics_live.py` |
-| 5.4 | Phase 5 item 23 | command-correlated、bounded、redacted diagnostics | `get_isaac_logs` structured records 與 legacy logs | `docs/JOB_DIAGNOSTICS.md` | `scripts/verify_job_diagnostics_live.py` |
+| 5.1 | Phase 5 item 20 | 限縮 `execute_script`／`reload_script` escape hatch | `execute_script`, `reload_script`, `get_script_policy`, `get_script_audit_log` | `docs/concepts/COMMAND_GOVERNANCE.md` | `scripts/verify_command_governance_live.py` |
+| 5.2 | Phase 5 item 21 | command ID、idempotency、write lifecycle、read-back 與有限 transaction | 所有 named tools 的 `command_id`／`idempotency_key`；`apply_stage_batch` | `docs/concepts/COMMAND_GOVERNANCE.md`、`docs/reference/RESPONSE_SCHEMA.md` | `scripts/verify_command_governance_live.py` |
+| 5.3 | Phase 5 item 22 | 共用 job lifecycle、deadline、取消與 transport limits | `start_job`, `get_job_status`, `cancel_job`, `list_jobs` | `docs/concepts/JOB_DIAGNOSTICS.md` | `scripts/verify_job_diagnostics_live.py` |
+| 5.4 | Phase 5 item 23 | command-correlated、bounded、redacted diagnostics | `get_isaac_logs` structured records 與 legacy logs | `docs/concepts/JOB_DIAGNOSTICS.md` | `scripts/verify_job_diagnostics_live.py` |
 
 主要實作位置：
 
@@ -28,7 +28,7 @@
 
 ## 共同不變條件
 
-- 128 個 named tools 都使用 response schema `1.0`，並接受 optional caller `command_id`／`idempotency_key`。不要新增繞過 shared wrapper 或 dispatcher metadata 的 public tool。
+- 所有 source-registered named tools 都使用 response schema `1.0`，並接受 optional caller `command_id`／`idempotency_key`。不要新增繞過 shared wrapper 或 dispatcher metadata 的 public tool。
 - Idempotency ledger 只存在目前 Kit runtime，最多 256 entries、TTL 600 秒。相同 key 與相同 payload 必須 replay 原 response；相同 key 配不同 payload 必須在 handler 前回 `IDEMPOTENCY_KEY_CONFLICT`。
 - `apply_stage_batch` 的 atomic rollback 只涵蓋可完整 snapshot/restore 的 Stage composition writes。Sensor、ROS 2、Replicator、motion、filesystem 與跨 subsystem batch 不得宣稱原子交易。
 - Script timeout 與 job cancellation 都是 cooperative。Python bytecode／awaitable 可在 safe point 結束；native Kit call 只能在控制權回到 Python 後觀察 deadline 或 cancellation。不要宣稱 hostile-code sandbox 或強制 native preemption。
@@ -97,7 +97,7 @@ uv build
 ## Current-claim checklist
 
 1. 重新記錄 canonical checkout、remote、branch、HEAD、status 與 verified backup。
-2. 確認 Isaac Sim 6.0.1、目前 128-command registry、capability flags、TCP `8766`、Kit PID/response 與 physics GPU policy。
+2. 確認 Isaac Sim 6.0.1、source inventory 與 runtime command registry 一致、capability flags、TCP `8766`、Kit PID/response 與 physics GPU policy。
 3. 只執行對應專用 verifier，並使用每次 run 唯一 idempotency key，避免歷史 replay 被誤判為新執行。
 4. Camera live job 先完成 Play 與 bounded warmup；SDG cancel 等待至少一個 completed-frame safe point。
 5. 捕捉 terminal state、repeat-query equality、redaction、cleanup、timeline、port、logs 與 dumps。沒有重跑 verifier 時，所有數值都標記為 historical。

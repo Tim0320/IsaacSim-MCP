@@ -78,7 +78,7 @@ Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8766 -State Listen
 
 - `runtime.isaac_sim_version` 以 `6.0.1` 開頭。
 - `runtime.adapter=IsaacAdapterV6`。
-- `extension.command_count=128`。
+- `extension.command_count` 與 [`TOOL_INVENTORY.md`](../reference/TOOL_INVENTORY.md) 的 source-derived count 一致。
 - `runtime.physics_backend` 與 backend matrix 一致。
 
 `8766` 是 live-control TCP socket。`9904` 是文件查詢 MCP，不能用來證明 Stage 已改變。

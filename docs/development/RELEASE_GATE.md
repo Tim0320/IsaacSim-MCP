@@ -18,7 +18,7 @@ strict mode 要求 clean worktree，並依序驗證：
 6. offline unit/contract/adapter tests。
 7. Windows PowerShell launcher tests。
 8. Ruff lint、本次 publish candidates 的 format check 與 `git diff --check`；不因歷史 baseline 格式漂移誤擋無關 PR。
-9. TCP 8766 read-only 128-tool live matrix；blocked prerequisite 與 code fail 分開。
+9. TCP 8766 read-only source-complete live matrix；source inventory 與 runtime command count 必須一致，blocked prerequisite 與 code fail 分開。
 10. wheel build、全新 temporary virtualenv install/import/version。
 11. worktree fingerprint 前後一致與 Git status review。
 

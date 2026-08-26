@@ -9,6 +9,7 @@ import time
 import uuid
 
 from isaac_mcp.connection import IsaacConnection
+from isaac_mcp.tool_inventory import tool_count
 
 ROOT = "/World/MCP_Task_5_3_5_4"
 CAMERA = f"{ROOT}/Camera"
@@ -48,7 +49,7 @@ def main() -> int:
         _data(connection.send_command("simulation.stop"))
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1")
-        assert capabilities["extension"]["command_count"] == 128
+        assert capabilities["extension"]["command_count"] == tool_count()
         assert capabilities["feature_flags"]["job.lifecycle"]["state"] == "supported"
         assert capabilities["feature_flags"]["diagnostics.correlation"]["state"] == "supported"
         assert capabilities["feature_flags"]["transport.limits"]["state"] == "supported"
@@ -145,9 +146,7 @@ def main() -> int:
             "simulation.execute_script",
             {
                 "code": (
-                    "import carb\n"
-                    "carb.log_warn('MCP_TASK_5_4_WARNING')\n"
-                    "print('token=synthetic-diagnostic-value')"
+                    "import carb\ncarb.log_warn('MCP_TASK_5_4_WARNING')\nprint('token=synthetic-diagnostic-value')"
                 ),
                 "max_output_bytes": 4096,
             },
@@ -206,7 +205,9 @@ def main() -> int:
             evidence["root_absent_after_cleanup"] = (
                 connection.send_command("scene.get_prim_info", {"prim_path": ROOT})["status"] == "error"
             )
-            evidence["timeline_after_cleanup"] = _data(connection.send_command("simulation.get_state"))["timeline_state"]
+            evidence["timeline_after_cleanup"] = _data(connection.send_command("simulation.get_state"))[
+                "timeline_state"
+            ]
             evidence["port_8766_open"] = _port_open(8766)
             connection.disconnect()
 

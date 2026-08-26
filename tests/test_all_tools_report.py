@@ -1,4 +1,4 @@
-"""Contract tests for the unified 128-tool evidence artifact."""
+"""Contract tests for the source-complete tool evidence artifact."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "generate_all_tools_report.py"
-RESULT = ROOT / "docs" / "ALL_TOOLS_TEST_RESULTS.json"
+RESULT = ROOT / "docs" / "research" / "ALL_TOOLS_TEST_RESULTS.json"
 
 
 def _module():
@@ -19,10 +19,11 @@ def _module():
     return module
 
 
-def test_inventory_and_evidence_cover_all_128_named_tools():
+def test_inventory_and_evidence_cover_every_source_named_tool():
     report = _module().build(None)
-    assert report["tool_count"] == 128
-    assert len({item["tool"] for item in report["results"]}) == 128
+    source_names = {item["tool"] for item in _module().inventory()}
+    assert report["tool_count"] == len(source_names)
+    assert {item["tool"] for item in report["results"]} == source_names
     assert all(item["purpose"] and item["input"] is not None for item in report["results"])
     assert all(item["readback"] and item["evidence"]["source"] for item in report["results"])
 
@@ -42,7 +43,7 @@ def test_tracked_machine_artifact_has_no_missing_or_extra_tools():
     artifact = json.loads(RESULT.read_text(encoding="utf-8"))
     source_names = {item["tool"] for item in _module().inventory()}
     artifact_names = {item["tool"] for item in artifact["results"]}
-    assert artifact["tool_count"] == 128
+    assert artifact["tool_count"] == len(source_names)
     assert artifact_names == source_names
 
 

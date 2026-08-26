@@ -111,13 +111,19 @@ uv run ruff format .
 ## Project Structure
 
 ```
-isaacsim-mcp-server/
-├── isaac_mcp/              # Main MCP server package
-│   └── tools/              # Tool implementations (9 categories)
-├── isaac.sim.mcp_extension/ # Isaac Sim extension module
-├── tests/                  # Test suite
-├── scripts/                # Setup and run scripts
-└── docs/                   # Documentation
+IsaacSim-MCP/
+├── ARCHITECTURE.md          # Runtime chain and layer ownership
+├── isaac_mcp/               # Python MCP server and source tool registry
+├── isaac.sim.mcp_extension/ # Isaac Sim runtime extension, handlers, adapters
+├── .agents/                 # Project skill and routed 1.x-6.x references
+├── docs/
+│   ├── getting-started/     # Install and first connection
+│   ├── concepts/            # Shared protocol and lifecycle models
+│   ├── reference/           # Current API and capability contracts
+│   ├── development/         # Test and release procedures
+│   └── research/            # Dated tasks and evidence snapshots
+├── scripts/                 # Launchers, generators, and guarded verifiers
+└── tests/                   # Offline, contract, launcher, and opt-in live tests
 ```
 
 ## Adding a New Tool
@@ -127,8 +133,9 @@ If you're adding a new MCP tool:
 1. Create or update the appropriate file in `isaac_mcp/tools/`.
 2. Follow the existing tool patterns for consistency.
 3. Add tests for your new tool.
-4. Verify the tool works in a running Isaac Sim instance using `scripts/dev_mcp_server.sh` for hot-reload.
-5. Update the documentation to reflect the new capability.
+4. Run `scripts/generate_tool_inventory.py` and commit the generated reference.
+5. Verify the tool works in a guarded scratch Stage when the change affects live behavior.
+6. Update the relevant contract and migration documentation. Do not hand-maintain a tool count in README or package metadata.
 
 ## License
 

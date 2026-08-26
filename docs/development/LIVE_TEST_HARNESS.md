@@ -37,7 +37,7 @@ uv run pytest -q tests\test_integration.py
 
 任何一項缺少、stage path 不一致、stage 在 scratch root 外、timeline 非 stopped 或 namespace 已存在，都會在第一個 write 前拒絕。
 
-## 128 tools 報告
+## Source-complete tools 報告
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\generate_all_tools_report.py --live

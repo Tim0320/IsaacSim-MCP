@@ -26,6 +26,8 @@
 import ast
 import os
 
+from isaac_mcp.tool_inventory import tool_names
+
 TOOLS_DIR = os.path.join(os.path.dirname(__file__), "..", "isaac_mcp", "tools")
 
 EXPECTED_MODULES = [
@@ -88,7 +90,7 @@ def test_init_imports_all_modules():
         assert module_name in content, f"tools/__init__.py missing import of {module_name}"
 
 
-def test_named_tool_inventory_has_128_unique_names():
+def test_named_tool_inventory_matches_authoritative_source_inventory():
     names = []
     for filename in EXPECTED_MODULES + ["graphs.py"]:
         path = os.path.join(TOOLS_DIR, filename)
@@ -105,7 +107,7 @@ def test_named_tool_inventory_has_128_unique_names():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert len(names) == 128
+    assert set(names) == set(tool_names())
     assert len(names) == len(set(names))
     assert {"start_job", "get_job_status", "cancel_job", "list_jobs"} <= set(names)
     assert "get_capabilities" in names

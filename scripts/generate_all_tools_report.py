@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the tracked 128-tool Isaac Sim 6.0.1 evidence matrix.
+"""Build the source-complete Isaac Sim 6.0.1 evidence matrix.
 
 This is an evidence aggregator, not a destructive test runner.  ``--live``
 adds a read-only runtime snapshot; individual pass claims remain tied to the
@@ -9,7 +9,6 @@ guarded verifier that produced their read-back evidence.
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import subprocess
 from collections import Counter
@@ -18,10 +17,11 @@ from pathlib import Path
 from typing import Any
 
 from isaac_mcp.connection import IsaacConnection
+from isaac_mcp.tool_inventory import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
-RESULT_PATH = ROOT / "docs" / "ALL_TOOLS_TEST_RESULTS.json"
-REPORT_PATH = ROOT / "docs" / "ALL_TOOLS_TEST_REPORT.md"
+RESULT_PATH = ROOT / "docs" / "research" / "ALL_TOOLS_TEST_RESULTS.json"
+REPORT_PATH = ROOT / "docs" / "research" / "ALL_TOOLS_TEST_REPORT.md"
 ALLOWED_STATUSES = {"pass", "partial", "blocked", "unsupported", "fail"}
 
 PROFILES: dict[str, dict[str, Any]] = {
@@ -32,7 +32,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "assets": {
         "date": "2026-08-20",
-        "verifier": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
+        "verifier": "docs/research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
         "readback": "catalog or resulting USD prim",
     },
     "capabilities": {
@@ -62,7 +62,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "lighting": {
         "date": "2026-08-20",
-        "verifier": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
+        "verifier": "docs/research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
         "readback": "authored light prim and attributes",
     },
     "materials": {
@@ -77,7 +77,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "objects": {
         "date": "2026-08-20",
-        "verifier": "docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
+        "verifier": "docs/research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
         "readback": "exact prim path, transform and absence after delete",
     },
     "physics": {
@@ -128,7 +128,7 @@ def _evidence(names: str, *, date: str, verifier: str, readback: str) -> None:
 _evidence(
     "get_scene_info create_physics_scene clear_scene list_prims get_prim_info list_environments load_environment",
     date="2026-08-20",
-    verifier="docs/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
+    verifier="docs/research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md",
     readback="stage path, prim inventory, authored fixture or cleanup postcondition",
 )
 _evidence(
@@ -211,53 +211,6 @@ OVERRIDES = {
 }
 
 
-def inventory() -> list[dict[str, Any]]:
-    """Extract every named tool, purpose, and public input from source AST."""
-    tools: list[dict[str, Any]] = []
-    for path in sorted((ROOT / "isaac_mcp" / "tools").glob("*.py")):
-        if path.name == "__init__.py":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            name = None
-            for decorator in node.decorator_list:
-                if (
-                    isinstance(decorator, ast.Call)
-                    and isinstance(decorator.func, ast.Attribute)
-                    and decorator.func.attr == "tool"
-                    and decorator.args
-                    and isinstance(decorator.args[0], ast.Constant)
-                ):
-                    name = decorator.args[0].value
-            if not isinstance(name, str):
-                continue
-            args = node.args.args
-            defaults = [None] * (len(args) - len(node.args.defaults)) + list(node.args.defaults)
-            inputs = []
-            for argument, default in zip(args, defaults):
-                if argument.arg in {"self"}:
-                    continue
-                inputs.append(
-                    {
-                        "name": argument.arg,
-                        "required": default is None,
-                        "default": None if default is None else ast.unparse(default),
-                    }
-                )
-            doc = ast.get_docstring(node) or ""
-            tools.append(
-                {
-                    "tool": name,
-                    "module": path.stem,
-                    "purpose": doc.splitlines()[0].strip() if doc else "Public Isaac Sim MCP operation.",
-                    "input": inputs,
-                }
-            )
-    return sorted(tools, key=lambda item: item["tool"])
-
-
 def live_snapshot(port: int) -> dict[str, Any]:
     """Capture only read-only, non-secret runtime facts."""
     connection = IsaacConnection(port=port)
@@ -293,8 +246,13 @@ def live_snapshot(port: int) -> dict[str, Any]:
 
 def build(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     tools = inventory()
-    if len(tools) != 128 or len({item["tool"] for item in tools}) != 128:
-        raise RuntimeError(f"expected 128 unique tools, found {len(tools)}")
+    if len(tools) != len({item["tool"] for item in tools}):
+        raise RuntimeError("duplicate named tools found in source inventory")
+    if snapshot and snapshot.get("extension_command_count") != len(tools):
+        raise RuntimeError(
+            "source/runtime tool count mismatch: "
+            f"source={len(tools)}, runtime={snapshot.get('extension_command_count')}"
+        )
     results = []
     for item in tools:
         profile = TOOL_EVIDENCE.get(item["tool"], PROFILES[item["module"]])
@@ -358,7 +316,7 @@ def build(snapshot: dict[str, Any] | None) -> dict[str, Any]:
 def markdown(report: dict[str, Any]) -> str:
     snapshot = report.get("live_snapshot") or {}
     lines = [
-        "# Isaac Sim 6.0.1：128 tools 統一證據報告",
+        f"# Isaac Sim 6.0.1：{report['tool_count']} tools 統一證據報告",
         "",
         "本報告逐項聚合已完成的 guarded live verifier 證據。產生器本身只做 source inventory 與 read-only live snapshot，不會清除或改寫 Stage。",
         "",

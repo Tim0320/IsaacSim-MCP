@@ -1,7 +1,7 @@
 # IsaacSim-MCP integration lifecycle 4.x
 
 Use this reference for completed Phase 4 work in
-`docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`. It is a retrieval and safety
+`docs/research/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`. It is a retrieval and safety
 index; read the linked contract and verifier before changing behavior or making
 a current live-support claim.
 
@@ -21,10 +21,10 @@ a current live-support claim.
 
 | Research label | Task item | Capability | Named tools | Contract | Live verifier |
 | --- | --- | --- | --- | --- | --- |
-| 4.1 | Phase 4 item 16 | Action Graph lifecycle, runtime status, exact ScriptNode configuration/reload and explicit evaluation | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` | `docs/OMNIGRAPH_LIFECYCLE.md` | `scripts/verify_omnigraph_lifecycle_live.py` |
-| 4.2 | Phase 4 item 17 | Typed ROS 2 Clock, TF, JointState, Camera and RTX LiDAR publisher workflows | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` | `docs/ROS2_WORKFLOWS.md` | `scripts/verify_ros2_workflows_live.py` |
-| 4.3 | Phase 4 item 18 | Bounded Replicator BasicWriter synthetic-data jobs and managed manifests | `get_replicator_status`, `create_sdg_job`, `start_sdg_job`, `get_sdg_job_status`, `cancel_sdg_job`, `get_sdg_manifest`, `delete_sdg_job` | `docs/REPLICATOR_SDG.md` | `scripts/verify_replicator_sdg_live.py` |
-| 4.4 | Phase 4 item 19 | MCP-owned IRA human lifecycle, Behavior Agent tasks/settings and NavMesh | `spawn_human`, `list_humans`, `get_human`, `delete_human`, `set_human_target`, `set_human_look_at`, `set_human_idle`, `set_human_behavior`, `get_navmesh_status`, `bake_navmesh` | `docs/HUMAN_LIFECYCLE.md` | `scripts/verify_human_lifecycle_live.py` |
+| 4.1 | Phase 4 item 16 | Action Graph lifecycle, runtime status, exact ScriptNode configuration/reload and explicit evaluation | `create_action_graph`, `edit_action_graph`, `list_action_graphs`, `get_action_graph`, `delete_action_graph`, `connect_action_graph`, `disconnect_action_graph`, `set_action_graph_enabled`, `get_action_graph_status`, `configure_script_node`, `reload_script_node`, `evaluate_action_graph` | `docs/reference/OMNIGRAPH_LIFECYCLE.md` | `scripts/verify_omnigraph_lifecycle_live.py` |
+| 4.2 | Phase 4 item 17 | Typed ROS 2 Clock, TF, JointState, Camera and RTX LiDAR publisher workflows | `get_ros2_status`, `list_ros2_workflows`, `create_ros2_clock_publisher`, `create_ros2_tf_publisher`, `create_ros2_joint_state_publisher`, `create_ros2_camera_publisher`, `create_ros2_lidar_publisher`, `delete_ros2_workflow` | `docs/reference/ROS2_WORKFLOWS.md` | `scripts/verify_ros2_workflows_live.py` |
+| 4.3 | Phase 4 item 18 | Bounded Replicator BasicWriter synthetic-data jobs and managed manifests | `get_replicator_status`, `create_sdg_job`, `start_sdg_job`, `get_sdg_job_status`, `cancel_sdg_job`, `get_sdg_manifest`, `delete_sdg_job` | `docs/reference/REPLICATOR_SDG.md` | `scripts/verify_replicator_sdg_live.py` |
+| 4.4 | Phase 4 item 19 | MCP-owned IRA human lifecycle, Behavior Agent tasks/settings and NavMesh | `spawn_human`, `list_humans`, `get_human`, `delete_human`, `set_human_target`, `set_human_look_at`, `set_human_idle`, `set_human_behavior`, `get_navmesh_status`, `bake_navmesh` | `docs/reference/HUMAN_LIFECYCLE.md` | `scripts/verify_human_lifecycle_live.py` |
 
 ## Cross-task invariants
 

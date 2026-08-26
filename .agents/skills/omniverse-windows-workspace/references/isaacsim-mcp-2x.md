@@ -1,7 +1,7 @@
 # IsaacSim-MCP Robot control 2.x
 
 Use this reference for Phase 2 Robot control work in
-`docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`.
+`docs/research/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`.
 
 ## Contents
 
@@ -32,10 +32,10 @@ Recorded results are historical baselines. A current live claim requires a fresh
 
 | Research label | Task item | Capability | Named tools | Contract | Live verifier |
 | --- | --- | --- | --- | --- | --- |
-| 2.1 | Phase 2 item 7 | Complete V6 joint state and atomic position/velocity/effort commands | `get_joint_state`, `set_joint_command` | `docs/ROBOT_JOINT_CONTROL.md` | `scripts/verify_robot_joint_control_live.py` |
-| 2.2 | Phase 2 item 8 | Atomic V6 drive gains, limits, and drive type | `set_joint_drive_config`, `get_joint_config` | `docs/ROBOT_JOINT_DRIVE_CONFIG.md` | `scripts/verify_robot_joint_drive_config_live.py` |
-| 2.3 | Phase 2 item 9 | Lula IK, RRT/C-space trajectories, bounded non-blocking jobs | `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`, `cancel_motion`, `get_motion_status` | `docs/MOTION_CONTROL.md` | `scripts/verify_motion_control_live.py` |
-| 2.4 | Phase 2 item 10 | Explicit-profile gripper and differential/holonomic mobile-base commands | `list_controller_profiles`, `set_gripper_width`, `open_gripper`, `close_gripper`, `set_mobile_base_velocity`, `stop_mobile_base` | `docs/CONTROLLER_PROFILES.md` | `scripts/verify_controller_profiles_live.py` |
+| 2.1 | Phase 2 item 7 | Complete V6 joint state and atomic position/velocity/effort commands | `get_joint_state`, `set_joint_command` | `docs/reference/ROBOT_JOINT_CONTROL.md` | `scripts/verify_robot_joint_control_live.py` |
+| 2.2 | Phase 2 item 8 | Atomic V6 drive gains, limits, and drive type | `set_joint_drive_config`, `get_joint_config` | `docs/reference/ROBOT_JOINT_DRIVE_CONFIG.md` | `scripts/verify_robot_joint_drive_config_live.py` |
+| 2.3 | Phase 2 item 9 | Lula IK, RRT/C-space trajectories, bounded non-blocking jobs | `compute_ik`, `plan_joint_trajectory`, `execute_trajectory`, `cancel_motion`, `get_motion_status` | `docs/reference/MOTION_CONTROL.md` | `scripts/verify_motion_control_live.py` |
+| 2.4 | Phase 2 item 10 | Explicit-profile gripper and differential/holonomic mobile-base commands | `list_controller_profiles`, `set_gripper_width`, `open_gripper`, `close_gripper`, `set_mobile_base_velocity`, `stop_mobile_base` | `docs/reference/CONTROLLER_PROFILES.md` | `scripts/verify_controller_profiles_live.py` |
 
 ## 2.3 invariants
 

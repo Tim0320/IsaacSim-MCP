@@ -6,7 +6,7 @@
 - Added a bounded retained lifecycle for eligible asset/sensor work and unified status/cancel routing for motion and SDG job IDs.
 - Added request/response/socket-wait limits with fail-closed oversized envelopes.
 - Added bounded structured diagnostics with command/stage/source correlation, Kit warning/error capture windows, filters, and sensitive-value redaction.
-- Documented the contract in `docs/JOB_DIAGNOSTICS.md` and added focused lifecycle/redaction tests.
+- Documented the contract in `docs/concepts/JOB_DIAGNOSTICS.md` and added focused lifecycle/redaction tests.
 
 All notable changes to the isaacsim-mcp-server project will be documented in this file.
 
@@ -14,6 +14,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed — documentation architecture and project authority
+
+- Split documentation into `getting-started`, `concepts`, `reference`, `development`, and `research`, with `docs/README.md` as the stable index.
+- Added `ARCHITECTURE.md` for the LLM-to-Isaac-Sim control chain and reduced README to the project entry point, quick start, support, documentation, and safety overview.
+- Changed the project Skill to classify documentation, offline code, live runtime, and release tasks before deciding whether to run environment checks.
+- Added a source-derived tool inventory and authority contract; package metadata no longer hardcodes a tool count, and live evidence fails closed when source and runtime registries differ.
+- Separated the current capability contract from dated capability verification history.
 
 ### Added — installation, protocol migration, and release gate
 
@@ -51,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New writes default to preview. Behavior Agent tasks require a playing timeline; bake and delete require stopped/paused state. External humans remain queryable but cannot be controlled or deleted.
 - Spawned character roots carry a schema `1.0` ownership marker. Delete targets one exact owned root, cancels/disables its live agent, and proves the prim is absent before reporting success.
 - Runtime control uses the public Isaac Sim 6.0.1 `IBehaviorAgent` API and converts m/s to stage units/s using `metersPerUnit`; task and settings responses include immediate read-back.
-- Added focused tool/handler/capability coverage and the human lifecycle contract in `docs/HUMAN_LIFECYCLE.md`.
+- Added focused tool/handler/capability coverage and the human lifecycle contract in `docs/reference/HUMAN_LIFECYCLE.md`.
 - Scratch live acceptance verified Navigation Core baking, an owned manual human,
   stopped-state rejection, accepted MoveTo/LookAt/Idle tasks, measured MoveTo
   displacement, exact deletion, list restoration and stopped-timeline cleanup.

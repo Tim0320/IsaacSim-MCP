@@ -11,7 +11,7 @@
 | `output_path` | `null` | 只允許搭配 `artifact`，且必須以 `.png` 結尾。未指定時寫入受控 artifact root。 |
 | `inline_max_bytes` | `1048576` | inline PNG 上限。可設定範圍 1 byte 到 4 MiB。 |
 
-預設 artifact root 是 `%TEMP%\isaacsim-mcp\artifacts`。可在啟動 Isaac Sim 前設定 `ISAAC_MCP_ARTIFACT_ROOT`，指定另一個專用目錄；TTL、容量與分塊讀取設定見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)。
+預設 artifact root 是 `%TEMP%\isaacsim-mcp\artifacts`。可在啟動 Isaac Sim 前設定 `ISAAC_MCP_ARTIFACT_ROOT`，指定另一個專用目錄；TTL、容量與分塊讀取設定見 [`ARTIFACT_TRANSPORT.md`](../concepts/ARTIFACT_TRANSPORT.md)。
 
 ## 共用影像 metadata
 
@@ -63,4 +63,4 @@ capture_image(
 
 先 base64 decode，再以 `data.inline.sha256` 驗證 PNG bytes。若 PNG 超過限制，回 `status=error` 與 `code=INLINE_SIZE_LIMIT_EXCEEDED`，不會傳回截斷資料。
 
-managed artifact 可用 `get_artifact_info`、`read_artifact`、`delete_artifact` 與 `cleanup_artifacts` 管理；完整契約見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)。
+managed artifact 可用 `get_artifact_info`、`read_artifact`、`delete_artifact` 與 `cleanup_artifacts` 管理；完整契約見 [`ARTIFACT_TRANSPORT.md`](../concepts/ARTIFACT_TRANSPORT.md)。

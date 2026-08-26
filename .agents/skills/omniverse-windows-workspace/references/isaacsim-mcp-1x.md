@@ -2,7 +2,7 @@
 
 This reference maps the conversation and research labels `1.1` through `1.6`
 to the completed Phase 1 items in
-`docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`. Use it as a navigation index,
+`docs/research/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md`. Use it as a navigation index,
 not as a substitute for the linked contract, source, tests, or current live
 read-back.
 
@@ -10,12 +10,12 @@ read-back.
 
 | Research label | Task document item | Capability | Named tools | Contract | Live verifier |
 | --- | --- | --- | --- | --- | --- |
-| 1.1 | Phase 1 item 1 | Camera RGB metadata, managed PNG artifact, bounded inline PNG | `create_camera`, `capture_image` | `docs/CAMERA_RGB.md` | `scripts/verify_camera_rgb_live.py` |
-| 1.2 | Phase 1 item 2 | Depth, distance, segmentation, normals, motion vectors, calibration | `capture_camera_output`, `get_camera_calibration` | `docs/CAMERA_OUTPUTS.md` | `scripts/verify_camera_outputs_live.py` |
-| 1.3 | Phase 1 item 3 | Typed RTX LiDAR Cartesian point cloud and auxiliary fields | `get_lidar_point_cloud` | `docs/LIDAR_POINT_CLOUD.md` | `scripts/verify_lidar_point_cloud_live.py` |
-| 1.4 | Phase 1 item 4 | Effective RTX LiDAR preset/generic configuration and USD read-back | `create_lidar`, `get_lidar_config` | `docs/LIDAR_CONFIG.md` | `scripts/verify_lidar_config_live.py` |
-| 1.5 | Phase 1 item 5 | Shared managed artifact store, chunks, hash, TTL, capacity, cleanup | `get_artifact_info`, `read_artifact`, `delete_artifact`, `cleanup_artifacts` | `docs/ARTIFACT_TRANSPORT.md` | `scripts/verify_artifact_transport_live.py` |
-| 1.6 | Phase 1 item 6 | Deterministic Camera/LiDAR teardown, verified deletion, same-path recreation | `delete_sensor`; sensor-aware `delete_object` | `docs/SENSOR_LIFECYCLE.md` | `scripts/verify_sensor_lifecycle_live.py` |
+| 1.1 | Phase 1 item 1 | Camera RGB metadata, managed PNG artifact, bounded inline PNG | `create_camera`, `capture_image` | `docs/reference/CAMERA_RGB.md` | `scripts/verify_camera_rgb_live.py` |
+| 1.2 | Phase 1 item 2 | Depth, distance, segmentation, normals, motion vectors, calibration | `capture_camera_output`, `get_camera_calibration` | `docs/reference/CAMERA_OUTPUTS.md` | `scripts/verify_camera_outputs_live.py` |
+| 1.3 | Phase 1 item 3 | Typed RTX LiDAR Cartesian point cloud and auxiliary fields | `get_lidar_point_cloud` | `docs/reference/LIDAR_POINT_CLOUD.md` | `scripts/verify_lidar_point_cloud_live.py` |
+| 1.4 | Phase 1 item 4 | Effective RTX LiDAR preset/generic configuration and USD read-back | `create_lidar`, `get_lidar_config` | `docs/reference/LIDAR_CONFIG.md` | `scripts/verify_lidar_config_live.py` |
+| 1.5 | Phase 1 item 5 | Shared managed artifact store, chunks, hash, TTL, capacity, cleanup | `get_artifact_info`, `read_artifact`, `delete_artifact`, `cleanup_artifacts` | `docs/concepts/ARTIFACT_TRANSPORT.md` | `scripts/verify_artifact_transport_live.py` |
+| 1.6 | Phase 1 item 6 | Deterministic Camera/LiDAR teardown, verified deletion, same-path recreation | `delete_sensor`; sensor-aware `delete_object` | `docs/reference/SENSOR_LIFECYCLE.md` | `scripts/verify_sensor_lifecycle_live.py` |
 
 The task document also contains item `1.1a`, the Isaac Sim 6.0.1 multi-GPU
 Timeline Stop guard. It is a prerequisite shared by Camera/LiDAR live testing,
@@ -115,9 +115,9 @@ These values are a historical baseline. Before reporting current support:
 
 1. Read the matching row in this reference.
 2. Read the linked contract document completely.
-3. Read `docs/CAPABILITIES.md` and `docs/RESPONSE_SCHEMA.md` for current feature
+3. Read `docs/reference/CAPABILITIES.md` and `docs/reference/RESPONSE_SCHEMA.md` for current feature
    flags and envelope rules.
 4. Inspect the named tool, extension handler, V6 adapter, focused tests, and live
    verifier before changing behavior.
-5. Use `docs/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md` for full research history,
+5. Use `docs/research/ISAACSIM_MCP_6_0_1_IMPLEMENTATION_TASK.md` for full research history,
    limitations, and acceptance evidence.

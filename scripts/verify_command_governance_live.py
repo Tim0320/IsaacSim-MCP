@@ -8,6 +8,7 @@ import socket
 import time
 
 from isaac_mcp.connection import IsaacConnection
+from isaac_mcp.tool_inventory import tool_count
 
 ROOT = "/World/MCP_Task_5_1_5_2"
 IDEMPOTENT_PRIM = f"{ROOT}/IdempotentCube"
@@ -46,16 +47,14 @@ def main() -> int:
         _data(connection.send_command("simulation.stop"))
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1"), capabilities["runtime"]
-        assert capabilities["extension"]["command_count"] == 124, capabilities["extension"]
+        assert capabilities["extension"]["command_count"] == tool_count(), capabilities["extension"]
         assert capabilities["feature_flags"]["execute_script"]["state"] == "supported"
         assert capabilities["feature_flags"]["command.governance"]["state"] == "supported"
 
         if connection.send_command("scene.get_prim_info", {"prim_path": ROOT})["status"] == "success":
             _data(connection.send_command("objects.delete", {"prim_path": ROOT}))
 
-        denied_cwd = connection.send_command(
-            "simulation.execute_script", {"code": "result = 1", "cwd": "C:\\Windows"}
-        )
+        denied_cwd = connection.send_command("simulation.execute_script", {"code": "result = 1", "cwd": "C:\\Windows"})
         assert denied_cwd["code"] == "SCRIPT_POLICY_DENIED", denied_cwd
 
         denied_background = connection.send_command(
@@ -95,7 +94,10 @@ def main() -> int:
         assert first["data"]["command"]["replayed"] is False
         assert replay["data"]["command"]["replayed"] is True
         assert replay["data"]["command"]["original_command_id"] == "task-5-create-1"
-        assert _data(connection.send_command("scene.get_prim_info", {"prim_path": IDEMPOTENT_PRIM}))["path"] == IDEMPOTENT_PRIM
+        assert (
+            _data(connection.send_command("scene.get_prim_info", {"prim_path": IDEMPOTENT_PRIM}))["path"]
+            == IDEMPOTENT_PRIM
+        )
 
         conflict = connection.send_command(
             "objects.create",
@@ -132,9 +134,7 @@ def main() -> int:
         )
         assert rolled_back["code"] == "BATCH_ROLLED_BACK", rolled_back
         assert rolled_back["readback"]["rolled_back"] is True, rolled_back
-        absent = connection.send_command(
-            "stage.get_attribute", {"prim_path": ROOT, "attribute": "mcp:rollbackProbe"}
-        )
+        absent = connection.send_command("stage.get_attribute", {"prim_path": ROOT, "attribute": "mcp:rollbackProbe"})
         assert absent["code"] == "ATTRIBUTE_NOT_FOUND", absent
 
         audit = _data(connection.send_command("simulation.get_script_audit", {"count": 20}))

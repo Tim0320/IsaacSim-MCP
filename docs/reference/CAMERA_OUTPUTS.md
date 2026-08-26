@@ -19,7 +19,7 @@ Isaac Sim 6.0.1 的 typed camera output 由 `capture_camera_output` 提供；相
 ## 回傳模式
 
 - `metadata`：只回 metadata，不傳輸 array bytes。
-- `artifact`：預設模式，寫入共用 managed store 的 `.npy` v1 artifact；可用 `output_path` 指定不受管理的 `.npy` 路徑。TTL、分塊下載、hash 與清理見 [`ARTIFACT_TRANSPORT.md`](ARTIFACT_TRANSPORT.md)。
+- `artifact`：預設模式，寫入共用 managed store 的 `.npy` v1 artifact；可用 `output_path` 指定不受管理的 `.npy` 路徑。TTL、分塊下載、hash 與清理見 [`ARTIFACT_TRANSPORT.md`](../concepts/ARTIFACT_TRANSPORT.md)。
 - `inline`：回傳 base64 raw little-endian array bytes，不含 `.npy` header。預設上限 1 MiB，hard cap 4 MiB。
 
 Metadata 包含 `output_type`、`annotator`、`dtype`、`shape`、`width`、`height`、`channels`、`units`、`coordinate_space`、`raw_size_bytes`、`raw_sha256`、frame/timestamp 與 `annotator_info`。

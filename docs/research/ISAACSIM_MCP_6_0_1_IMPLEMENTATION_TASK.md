@@ -100,7 +100,7 @@
   > lifecycle 修復：Play transition 依 Isaac Sim 6.0.1 CameraSensor reference flow 呼叫 `timeline.commit()`；Play 中 frame 尚未就緒時等待正常 render tick，不再排程會 pause timeline 並觸發 sensor release 的 fallback render。
   > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；`64x48` 七種輸出皆取得 frame，dtype/shape/units、raw 與 `.npy` hashes 全數通過。已知 cube 的 depth/normals 非零，semantic label `mcp_task_1_2_target` 與 instance-ID prim `/World/MCP_Task_1_2_Target` 可讀回；intrinsic、camera-to-world/world-to-camera、projection、meters-per-unit 可讀回；scratch prim 全數清除。
   > 離線驗收：Task 1.2 focused tests `74 passed, 1 deselected`；排除 live/destructive 與本 sandbox Git-for-Windows shell 問題的 suite `193 passed, 1 deselected`；Ruff、format check、`git diff --check` 通過。完整 suite 另有既有 backup-script tests `2` 項因 sandbox 的 `git-submodule` 找不到 `git-sh-setup` 失敗，與 Camera 變更無關。
-  > 驗證腳本：`scripts/verify_camera_outputs_live.py`。完整輸出契約：`docs/CAMERA_OUTPUTS.md`。
+  > 驗證腳本：`scripts/verify_camera_outputs_live.py`。完整輸出契約：`docs/reference/CAMERA_OUTPUTS.md`。
 
 - [x] 3. LiDAR point cloud 資料回傳
   > 現況（已確認）：V6 adapter 已能取得 point cloud，但 handler 最後只回傳 `point_count`，XYZ points 被丟棄。
@@ -111,7 +111,7 @@
   > V6 修正：以 `FULL` auxiliary output 建立 LiDAR，掛載 `generic-model-output` 與 `stable-id-map` annotators；依官方公式把 GMO spherical azimuth/elevation/range 轉成 Cartesian meters，避免把角度與距離誤標為 XYZ。
   > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX；取得 134,880 points，七個 fields 的 row count、dtype/shape/units、raw hashes 與 NPZ hash 全數通過。coordinate frame=`sensor`、timestamp/frame、pose `[0,0,1]` 可讀回；stable object ID 成功解析到已知 scratch cube；Play、Stop 後 Kit/8766 存活，沒有新增 native dump，scratch prim 全數清除。
   > 離線驗收：Task 1.3 focused tests `72 passed, 1 deselected`；排除 live、固定 `C:\isaacsim` version-negative case 與缺少 `/bin/bash` 的 Unix launcher tests 後，專案 suite `201 passed, 1 deselected`；Ruff 與 `git diff --check` 通過。
-  > 驗證腳本：`scripts/verify_lidar_point_cloud_live.py`。完整輸出契約：`docs/LIDAR_POINT_CLOUD.md`。
+  > 驗證腳本：`scripts/verify_lidar_point_cloud_live.py`。完整輸出契約：`docs/reference/LIDAR_POINT_CLOUD.md`。
 
 - [x] 4. LiDAR `config` 真正套用到 Isaac Sim 6.0.1
   > 現況（已確認）：建立 LiDAR 時接受 `config`，V6 路徑目前主要以 `Lidar(path=prim_path)` 建立，輸入設定沒有完整映射與 read-back。
@@ -121,7 +121,7 @@
   > 已實作：`create_lidar` 支援 named preset `config/variant`，或 generic `horizontal_fov_deg`、`vertical_fov_deg`、`horizontal_resolution_deg`、`vertical_resolution_deg`、`rotation_rate_hz`、`min_range_m`、`max_range_m`。模式衝突、未知欄位、無效範圍、無法整除與 sample budget 都以 stable error code 拒絕。
   > schema/read-back：generic 設定會 author `OmniSensorGenericLidarCoreAPI` 的 azimuth window、scan/tick/firing rate、range、emitter elevation/channel arrays；`get_lidar_config` 回傳 effective values 與 raw USD attributes。Isaac Sim 6.0.1 的 emitter channel ID 使用 1-based；partial-FOV 使用 per-tick output，避免完整 360° accumulation 無法發布 frame。
   > live 驗收（2026-08-23）：A=`120x20°`、`1x2°`、`10 Hz`、`0.5–40 m`，read-back 一致並取得 33 points；B=`180x30°`、`0.5x5°`、`20 Hz`、`1–80 m`，read-back 一致並取得 262 points。`100°/3°` 回 `LIDAR_HORIZONTAL_RESOLUTION_NOT_DIVISIBLE` 且未建立 prim；Play、Stop 與 scratch cleanup 通過。
-  > 驗證腳本：`scripts/verify_lidar_config_live.py`。完整契約：`docs/LIDAR_CONFIG.md`。
+  > 驗證腳本：`scripts/verify_lidar_config_live.py`。完整契約：`docs/reference/LIDAR_CONFIG.md`。
 
 - [x] 5. 共用 artifact 資料傳輸層
   > 現況：影像與 point cloud 沒有統一的大型資料 transport、保存期限、清理與 hash 契約。
@@ -131,7 +131,7 @@
   > 已實作：新增共用 managed store 與 `get_artifact_info`、`read_artifact`、`delete_artifact`、`cleanup_artifacts` 四個 named tools。handle 為 192-bit random `artifact://managed/<opaque-id>`；metadata 包含 MIME、format、dtype/shape、size、SHA-256、建立/到期時間與 producer 欄位。Camera PNG/NPY 與 LiDAR NPZ 已改用同一 writer；explicit `output_path` 保留為 `managed=false`、`handle=null`。
   > 安全與限制：root、TTL、單檔/總容量、chunk 上限可由環境變數設定；輸入必須為正整數。handle 使用完整格式驗證，sidecar path 必須留在 root；寫入採 atomic replace，並提供 `ARTIFACT_TOO_LARGE`、`ARTIFACT_CAPACITY_EXCEEDED`、`ARTIFACT_CHUNK_LIMIT_EXCEEDED` 等 stable codes。
   > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、53 commands。Camera PNG 1,087 bytes 與 LiDAR NPZ 1,248 bytes 均用 512-byte chunks 下載重組，完整 SHA-256 一致；traversal、1,025-byte chunk limit、delete、15 秒 TTL expiry、cleanup 與 scratch prim 清理全數通過。
-  > 驗證腳本：`scripts/verify_artifact_transport_live.py`。完整契約：`docs/ARTIFACT_TRANSPORT.md`。
+  > 驗證腳本：`scripts/verify_artifact_transport_live.py`。完整契約：`docs/concepts/ARTIFACT_TRANSPORT.md`。
 
 - [x] 6. Sensor lifecycle 與刪除一致性
   > 現況：Camera/LiDAR wrapper、render product、annotator 與 USD prim 的生命週期可能不同；刪除 prim 後仍可能被持有的 wrapper 在後續 tick 重建或殘留資源。
@@ -143,7 +143,7 @@
   > Stop/recreate：Timeline Stop 會釋放 Camera/LiDAR runtime，但保留 LiDAR authoring metadata；同路徑重建前也先 teardown 舊 runtime，避免重複 annotator、writer、RenderProduct 或 callback。extension shutdown 同樣執行集中釋放。
   > live 驗收（2026-08-23）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、54 commands。Camera 與 LiDAR 以相同 prim path 完成兩輪 create/read/delete/recreate；Camera RGB `[48,64,3]`，LiDAR point count `2`。每次刪除等待 32 Kit updates，prim、LiDAR actual prim、RenderProduct、兩種 runtime cache 及 LiDAR metadata read-back 全為 absent；重建前後各 sensor 僅有一個 RenderProduct，`duplicate_pipeline_detected=false`。PID/port 保持存活，log 無 teardown error、invalid-prim access、native crash signature，scratch cleanup 通過。
   > scratch safeguard：驗證腳本在任何寫入前先確認 timeline 非 Playing，並拒絕含預設 Isaac Sim baseline 與 `MCP_Task_1_6` namespace 以外 prim 的 stage；不會為了測試清除既有使用者場景。
-  > 驗證腳本：`scripts/verify_sensor_lifecycle_live.py`。完整契約：`docs/SENSOR_LIFECYCLE.md`。
+  > 驗證腳本：`scripts/verify_sensor_lifecycle_live.py`。完整契約：`docs/reference/SENSOR_LIFECYCLE.md`。
 
 ## Phase 2：Robot 控制
 
@@ -155,7 +155,7 @@
   > 已實作：新增 `get_joint_state`、`set_joint_command`，V6 讀取 DOF position/velocity、projected joint force、三種 target；name/index selector 與所有 values 先完整驗證再一次套用。也修正 V6 subset position 將 DOF indices 誤傳成 articulation indices 的既有錯誤。
   > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、56 commands。Franka fixture 讀回 9 DOF，對 `panda_joint1` 依序套用 position、velocity、effort；三種 immediate target 均在浮點容差內等於 requested value，physics updates 後 position/velocity/projected effort measured state 全為有限值。錯誤 joint name 回 `JOINT_NOT_FOUND`、`applied=false`，前後三種 targets 完全相同。
   > lifecycle／安全證據：Play 前快取的 stale tensor wrapper 會自動淘汰並重綁目前 SimulationView；cleanup 必須先 Stop 再刪 articulation，避免 Pause 中刪除使 PhysX tensor view 失效。scratch robot read-back 為 absent，timeline=`stopped`，Kit PID `2008`／TCP `8766` 存活，`/physics/cudaDevice=0` 對應唯一 active display GPU，當次 run-scoped log 無 warning/error，新增 native dump `0`。
-  > 驗證腳本與契約：`scripts/verify_robot_joint_control_live.py`、`docs/ROBOT_JOINT_CONTROL.md`。
+  > 驗證腳本與契約：`scripts/verify_robot_joint_control_live.py`、`docs/reference/ROBOT_JOINT_CONTROL.md`。
 
 - [x] 8. Drive gains、limits 與控制器參數寫入
   > 現況：joint/drive 設定讀取能力高於寫入能力，缺 stiffness、damping、max force、velocity、drive type 的 typed setter。
@@ -167,7 +167,7 @@
   > backend：目前 PhysX 五欄 supported/verified；Newton 的 `max_velocity` unsupported，其餘 USD DriveAPI 欄位標為 unverified，未宣稱 live 支援。
   > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、57 commands。Franka 9 DOF 的 `panda_joint1` 由 stiffness/damping/max force/max velocity/drive type=`22918.3125/4583.6626/87/2.175/force` 改為 requested `20626.48125/4125.29634/78.3/1.5/acceleration`；read-back=`20626.48047/4125.29639/78.300003/1.5/acceleration`，符合 float32 容差。
   > atomic／lifecycle：負 stiffness、未知 joint name 與 Play 中寫入均在 apply 前拒絕，前後五欄 snapshot 完全一致；scratch prim absent、timeline stopped、Kit PID `22232`／TCP `8766` 存活、`cudaDevice=0` 對應唯一 active display GPU、run-scoped error-like log `0`、新增 native dump `0`。
-  > 驗證腳本與契約：`scripts/verify_robot_joint_drive_config_live.py`、`docs/ROBOT_JOINT_DRIVE_CONFIG.md`。
+  > 驗證腳本與契約：`scripts/verify_robot_joint_drive_config_live.py`、`docs/reference/ROBOT_JOINT_DRIVE_CONFIG.md`。
 
 - [x] 9. IK、trajectory、motion planning 與 controller lifecycle
   > 現況：沒有 named tool 可建立/選擇 controller、求 IK、產生 trajectory、執行、暫停、取消與查詢 job。
@@ -178,7 +178,7 @@
   > 能力邊界：Lula IK 官方 API `supports_collision_avoidance()` 為 false，因此 IK response 永遠回 `collision_check.checked=false`。RRT 的 checked result 只包含 Lula robot model 與已註冊 world view；目前 USD scene obstacle count 為 0 且 `scene_obstacles_included=false`，不得宣稱整個 Stage collision-free，也不得把 `cspace` spline 宣稱為 collision-free path。
   > live 驗收（2026-08-24）：在乾淨重啟、`/physics/cudaDevice=0`、空白 scratch Stage 的 Isaac Sim `6.0.1-rc.7`／PhysX 完成，registry 為 68 commands、motion generation `8.2.9`。Franka IK error=`7.363885225415161e-7 m`，相同 warm start／seed `17` 解完全一致；RRT 回 `checked=true`、`path_valid=true`，同時明確回報 obstacle count `0` 與 `scene_obstacles_included=false`。
   > lifecycle／cleanup：job 通過 paused→running→completed（progress `1.0`）、cancel terminal state 與 `timeout_ms=1` terminal timeout，且 execute 立即回 `non_blocking=true`。verifier 只清除自建 `/World/MCP_Task_2_3_Robot`、`/World/groundPlane`、`/World/PhysicsScene`；最終 read-back 全 absent、timeline stopped、Kit PID `29916`／TCP `8766` 存活，當次 log 無 GPU page fault、CUDA external-memory、`ERROR_DEVICE_LOST` 或 PhysX crash signature，新增 native dump `0`。
-  > 驗證腳本與契約：`scripts/verify_motion_control_live.py`、`docs/MOTION_CONTROL.md`。
+  > 驗證腳本與契約：`scripts/verify_motion_control_live.py`、`docs/reference/MOTION_CONTROL.md`。
 
 - [x] 10. Gripper 與 mobile base 常用操作
   > 現況：可透過底層 joints 或 `execute_script` 組合，但缺少穩定、高階 named tools。
@@ -192,7 +192,7 @@
   > 歷史失效 session：同一個長時間運作的 Kit session 在先前 `cuda:1` allocation failure 後，RTX 持續回 `Cannot create cuda external memory`，之後發生 GPU page fault／`ERROR_DEVICE_LOST` 並產生 `.nv-gpudmp`；該 session 的結果未納入驗收。
   > live 驗收（2026-08-24）：乾淨重啟後，Franka open/set-width/close 的總寬依序為 `0.08/0.03/0.0 m`，finger targets 為 `[0.04,0.04]`、`[0.015,0.015]`、`[0,0]`。錯誤 profile 回 `CONTROLLER_PROFILE_MISMATCH` 且 command targets 前後一致。Jetbot targets=`[2.9583333,3.7083333] rad/s`、Kaya targets=`[-9.304024,-6.6114283,-9.497344] rad/s`；兩者均取得有限 measured velocity，stop 後全部 wheel targets 立即讀回零。
   > lifecycle／cleanup：Kaya experimental controller 回傳 ndarray 的 Isaac Sim 6 API 已正規化，並以 shuffled setup names unit test 驗證 joint reorder。verifier 最終 `pass=true`，只清除自建三個 robot 與 physics fixtures；全部 read-back absent、timeline stopped、Kit PID `29916`／TCP `8766` 存活，當次 log 關鍵錯誤 `0`、新增 native dump `0`。
-  > 契約：`docs/CONTROLLER_PROFILES.md`。
+  > 契約：`docs/reference/CONTROLLER_PROFILES.md`。
 
 ## Phase 3：Physics、材料與 USD stage
 
@@ -205,7 +205,7 @@
   > timing lifecycle：time step 同步 `physxScene:timeStepsPerSecond`、Stage `timeCodesPerSecond`、`/persistent/simulation/minFrameRate` 與 SimulationManager default scene。修正 `_ensure_physics_world()` 原本每次以 `setup_simulation(dt=1/60)` 覆寫設定的問題，改為不傳 dt 並保留既有 authored rate。
   > atomicity/read-back：成功 response 同時回 USD、runtime wrapper、SimulationManager dt、Stage time codes、min frame-rate、default scene 與 GPU/broadphase；apply/read-back 失敗會還原所有 authored attributes、Stage/global timing 與 default scene。`gpu_enabled` 不改 launcher `/physics/cudaDevice` ordinal；GPU dynamics 停用 CCD 的 PhysX side effect 會明確回報。
   > live 驗收（2026-08-24）：乾淨重啟、Isaac Sim `6.0.1-rc.7`／PhysX、`/physics/cudaDevice=0`（唯一 display-active GPU）完成。120 Hz USD/runtime/manager read-back一致；初始化 warm-up 後 12 steps 的 physics clock 精確增加 `0.1 s`。invalid `0.007 s` 與 playing timeline request 均保持 snapshot 不變；GPU/GPU broadphase 與 CPU/MBP mapping 通過。
-  > cleanup／health：verifier 對 Isaac baseline `/PhysicsScene` 做完整 snapshot/restore，不刪除既有 scene；attributes、Stage `60 Hz`、min-frame-rate `30`、default scene `None` 全部恢復，timeline stopped，Kit PID `38160`／TCP `8766` 存活，新增 native dump `0`。Stop 有四筆既有 tensor SimulationView invalidation warning，但無 CUDA/device-lost/native crash signature。契約：`docs/PHYSICS_PARAMS.md`。
+  > cleanup／health：verifier 對 Isaac baseline `/PhysicsScene` 做完整 snapshot/restore，不刪除既有 scene；attributes、Stage `60 Hz`、min-frame-rate `30`、default scene `None` 全部恢復，timeline stopped，Kit PID `38160`／TCP `8766` 存活，新增 native dump `0`。Stop 有四筆既有 tensor SimulationView invalidation warning，但無 CUDA/device-lost/native crash signature。契約：`docs/reference/PHYSICS_PARAMS.md`。
 
 - [x] 12. PhysX 與 Newton 能力分流
   > 現況：adapter 介面宣稱 backend-neutral，但 reset/step、articulation、sensor 等路徑尚無完整 Newton live matrix。
@@ -217,7 +217,7 @@
   > Newton 邊界：目前沒有任何 Newton row 宣稱 supported。Task 3.3 擴充後共 17 項維持 `untested`；time step、GPU dynamics 與 PhysXJointAPI max velocity 共 3 項為 `unsupported`。本輪沒有以 shared code 或 import success 代替 Newton live evidence。
   > offline 驗收：capability contract、active-backend projection、nullable/false 語意與 adapter guard tests 均通過；完整離線 suite `286 passed, 1 deselected`，Ruff lint 通過。本輪檔案 format check 與 `git diff --check` 通過；repository-wide format check 另有 15 個本輪開始前既存的未格式化檔案，未納入 3.2 的跨功能重寫。
   > live 驗收（2026-08-24）：TCP `8766` read-only verifier 在 Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、`cudaDevice=0` 讀回 capability schema `1.1` 與 matrix schema `1.0`；Task 3.3 擴充後為 20/20 PhysX rows supported/verified，Newton 為 0 supported、17 untested、3 unsupported。Stage info 與 simulation state查詢前後完全一致；Kit PID `38160`／port 存活，近 15 分鐘新增 native dump `0`。
-  > 契約與 verifier：`docs/BACKEND_CAPABILITY_MATRIX.md`、`scripts/verify_backend_capability_matrix_live.py`。
+  > 契約與 verifier：`docs/reference/BACKEND_CAPABILITY_MATRIX.md`、`scripts/verify_backend_capability_matrix_live.py`。
 
 - [x] 13. Rigid body、collider、mass 與 joint authoring
   > 現況：基礎物件操作可建立 prim，但完整 physics schema authoring 仍常需 `execute_script`。
@@ -227,7 +227,7 @@
   > 已實作：新增 `configure_physics_body`、`get_physics_body`、`create_collision_group`、`get_collision_group`、`create_physics_joint`、`get_physics_joint` 六個 named tools，registry 由 68 增至 74。body 支援 dynamic/kinematic/static、六種 Mesh approximation、kg mass 與 kg/m³ density；joint 支援 fixed/revolute/prismatic、world anchor、local frames、XYZ axis 與成對 limits。
   > validation／atomicity：所有 write 要求 stopped timeline；mass/density 互斥、static 禁止 mass/density、axis/limit/frame/quaternion 皆先驗證。body apply/read-back 失敗會還原 managed APIs/attributes；新 group/joint 失敗會刪除新 prim。本輪 live 以 Cube 要求 Mesh-only `convex_hull` 製造中途失敗，read-back 證明回復 static、RigidBodyAPI 不殘留且 collider 保留。
   > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`／PhysX／TCP `8766`，scratch `/World/MCP_Task_3_3` 讀回 `convex_hull`、mass `2.5 kg`、density `850 kg/m³`、collision group targets/filter/invert/merge，以及三種 joint bodies、frames、axis、limits 與 units。dynamic+mass 轉 static 後 `MassAPI`/`RigidBodyAPI` 均移除；停用 Mesh collider 後 approximation 清除。120 exact steps 後 fixed body 保持 `[5,0,3]`；invalid joint 未建立，scratch root cleanup 後確認不存在。
-  > backend 邊界：capability matrix 現為 20 rows；PhysX 20/20 supported/verified，Newton 0 supported、17 untested、3 unsupported。契約與 verifier：`docs/PHYSICS_AUTHORING.md`、`scripts/verify_physics_authoring_live.py`。
+  > backend 邊界：capability matrix 現為 20 rows；PhysX 20/20 supported/verified，Newton 0 supported、17 untested、3 unsupported。契約與 verifier：`docs/reference/PHYSICS_AUTHORING.md`、`scripts/verify_physics_authoring_live.py`。
 
 - [x] 14. 補齊 physics material MCP schema
   > 現況（已確認）：handler/adapter 已接受 `static_friction`、`dynamic_friction`、`restitution`，MCP tool 介面沒有完整暴露這些參數。
@@ -237,7 +237,7 @@
   > 已實作：`create_material` named schema 新增 `static_friction`、`dynamic_friction`、`restitution`；新增 `get_material` 與 `get_material_binding`，registry 由 74 增至 76。physics material 改為正式 `UsdShade.Material + UsdPhysics.MaterialAPI`；`apply_material` 新增 `auto|physics|visual` purpose，physics 使用 `material:binding:physics`。
   > validation／atomicity：friction 需 finite 且 >=0、dynamic <= static、restitution 在 `[0,1]`；physics create/bind 要求 stopped timeline。create/read-back 失敗刪除新 prim；bind/read-back 失敗還原先前 direct binding 與 strength；float32 read-back 使用 `rel_tol=1e-6`／`abs_tol=1e-7`。
   > live 驗收（2026-08-24）：Isaac Sim `6.0.1-rc.7`／PhysX／TCP `8766`，scratch `/World/MCP_Task_3_4` 建立低材質 `0/0/0` 與高材質 `1.0/0.8/0.9`，8 個 physics-purpose bindings 的 direct/resolved path 與 relationship 全部讀回。181 exact steps 後低摩擦物件比高摩擦多滑行 `2.558789 m`；高 restitution 球碰撞後回彈最高 `3.065565 m`，低 restitution 球沒有回彈。invalid friction pair 未建立 prim，scratch root cleanup 後確認不存在。
-  > backend 邊界：capability matrix 現為 21 rows；PhysX 21/21 supported/verified，Newton 0 supported、18 untested、3 unsupported。契約與 verifier：`docs/PHYSICS_MATERIALS.md`、`scripts/verify_physics_material_live.py`。
+  > backend 邊界：capability matrix 現為 21 rows；PhysX 21/21 supported/verified，Newton 0 supported、18 untested、3 unsupported。契約與 verifier：`docs/reference/PHYSICS_MATERIALS.md`、`scripts/verify_physics_material_live.py`。
 
 - [x] 15. Stage、layer、USD composition 與語意資料
   > 現況：scene tools 著重列舉、查詢、export/clear 等基本操作，缺少完整 open/new/save、layer、reference/payload、variant、semantic label 與 arbitrary attr 契約。
@@ -251,7 +251,7 @@
   > batch transaction：最多 100 個 subLayer/arc/variant/semantic/attribute operations。Preview 逐項驗證；apply 前保存 root/session layer 與 payload load rules，任一步失敗回 `BATCH_ROLLED_BACK` 並整批還原。Stage lifecycle 與外部檔案 side effect 不允許放入 batch。
   > live 驗收（2026-08-25）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、TCP `8766`，88-command registry。`/World/MCP_Task_3_5` scratch Stage 通過 subLayer、reference、payload unload/load、variant `cube→sphere`、LabelsAPI `class=[fixture,obstacle]`、`float3` 與 `double[]` read-back；兩項成功 batch 後，以第二項 invalid variant 觸發 `BATCH_ROLLED_BACK`，第一項 `mcp:rollbackProbe` 確認不存在。
   > save/reopen/restore：乾淨重啟後 save-as 與 reopen 的 scoped prim count 均為 `5`，layer stack、composition arcs、variant、metadata、semantics 與 prim count 完全一致；來源 overwrite 被拒絕。Verifier 保存並還原原 anonymous root/session layer，prim count `15→15`，scratch root absent、timeline stopped、Kit PID `29892`／TCP `8766` 存活；當次 log 無 PhysX GPU/CUDA/device-lost/access-violation/crash signature，該乾淨 session 新增 native dump `0`。
-  > 離線驗收：Ruff lint、`git diff --check` 通過；排除固定 Windows Bash launcher 問題與 destructive live integration 的 suite 為 `311 passed`。不可在 `8766` 開啟時把 `tests/test_integration.py` 當離線 suite 執行：一次後續廣泛 pytest 依序建立未 teardown 的 Camera/LiDAR/robots，再於 `TestSimulationTools::test_play` 進入 Replicator `reset_scenario()` 時造成 native crash；該 run 不納入 3.5 驗收。dump ID=`c70a7057-a692-4ec4-9615-f6190711630e`、當時 SHA-256=`784A1AAE6AF730ED090A29C4CE8B42DD08A71121DDFA818CF1D3D4E113B23877`；NVIDIA crash reporter 結束後刪除 zip/TOML，目前只保留同 ID `.py.txt` stack。契約與 verifier：`docs/STAGE_COMPOSITION.md`、`scripts/verify_stage_composition_live.py`。
+  > 離線驗收：Ruff lint、`git diff --check` 通過；排除固定 Windows Bash launcher 問題與 destructive live integration 的 suite 為 `311 passed`。不可在 `8766` 開啟時把 `tests/test_integration.py` 當離線 suite 執行：一次後續廣泛 pytest 依序建立未 teardown 的 Camera/LiDAR/robots，再於 `TestSimulationTools::test_play` 進入 Replicator `reset_scenario()` 時造成 native crash；該 run 不納入 3.5 驗收。dump ID=`c70a7057-a692-4ec4-9615-f6190711630e`、當時 SHA-256=`784A1AAE6AF730ED090A29C4CE8B42DD08A71121DDFA818CF1D3D4E113B23877`；NVIDIA crash reporter 結束後刪除 zip/TOML，目前只保留同 ID `.py.txt` stack。契約與 verifier：`docs/reference/STAGE_COMPOSITION.md`、`scripts/verify_stage_composition_live.py`。
 
 ## Phase 4：OmniGraph、ROS 2、Replicator 與 Humans
 
@@ -261,7 +261,7 @@
   > write guard：所有 graph 寫入要求 stopped timeline，只有 `set_action_graph_enabled(enabled=false)` 可在 playing 時緊急停用。新增 delete/connect/disconnect/enabled/configure/reload 寫入預設 `preview=true`；既有 create/edit 沒有 preview 參數。每項 apply 都做 operation-specific read-back/rollback，失敗使用 `GRAPH_TRANSACTION_ROLLED_BACK` 或 `GRAPH_ROLLBACK_FAILED`；delete 使用 `DeletePrimsCommand(destructive=False)` 並以 `undo()` rollback。
   > ScriptNode：`inline`／`file` mode 互斥，file mode 只接受 canonical existing `.py`；configure/reload 必須指定 exact graph/node，不允許跨 graph fallback。reload 會清除 ScriptNode cache、重設 `state:omni_initialized`，成功 read-back source hash/path 並回 `compile_state=pending_evaluation`。
   > evaluate/error：explicit evaluation 要求 stopped timeline且 graph enabled；pre/post node compute count 與 runtime messages 放入 read-back。disabled、render-pipeline graph 或 node error 分別回 `GRAPH_DISABLED`、`GRAPH_NOT_EXPLICITLY_EVALUABLE`、`GRAPH_EVALUATION_FAILED`。
-  > offline 驗證：tool count、capability、schema、public forwarding 與 handler contract tests 已加入；排除 Windows launcher 與 destructive live integration 的完整 safe suite 為 `322 passed`，Ruff lint 與 `git diff --check` 通過。完整契約為 `docs/OMNIGRAPH_LIFECYCLE.md`。
+  > offline 驗證：tool count、capability、schema、public forwarding 與 handler contract tests 已加入；排除 Windows launcher 與 destructive live integration 的完整 safe suite 為 `322 passed`，Ruff lint 與 `git diff --check` 通過。完整契約為 `docs/reference/OMNIGRAPH_LIFECYCLE.md`。
   > live 驗收（2026-08-25）：Isaac Sim 6.0.1 live extension 為 98-command registry；`/World/MCP_Task_4_1` graph 建立 3 nodes、1 條初始 edge。list/get、connect/disconnect、duplicate `CONNECTION_ALREADY_EXISTS`、inline `A→B→RECOVERED`、file `C→D` configure/reload 與 runtime exception `evaluation_state=error` 均通過。
   > evaluation/enabled/delete：stopped explicit evaluate 只增加 OnTick compute count，ScriptNode count 維持 `0`，沒有把未收到 playback tick 的 downstream node 誤報為已執行；短 Play/Stop 才驗證 ScriptNode source。disabled graph 的 compute count 固定為 `27`；delete 後 graph/prim 均 absent，最後 graph list restore、timeline stopped。Verifier：`scripts/verify_omnigraph_lifecycle_live.py`。
   > 驗證邊界：live `8766` 開啟時不可把 `tests/test_integration.py` 混入離線 regression suite。該檔會建立未 teardown Camera/LiDAR/robots，歷史上曾在後續 simulation play 進入 Replicator `reset_scenario()` 時造成 native crash；4.1 必須使用專用、具 teardown 與 health gate 的 verifier。
@@ -273,7 +273,7 @@
   > fail-closed live：bridge/core/nodes disabled 時，status 回三項 missing extensions，實際 create 回 `ROS2_PREREQUISITE_MISSING`，workflow count 維持 `0`。
   > external subscriber live（2026-08-25）：啟用 bundled Jazzy bridge/core/nodes `5.1.2/1.9.4/1.18.13`；domain `42` 的獨立 rclpy process 收到 20 筆 `/mcp_task_4_2/clock`，schema=`rosgraph_msgs/msg/Clock`，最近一次觀測約 `60.23 Hz`。delete 後 graph/prim/marker absent、list restore、timeline stopped。
   > offline 驗收：ROS 2 focused contract `43 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `336 passed`，Ruff、Python compile 與 `git diff --check` 通過。
-  > 驗證邊界：Clock 已完成真正外部 subscriber；TF／JointState／Camera／LiDAR 已完成 6.0 topology、forwarding、validation、preview/ownership offline contract，但仍需各自對應資產與外部 subscriber 的逐型 live schema/frame 驗收，不能由 Clock 證據代替。契約與 verifier：`docs/ROS2_WORKFLOWS.md`、`scripts/verify_ros2_workflows_live.py`。
+  > 驗證邊界：Clock 已完成真正外部 subscriber；TF／JointState／Camera／LiDAR 已完成 6.0 topology、forwarding、validation、preview/ownership offline contract，但仍需各自對應資產與外部 subscriber 的逐型 live schema/frame 驗收，不能由 Clock 證據代替。契約與 verifier：`docs/reference/ROS2_WORKFLOWS.md`、`scripts/verify_ros2_workflows_live.py`。
 
 - [x] 18. Replicator 與 synthetic data generation
   > 已實作：新增 7 個 Replicator SDG named tools，registry `106→113`；支援 bounded `BasicWriter`、manual trigger、frame/resolution/subframe/delta-time、固定 seed、typed transform/light randomization、非阻塞 start/status/cancel、terminal manifest 與 job/artifact delete。
@@ -282,7 +282,7 @@
   > artifact 修復：JSON annotation output 曾暴露 managed `.json` data 被 cleanup 誤判為 sidecar；sidecar 掃描已限縮為 exact 32-character managed ID，regression test 證明 JSON payload/manifest 可連續寫入與查詢。
   > live 驗收（2026-08-25）：Replicator core `1.13.27`；兩次 seed `4317` 的 2-frame RGB + semantic-segmentation job，randomization trace/hash 完全一致；每輪兩種 annotation frame count 都是 `2`。100-frame job 在 bounded frame safe point 取消，terminal=`cancelled` 且三項 cleanup 全 true。最後 scratch fixture absent、job count `0`、timeline stopped。
   > runtime 邊界：Isaac Sim 6.0.1 `BasicWriter` 的 bbox NumPy backend 會傳入目前 NumPy 已移除的 `fix_imports` 參數並產生 partial output，因此 bbox/distance 等 NumPy annotations 目前 fail-closed 列為 unavailable；named workflow 只宣稱 live-verified RGB 與 colorized semantic/instance segmentation，不能以部分 JSON 檔誤報 bbox 成功。
-  > offline 驗收：focused Replicator/artifact tests `26 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `351 passed, 1 deselected`；專用 verifier：`scripts/verify_replicator_sdg_live.py`。不可用會累積 sensor/robot 的 `tests/test_integration.py` 取代此 teardown acceptance。完整契約：`docs/REPLICATOR_SDG.md`。
+  > offline 驗收：focused Replicator/artifact tests `26 passed`；排除 Windows launcher 與 destructive live integration 的完整 safe suite `351 passed, 1 deselected`；專用 verifier：`scripts/verify_replicator_sdg_live.py`。不可用會累積 sensor/robot 的 `tests/test_integration.py` 取代此 teardown acceptance。完整契約：`docs/reference/REPLICATOR_SDG.md`。
 
 - [x] 19. Human lifecycle 與 runtime 行為控制
   > 現況：已有 `spawn_human`；移動、朝向、idle、刪除、行為更新與 NavMesh status 仍依賴 `reload_script`/`execute_script`。
@@ -292,7 +292,7 @@
   > 已實作：新增 9 個 lifecycle named tools，registry `113→122`；list/get 可辨識 owned/external，control/delete 僅允許 schema `1.0` MCP-owned human。MoveTo/LookAt/Idle 使用公開 `IBehaviorAgent`，behavior settings 支援 enabled、m/s speed、NavMesh areas 與 avoidance read-back。
   > 安全契約：所有新 write 預設 `preview=true`；runtime task 僅在 playing 派送，NavMesh bake/delete 僅在 stopped/paused 執行；delete 只移除 exact human，group 僅在 empty 時移除。
   > live 驗收（2026-08-25）：Isaac Sim `6.0.1-rc.7`、IRA `1.6.8`、Behavior/Navigation Core `110.1.4`；官方 physics ground + `/World/MCP_Task_4_4/NavMeshVolume` 在 1 frame 產生 ready NavMesh。manual human 建立於 `/World/MCP_Task_4_4/Characters/MCPHumans/MCPHumans_0`，ownership schema=`1.0`；stopped apply 正確回 `TIMELINE_STATE_CONFLICT`。playing 時 MoveTo task=`running` 且量測位移 `0.2639` stage units，LookAt/Idle 均回 exact running task；delete read-back human absent。
-  > teardown/health：scratch root absent、human list 恢復、timeline stopped、TCP `8766` owner PID `9280`、Kit Responding、post-run bounded error/crash signature=`0`（另有 hot-reload ext-folder 掃描到 repo 非 extension 目錄的既知 warnings）、重啟後新增 `.dmp/.dump`=`0`。完整 safe suite（排除 destructive `tests/test_integration.py` 與固定 Bash launcher）`365 passed`；Ruff、compile、`git diff --check` 通過。專用 verifier：`scripts/verify_human_lifecycle_live.py`；完整契約：`docs/HUMAN_LIFECYCLE.md`。
+  > teardown/health：scratch root absent、human list 恢復、timeline stopped、TCP `8766` owner PID `9280`、Kit Responding、post-run bounded error/crash signature=`0`（另有 hot-reload ext-folder 掃描到 repo 非 extension 目錄的既知 warnings）、重啟後新增 `.dmp/.dump`=`0`。完整 safe suite（排除 destructive `tests/test_integration.py` 與固定 Bash launcher）`365 passed`；Ruff、compile、`git diff --check` 通過。專用 verifier：`scripts/verify_human_lifecycle_live.py`；完整契約：`docs/reference/HUMAN_LIFECYCLE.md`。
   > 實測修復：Navigation Core 自有 tests 會在建立 volume 後先跑 5 個 app updates；handler 同步採用此 notice window。live fixture 必須使用 Navigation Core 可辨識的 physics ground；任意縮放 Cube 不能當作 NavMesh bake 成功證據。task ID 只證明 dispatch/acceptance，MoveTo 另以 position delta 證明實際執行。
 
 ## Phase 5：安全性、可靠性與可觀測性
@@ -303,7 +303,7 @@
   > 實作：增加 capability/政策開關、允許的 cwd roots、timeout、輸出上限、command ID、audit log；預設提示先使用 named tools。
   > 驗收：超時、超量輸出、越界 cwd 與禁用狀態均 fail closed；停止或取消後不繼續背景修改 stage。
   > 已實作：新增 `get_script_policy`、`get_script_audit_log`；execute/reload 共用 enabled、allowed roots、code bytes、cooperative timeout、per-stream output 與 background opt-in policy。預設禁止 thread/process/subprocess/async task 排程；audit 僅保存 command ID、SHA-256、結果、耗時與 byte counts，不保存 source。
-  > 邊界：timeout 可中止 Python bytecode，native Kit call 只能在控制權回到 Python 後中止；此能力只接受可信任程式碼，不宣稱為 hostile-code OS sandbox。完整契約與 verifier：`docs/COMMAND_GOVERNANCE.md`、`scripts/verify_command_governance_live.py`。
+  > 邊界：timeout 可中止 Python bytecode，native Kit call 只能在控制權回到 Python 後中止；此能力只接受可信任程式碼，不宣稱為 hostile-code OS sandbox。完整契約與 verifier：`docs/concepts/COMMAND_GOVERNANCE.md`、`scripts/verify_command_governance_live.py`。
   > live 驗收（2026-08-25）：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、124 commands。越界 `C:\Windows`、thread background、64-byte output cap 分別回 `SCRIPT_POLICY_DENIED`／`SCRIPT_POLICY_DENIED`／`SCRIPT_OUTPUT_LIMIT_EXCEEDED`；0.05 s infinite loop 回 `SCRIPT_TIMEOUT`，timeout 後 `/World/MCP_Task_5_1_5_2/MustStayAbsent` read-back 為 absent。audit 取得 5 筆 hash-only records。
 
 - [x] 21. Command ID、idempotency、transaction 與 read-back
@@ -331,7 +331,7 @@
   > 驗收：故意觸發錯誤時，可由 MCP response 追到對應 Kit warning/error；log 不包含 credential 或無上限 stdout。
   > 已實作：`get_isaac_logs` 保留 legacy string logs 並新增 structured records；每筆含 timestamp/severity/source/command ID/type/stage/frame/backend/extension。dispatcher 記錄 start/result，並用 command-window Kit log offset 關聯該 command 期間的 Warning/Error；不安裝可能造成 physics/GIL deadlock 的 Python carb consumer。
   > bounds/redaction：runtime 1000 records、query 200 records/256 KiB、message 8 KiB；支援 `filter_command_id`、severity、source。常見 api key/token/password/authorization/bearer 值在進 buffer 前遮罩。
-  > live 驗收（2026-08-25）：intentional `carb.log_warn` 與 captured stdout 由同一 command ID 查得 dispatcher/kit/stdout 三種 source；structured records 與 legacy logs 的 synthetic `token=` 值都只出現 `[REDACTED]`，raw value absent。final-restart 專用 verifier 回 4 筆 correlated records，無 GPU crash signature；fixture/timeline/port/dump health 同 Task 22。完整契約與 verifier：`docs/JOB_DIAGNOSTICS.md`、`scripts/verify_job_diagnostics_live.py`。
+  > live 驗收（2026-08-25）：intentional `carb.log_warn` 與 captured stdout 由同一 command ID 查得 dispatcher/kit/stdout 三種 source；structured records 與 legacy logs 的 synthetic `token=` 值都只出現 `[REDACTED]`，raw value absent。final-restart 專用 verifier 回 4 筆 correlated records，無 GPU crash signature；fixture/timeline/port/dump health 同 Task 22。完整契約與 verifier：`docs/concepts/JOB_DIAGNOSTICS.md`、`scripts/verify_job_diagnostics_live.py`。
   > offline 驗收：focused lifecycle/transport/log/schema contracts `46 passed`；完整 safe suite（排除 destructive live integration 與固定 Windows Bash launcher）`384 passed, 1 deselected`；Ruff、compile、`git diff --check` 通過。
 
 ## Phase 6：測試、報告與發布
@@ -342,16 +342,16 @@
   > 實作：拆成純 unit、schema contract、offline adapter mock、destructive scratch-stage live tests；每次 live run 建立唯一 stage/prim namespace，結束後 read-back 清理。
   > 驗收：unit/contract 可離線重跑；live harness 拒絕非 scratch stage；Windows launcher 測試與 Unix Bash 測試分平台執行。
   > 已實作（2026-08-26）：pytest marker 將 suite 分成 `unit`、`contract`、`offline_adapter`、`live/destructive`、`windows_launcher`、`unix_launcher`；CI 新增 Windows/Ubuntu offline matrix，並把 PowerShell/Bash launcher 拆成各自平台 job。legacy integration 預設 skip，只有完整 confirmation、exact scratch USD、允許根目錄、stopped timeline 全部成立才可進入。
-  > scratch contract：`ScratchRun.validate()` 在任何 write 前拒絕匿名 stage、path mismatch、root escape、playing timeline 與既存 namespace；每輪配置 `/World/MCP_Live_<32 hex>`，cleanup 只刪該 root 並讀回 absent。當前 8766 的匿名 stage 實測被拒絕，未發生 Stage mutation。契約與測試：`docs/LIVE_TEST_HARNESS.md`、`isaac_mcp/live_testing.py`、`tests/test_live_testing.py`。
+  > scratch contract：`ScratchRun.validate()` 在任何 write 前拒絕匿名 stage、path mismatch、root escape、playing timeline 與既存 namespace；每輪配置 `/World/MCP_Live_<32 hex>`，cleanup 只刪該 root 並讀回 absent。當前 8766 的匿名 stage 實測被拒絕，未發生 Stage mutation。契約與測試：`docs/development/LIVE_TEST_HARNESS.md`、`isaac_mcp/live_testing.py`、`tests/test_live_testing.py`。
   > offline 驗收：`384 passed, 70 deselected`；Windows PowerShell launcher `16 passed`；Unix Bash launcher 已隔離到 Ubuntu CI，本機 Windows 的 `bash.exe` 因 WSL 未安裝 `/bin/bash` 不納入失敗判定。Ruff、publish-candidate format 與 `git diff --check` 全數通過。
 
 - [x] 25. 目前 128 個 tools 的統一 Isaac Sim 6.0.1 live 報告
   > 現況：歷史 42-tool 報告為 38 passed、2 partial、2 external-config blocked；目前新增的 NVIDIA asset、human、capability、LiDAR config、artifact transport、sensor lifecycle 與 Robot joint control 工具未納入同一輪 56-tool live matrix。
-  > 缺漏位置：`docs/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
+  > 缺漏位置：`docs/research/ALL_TOOLS_TEST_REPORT.md` 與新的 machine-readable result artifact。
   > 實作：每個 tool 記錄用途、前置條件、input、read-back、結果、限制、Kit log、artifact/hash；外部 API key 阻塞與程式缺陷分開。
   > 驗收：56 個現有 tools 加上本 task 後續新增 tools 全部有逐項證據；pass/partial/blocked/unsupported 定義固定，禁止只有總數。
-  > 已實作（2026-08-26）：source AST 自動盤點 128 個 named tools，逐項輸出用途、input、前置條件、read-back、固定狀態、verifier/date、Kit log 範圍、artifact/hash 契約、限制與 blocker。tracked machine artifact 為 `docs/ALL_TOOLS_TEST_RESULTS.json`；產生器與相容入口都只做 read-only snapshot，不再呼叫 `clear_scene`。
-  > 本次 runtime snapshot：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、128 commands、timeline stopped。聚合結果 `117 pass / 11 blocked / 0 fail`；其中 8 個 ROS 2 tools 因目前 bridge/core/nodes 關閉而 blocked，仍保留 2026-08-25 external subscriber live 證據；`search_usd`／`generate_3d` 因外部 provider 設定 blocked；`spawn_nvidia_asset` 因缺 dedicated exact-path scratch live postcondition blocked，未以 catalog/contract presence 冒充 pass。報告：`docs/ALL_TOOLS_TEST_REPORT.md`、`docs/ALL_TOOLS_TEST_RESULTS.json`；產生器：`scripts/generate_all_tools_report.py`。
+  > 已實作（2026-08-26）：source AST 自動盤點 128 個 named tools，逐項輸出用途、input、前置條件、read-back、固定狀態、verifier/date、Kit log 範圍、artifact/hash 契約、限制與 blocker。tracked machine artifact 為 `docs/research/ALL_TOOLS_TEST_RESULTS.json`；產生器與相容入口都只做 read-only snapshot，不再呼叫 `clear_scene`。
+  > 本次 runtime snapshot：Isaac Sim `6.0.1-rc.7`、`IsaacAdapterV6`、PhysX、128 commands、timeline stopped。聚合結果 `117 pass / 11 blocked / 0 fail`；其中 8 個 ROS 2 tools 因目前 bridge/core/nodes 關閉而 blocked，仍保留 2026-08-25 external subscriber live 證據；`search_usd`／`generate_3d` 因外部 provider 設定 blocked；`spawn_nvidia_asset` 因缺 dedicated exact-path scratch live postcondition blocked，未以 catalog/contract presence 冒充 pass。報告：`docs/research/ALL_TOOLS_TEST_REPORT.md`、`docs/research/ALL_TOOLS_TEST_RESULTS.json`；產生器：`scripts/generate_all_tools_report.py`。
 
 - [x] 26. 文件、相容性、migration 與 release gate
   > 現況：已有 README 與部分測試報告，但新增 response/artifact/capability 契約會影響 client。
