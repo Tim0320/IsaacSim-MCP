@@ -20,6 +20,7 @@
 - [Capabilities](reference/CAPABILITIES.md)
 - [Backend capability matrix](reference/BACKEND_CAPABILITY_MATRIX.md)
 - [Response schema](reference/RESPONSE_SCHEMA.md)
+- [Error codes and Agent recovery](reference/ERROR_CODES.md)
 - Camera 與 LiDAR：[RGB](reference/CAMERA_RGB.md)、[Camera outputs](reference/CAMERA_OUTPUTS.md)、[LiDAR config](reference/LIDAR_CONFIG.md)、[Point cloud](reference/LIDAR_POINT_CLOUD.md)、[Sensor lifecycle](reference/SENSOR_LIFECYCLE.md)
 - Robot 與 motion：[Joint control](reference/ROBOT_JOINT_CONTROL.md)、[Drive config](reference/ROBOT_JOINT_DRIVE_CONFIG.md)、[Motion](reference/MOTION_CONTROL.md)、[Controller profiles](reference/CONTROLLER_PROFILES.md)
 - Physics 與 USD：[Parameters](reference/PHYSICS_PARAMS.md)、[Authoring](reference/PHYSICS_AUTHORING.md)、[Materials](reference/PHYSICS_MATERIALS.md)、[Stage composition](reference/STAGE_COMPOSITION.md)
@@ -40,5 +41,6 @@
 - [Machine-readable evidence snapshot](research/ALL_TOOLS_TEST_RESULTS.json)
 - [Historical 42-tool report](research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md)
 - [Capability verification history](research/CAPABILITY_HISTORY.md)
+- [Transport and V6 adapter refactor research](research/TRANSPORT_AND_V6_REFACTOR_PLAN.md)
 
 Research 檔案保存有日期的 evidence。要宣稱目前 running Isaac Sim 的能力，必須重新讀取 `get_capabilities` 並執行 guarded live verification。

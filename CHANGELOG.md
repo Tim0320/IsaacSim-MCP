@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — CI v2 and recovery-oriented error reference
+
+- Expanded CI to run on pull requests and pushes to `main`, test Python 3.10/3.11/3.12, verify both platform launchers and generated tool inventory, build a wheel, and smoke-install it in a clean environment.
+- Restored Python 3.10 test compatibility with a conditional `tomli` development dependency.
+- Added a centralized error-code action matrix for retry, reconnect, capability query, request correction, read-back, and no-replay decisions.
+- Documented measured TCP framing risks, typed transport exception requirements, oversized handler seams, and a contract-preserving `IsaacAdapterV6` facade decomposition plan.
+
 ### Changed — documentation architecture and project authority
 
 - Split documentation into `getting-started`, `concepts`, `reference`, `development`, and `research`, with `docs/README.md` as the stable index.

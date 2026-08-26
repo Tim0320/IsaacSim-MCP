@@ -96,6 +96,7 @@ Package、extension、response、capability 與 backend-matrix version 各有獨
 - `research/`：有日期的 1.x～6.x tasks 與 verification snapshots。
 
 Agent 工作流程在 [.agents/skills/omniverse-windows-workspace/SKILL.md](.agents/skills/omniverse-windows-workspace/SKILL.md)。Tool、version 與 capability 的權威來源見 [Authority and Generated Metadata](docs/reference/AUTHORITY.md)。
+Agent 的 retry、reconnect、read-back 與 fail-closed 行為見 [Error Codes and Agent Recovery](docs/reference/ERROR_CODES.md)。
 
 ## Safety 與 verification
 

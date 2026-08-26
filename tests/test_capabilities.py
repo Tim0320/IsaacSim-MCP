@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 from isaac_sim_mcp_extension import __version__ as extension_version
 from isaac_sim_mcp_extension.adapters.base import IsaacAdapterBase
 from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
