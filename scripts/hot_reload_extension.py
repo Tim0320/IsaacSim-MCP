@@ -14,12 +14,17 @@ import isaac_sim_mcp_extension.adapters.base as base_mod
 import isaac_sim_mcp_extension.adapters.v5 as v5_mod
 import isaac_sim_mcp_extension.adapters.v6 as v6_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime as v6_runtime_init
+import isaac_sim_mcp_extension.adapters.v6_runtime.assets as v6_assets_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime.capabilities as v6_capabilities_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime.context as v6_context_mod
+import isaac_sim_mcp_extension.adapters.v6_runtime.lighting as v6_lighting_mod
+import isaac_sim_mcp_extension.adapters.v6_runtime.materials as v6_materials_mod
+import isaac_sim_mcp_extension.adapters.v6_runtime.motion as v6_motion_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime.physics as v6_physics_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime.robots as v6_robots_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime.scene as v6_scene_mod
 import isaac_sim_mcp_extension.adapters.v6_runtime.sensors as v6_sensors_mod
+import isaac_sim_mcp_extension.adapters.v6_runtime.simulation as v6_simulation_mod
 import isaac_sim_mcp_extension.adapters.version as version_mod
 import isaac_sim_mcp_extension.controller_profiles as controller_profiles_mod
 import isaac_sim_mcp_extension.handlers as handlers_init
@@ -48,7 +53,12 @@ for module in (
     v6_scene_mod,
     v6_physics_mod,
     v6_robots_mod,
+    v6_motion_mod,
     v6_sensors_mod,
+    v6_materials_mod,
+    v6_lighting_mod,
+    v6_assets_mod,
+    v6_simulation_mod,
     v6_runtime_init,
     v5_mod,
     v6_mod,

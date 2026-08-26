@@ -208,27 +208,60 @@ D.6 execution evidence：
 
 ## D.7 MotionRuntime
 
-- [ ] planning config、IK、trajectory store、motion jobs與update subscription整組搬移。
-- [ ] `MotionRuntime` 可以依賴 `RobotRuntime`，反向依賴禁止。
-- [ ] 保留 non-blocking execution、cancel、terminal state與subscription cleanup。
-- [ ] 不移入 MCP unified job manager semantics。
-- [ ] 執行 motion/IK/trajectory/controller tests與 guarded live verifier。
+- [x] planning config、IK、trajectory store、motion jobs與update subscription整組搬移。
+- [x] `MotionRuntime` 可以依賴 `RobotRuntime`，反向依賴禁止。
+- [x] 保留 non-blocking execution、cancel、terminal state與subscription cleanup。
+- [x] 不移入 MCP unified job manager semantics。
+- [x] 執行 motion/IK/trajectory/controller tests與 guarded live verifier。
+
+| Evidence | Result |
+|---|---|
+| Added | `v6_runtime/motion.py`, `test_v6_runtime_motion.py` |
+| State owner | trajectory store、motion jobs與update subscription唯一owner為`MotionRuntime`；facade只保留compatibility property與explicit forwarder |
+| Dependency | `MotionRuntime -> SceneRuntime, RobotRuntime`；RobotRuntime沒有反向dependency，且沒有unified job manager state |
+| Lifecycle | non-blocking completion、cancel、1 ms timeout terminal state、shutdown cancellation與subscription cleanup皆保留 |
+| Focused tests | 95 passed，涵蓋motion、adapter、robot/controller、capability與64-method decomposition contract |
+| Full offline after D.7 | 480 passed / 70 deselected |
+| Guarded live | Isaac Sim `6.0.1-rc.7` / PhysX；IK position error `7.363885225415161e-07 m`、RRT collision check、non-blocking completion、cancel與timeout terminal state通過 |
+| Live safety | scratch robot、ground與physics exact paths absent；timeline stopped；128 handlers重新註冊 |
+| Pre-live backup | `E:\碩士論文\backups\isaacsim-mcp\20260826-212519-949-pre-live-phase-d7`；restore comparison通過，281 files、2 untracked |
 
 ## D.8 Handler-owned runtime boundary gate
 
-- [ ] 分別盤點 Graph、ROS2、Replicator、Human handler中的 raw Isaac API、MCP policy與job/ownership code。
-- [ ] 只有 raw runtime operation可候選移入 adapter component。
-- [ ] 若 extraction 需要 handlers直接依賴 component、改 stable errors或同時改 orchestration，記錄並延後到 Phase F。
-- [ ] 禁止為滿足目標目錄而建立空 module。
-- [ ] 每個通過 gate 的 domain獨立 extraction、test、contract comparison與 live verification。
+- [x] 分別盤點 Graph、ROS2、Replicator、Human handler中的 raw Isaac API、MCP policy與job/ownership code。
+- [x] 只有 raw runtime operation可候選移入 adapter component。
+- [x] 若 extraction 需要 handlers直接依賴 component、改 stable errors或同時改 orchestration，記錄並延後到 Phase F。
+- [x] 禁止為滿足目標目錄而建立空 module。
+- [x] 每個通過 gate 的 domain獨立 extraction、test、contract comparison與 live verification；本輪0個domain通過，沒有不適用的空 extraction。
+
+| Domain | Boundary result |
+|---|---|
+| Graph | `omni.graph` authoring/evaluation與stopped-timeline policy、preview、source hash、ownership/read-back、delete update loop交織；拆分會同時改handler orchestration與stable errors，延後Phase F。 |
+| ROS2 | extension prerequisites、topic/frame/domain/QoS validation、ownership marker與workflow graph spec共用Graph handler流程；raw OG/USD操作不能獨立移動，延後Phase F。 |
+| Replicator | raw Replicator orchestration與bounded job lifecycle、artifact ingestion/manifest、randomizer restore同一owner；拆分會切開job/artifact semantics，延後Phase F。 |
+| Human | IRA/Navigation APIs與human ownership、Behavior Agent resolution、timeline policy、NavMesh bake/wait、delete read-back交織，延後Phase F。 |
+| Enforcement | `test_v6_runtime_handler_boundary.py`確認沒有建立四個空runtime，且handlers不import `v6_runtime`。 |
 
 ## D.9 Materials, simulation and final facade cleanup
 
-- [ ] 根據實際 cohesion決定 material/lighting/assets 是否形成具名 runtime，禁止 `IntegrationRuntime` 垃圾桶。
-- [ ] 抽出 simulation/script raw runtime時保留 sync/async、Kit scheduling與policy boundary。
-- [ ] `v6.py` 最終只保留 composition root、explicit forwarding與真正跨-domain coordination。
-- [ ] 禁止 dynamic forwarding；ABC conformance、introspection與 monkeypatch targets 必須保留。
-- [ ] 更新 Architecture/Skill reference，只記錄完成後的實際結構。
+- [x] 根據實際 cohesion決定 material/lighting/assets 是否形成具名 runtime，禁止 `IntegrationRuntime` 垃圾桶。
+- [x] 抽出 simulation/script raw runtime時保留 sync/async、Kit scheduling與policy boundary。
+- [x] `v6.py` 最終只保留 composition root、explicit forwarding與真正跨-domain coordination。
+- [x] 禁止 dynamic forwarding；ABC conformance、introspection與 monkeypatch targets 必須保留。
+- [x] 更新 Architecture/Skill reference，只記錄完成後的實際結構。
+
+| Evidence | Result |
+|---|---|
+| Named runtimes | 新增`MaterialRuntime`、`LightingRuntime`、`AssetRuntime`與`SimulationRuntime`；沒有`IntegrationRuntime`。 |
+| Policy boundary | weak-reference bridges讓base read-back、facade helper與monkeypatch targets維持可見；handler仍只依賴64-method facade。 |
+| Simulation/script | timeline play/pause/stop、physics-only exact step、state、bounded execute/reload與ScriptNode recompile整組搬移；`_exec_namespaces`唯一runtime owner並保留facade compatibility property。 |
+| Facade result | `v6.py`由baseline 3,366 lines / 163,385 bytes降至667 lines / 27,354 bytes；沒有`__getattr__`或dynamic forwarding。 |
+| Focused tests | D.7-D.9 facade/runtime/adapter/handler boundary tests 72 passed。 |
+| Full offline | 485 passed / 70 deselected；128 source-derived tools inventory check通過。 |
+| Windows/package | Windows launcher 16 passed；wheel build與clean Python 3.12 smoke install通過，version `0.6.0`。 |
+| Guarded live | hot reload成功註冊128 handlers；physics material verifier通過8 bindings與181 steps；scratch燈光create/modify、clone、execute_script與simulation state read-back通過。 |
+| Live cleanup | `/World/MCP_Task_3_4`與`/World/MCP_Phase_D9` exact roots皆absent、timeline stopped、PhysX、Isaac Sim `6.0.1-rc.7`、TCP `8766`持續listening。 |
+| Pre-live backup | `E:\碩士論文\backups\isaacsim-mcp\20260826-213625-626-pre-live-phase-d9`；restore comparison通過，287 files、8 untracked。 |
 
 ## 每個 extraction slice 的 gate
 
@@ -242,12 +275,12 @@ D.6 execution evidence：
 
 ## Definition of Done
 
-- [ ] `IsaacAdapterV6` 是 explicit facade/composition root，`v6.py` 明顯縮小。
-- [ ] Domain components有單一 state owner、單向 dependencies且沒有 circular imports。
-- [ ] RuntimeContext沒有 MCP policy；CapabilityRuntime沒有取代 high-level capability response。
-- [ ] Handler 不感知 `v6_runtime` internal decomposition。
-- [ ] 64 個 baseline public methods保持可用且 signatures/behavior不變。
-- [ ] 128 source-derived tools與 generated inventory不變。
-- [ ] Request/response/error/capability/idempotency/ownership/read-back/rollback/job semantics不變。
-- [ ] Offline、contract、domain-specific、launcher、package與必要 live gates通過。
-- [ ] 每個 extraction slice可以獨立 review與回復。
+- [x] `IsaacAdapterV6` 是 explicit facade/composition root，`v6.py` 明顯縮小。
+- [x] Domain components有單一 state owner、單向 dependencies且沒有 circular imports。
+- [x] RuntimeContext沒有 MCP policy；CapabilityRuntime沒有取代 high-level capability response。
+- [x] Handler 不感知 `v6_runtime` internal decomposition。
+- [x] 64 個 baseline public methods保持可用且 signatures/behavior不變。
+- [x] 128 source-derived tools與 generated inventory不變。
+- [x] Request/response/error/capability/idempotency/ownership/read-back/rollback/job semantics不變。
+- [x] Offline、contract、domain-specific、Windows launcher、package與必要 live gates通過；Linux與Python 3.10/3.12矩陣由CI執行。
+- [x] 每個 extraction slice可以獨立 review與回復。

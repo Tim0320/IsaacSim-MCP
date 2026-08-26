@@ -28,6 +28,7 @@ The environment check reports state; it does not authorize installation, process
 - [4.x](references/isaacsim-mcp-4x.md): OmniGraph, ScriptNode, ROS 2, Replicator SDG, humans, Behavior Agents, and NavMesh.
 - [5.x](references/isaacsim-mcp-5x.md): script policy, command governance, idempotency, jobs, transport, and diagnostics.
 - [6.x](references/isaacsim-mcp-6x.md): test layers, scratch-stage safety, generated inventory, evidence reports, migration, release gates, and publishing.
+- [V6 adapter runtime](references/v6-adapter-runtime.md): read before changing `IsaacAdapterV6`, `v6_runtime`, component state ownership, hot reload order, or the deferred Graph/ROS2/Replicator/Human boundary.
 
 These references contain dated acceptance evidence. They do not replace current `get_capabilities` output or a guarded live verifier.
 

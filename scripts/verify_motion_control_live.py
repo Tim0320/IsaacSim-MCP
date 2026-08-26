@@ -8,6 +8,7 @@ import math
 import time
 
 from isaac_mcp.connection import IsaacConnection
+from isaac_mcp.tool_inventory import tool_count
 
 ROBOT_PATH = "/World/MCP_Task_2_3_Robot"
 OWNED_PHYSICS_PATHS = ("/World/groundPlane", "/World/PhysicsScene")
@@ -36,7 +37,18 @@ art.set_dof_positions(q)
 art.set_dof_position_targets(q)
 print("initialized")
 """
-    result = _data(connection.send_command("simulation.execute_script", {"code": code}))
+    response = None
+    for _attempt in range(60):
+        response = connection.send_command("simulation.execute_script", {"code": code})
+        if response["status"] == "success":
+            break
+        if response.get("code") != "COMMAND_FAILED" or "physics tensor entity is not valid" not in response.get(
+            "message", ""
+        ):
+            raise AssertionError(response)
+        time.sleep(0.1)
+    assert response is not None
+    result = _data(response)
     assert "initialized" in result["stdout"], result
 
 
@@ -48,7 +60,7 @@ allowed = {ROBOT_PATH!r}
 unexpected = []
 for prim in omni.usd.get_context().get_stage().TraverseAll():
     path = str(prim.GetPath())
-    if path in {{"/World", "/PhysicsScene", "/Environment"}} or path.startswith(("/Render", "/OmniverseKit", "/Environment/")):
+    if path in {{"/World", "/PhysicsScene", "/Environment", "/Orchestrator"}} or path.startswith(("/Render", "/OmniverseKit", "/Environment/", "/Orchestrator/")):
         continue
     if path == allowed or path.startswith(allowed + "/"):
         continue
@@ -68,7 +80,7 @@ def main() -> int:
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1")
         assert capabilities["runtime"]["physics_backend"] == "physx"
-        assert capabilities["extension"]["command_count"] == 68
+        assert capabilities["extension"]["command_count"] == tool_count()
         assert capabilities["feature_flags"]["motion.ik_and_planning"]["state"] == "supported"
 
         _assert_scratch_stage(connection)

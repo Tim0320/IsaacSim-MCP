@@ -45,7 +45,7 @@ def _stop_body_src(filename):
 
 
 def test_v6_stop_resets_physics():
-    src = _stop_body_src("v6.py")
+    src = _stop_body_src(os.path.join("v6_runtime", "simulation.py"))
     assert "reset" in src.lower()
     assert "stop()" in src  # still stops the timeline first
 

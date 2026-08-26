@@ -916,7 +916,11 @@ def test_get_simulation_state_detects_physics_scene_with_isa():
         "isaac_sim_mcp_extension",
         "adapters",
     )
-    for fname in ("v5.py", "v6.py"):
+    implementations = (
+        "v5.py",
+        os.path.join("v6_runtime", "simulation.py"),
+    )
+    for fname in implementations:
         with open(os.path.join(adapters_dir, fname)) as f:
             src = f.read()
         assert "IsA(UsdPhysics.Scene)" in src, f"{fname}: physics-scene check must use IsA"
@@ -1028,7 +1032,8 @@ def test_v6_step_must_not_pump_the_kit_event_loop(monkeypatch):
         "isaac.sim.mcp_extension",
         "isaac_sim_mcp_extension",
         "adapters",
-        "v6.py",
+        "v6_runtime",
+        "simulation.py",
     )
     with open(src_path) as f:
         text = f.read()
@@ -1038,7 +1043,7 @@ def test_v6_step_must_not_pump_the_kit_event_loop(monkeypatch):
         if isinstance(node, ast.FunctionDef) and node.name == "step":
             step_src = ast.get_source_segment(text, node)
             break
-    assert step_src is not None, "v6.step not found"
+    assert step_src is not None, "V6 SimulationRuntime.step not found"
     code = "\n".join(line.split("#", 1)[0] for line in step_src.splitlines())
     assert "get_app().update()" not in code, "v6.step must not pump the kit event loop"
     assert "SimulationManager.step" in code

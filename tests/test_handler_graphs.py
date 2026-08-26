@@ -67,7 +67,11 @@ def test_force_recompile_helper_exists_and_is_reused():
 
 
 def test_reload_script_scans_scriptnodes_by_scriptpath():
-    for fname in ("v6.py", "v5.py"):
+    implementations = (
+        os.path.join("v6_runtime", "simulation.py"),
+        "v5.py",
+    )
+    for fname in implementations:
         path = os.path.join(
             os.path.dirname(__file__),
             "..",

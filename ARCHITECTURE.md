@@ -30,6 +30,56 @@ flowchart LR
 | Adapter | `isaac_sim_mcp_extension/adapters/` | 隔離不同 Isaac Sim version 與 backend API。 |
 | Isaac Sim | 外部 runtime | 持有 USD Stage、timeline、sensor、physics、graph、Replicator、robot 與 assets。 |
 
+## IsaacAdapterV6 runtime composition
+
+`IsaacAdapterV6` 是64個public methods的explicit facade。Handler只看facade，不import `v6_runtime`；domain component只處理Isaac Sim 6.x integration與自己的state owner。
+
+```mermaid
+flowchart TD
+    F[IsaacAdapterV6 facade] --> C[RuntimeContext]
+    F --> Cap[CapabilityRuntime]
+    F --> Scene[SceneRuntime]
+    F --> Physics[PhysicsRuntime]
+    F --> Robot[RobotRuntime]
+    F --> Motion[MotionRuntime]
+    F --> Sensor[SensorRuntime]
+    F --> Material[MaterialRuntime]
+    F --> Lighting[LightingRuntime]
+    F --> Asset[AssetRuntime]
+    F --> Simulation[SimulationRuntime]
+
+    Cap --> C
+    Scene --> C
+    Physics --> C
+    Physics --> Scene
+    Robot --> Scene
+    Robot --> Physics
+    Motion --> Scene
+    Motion --> Robot
+    Sensor --> Scene
+    Material --> Scene
+    Lighting --> Scene
+    Simulation --> C
+```
+
+| Component | State / responsibility |
+|---|---|
+| `RuntimeContext` | stage access、Isaac version與live backend detection；不持有MCP policy。 |
+| `CapabilityRuntime` | V6 backend matrix資料；high-level capability response仍由handler組裝。 |
+| `SceneRuntime` | discovery、reference、prim authoring與transform read/write。 |
+| `PhysicsRuntime` | SimulationManager bridge、physics scene/body/group/joint、params read-back與rollback。 |
+| `RobotRuntime` | articulation cache、joint state/command、drive config與controller integration。 |
+| `MotionRuntime` | IK/planning、trajectory store、motion jobs、update subscription與terminal cleanup。 |
+| `SensorRuntime` | camera/LiDAR caches、metadata、render request與sensor lifecycle。 |
+| `MaterialRuntime` | visual/physics material authoring、binding read-back與rollback。 |
+| `LightingRuntime` | light creation與mutation。 |
+| `AssetRuntime` | prim clone與Isaac Sim 6 two-step URDF import。 |
+| `SimulationRuntime` | timeline、exact physics step、state、bounded script execution/reload與ScriptNode recompile。 |
+
+Facade只保留composition、explicit forwarding與真正跨domain的timeline-stop coordination。Policy bridges使用weak reference回到facade，保留base policy、ABC/introspection與monkeypatch targets，同時避免component反向擁有facade。
+
+Graph、ROS2、Replicator與Human目前仍由handler擁有：raw Isaac API與stable errors、ownership、job/artifact或workflow orchestration尚未形成可獨立搬移的邊界。這四個domain延後到Phase F，沒有建立空runtime。
+
 ## Request lifecycle
 
 1. MCP client 從 server registry 選擇 named tool。
