@@ -12,6 +12,8 @@ from typing import Any
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from isaac_mcp.tool_inventory import MCP_LOCAL_TOOL_NAMES
+
 CAMERA_PATH = "/World/MCP_Task_1_6_Camera"
 LIDAR_PATH = "/World/MCP_Task_1_6_Lidar"
 TARGET_PATH = "/World/MCP_Task_1_6_Target"
@@ -269,7 +271,7 @@ async def main() -> int:
                 capabilities = _payload(await session.call_tool("get_capabilities", {}))
                 data = capabilities["data"]
                 assert data["runtime"]["isaac_sim_version"].startswith("6.0.1")
-                assert data["extension"]["command_count"] == len(tools)
+                assert data["extension"]["command_count"] == len(tools - MCP_LOCAL_TOOL_NAMES)
                 assert data["feature_flags"]["sensor.lifecycle"]["state"] == "supported"
 
                 target = _payload(

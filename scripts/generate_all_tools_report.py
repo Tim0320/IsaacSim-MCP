@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from isaac_mcp.connection import IsaacConnection
-from isaac_mcp.tool_inventory import inventory
+from isaac_mcp.tool_inventory import MCP_LOCAL_TOOL_NAMES, extension_tool_count, inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULT_PATH = ROOT / "docs" / "research" / "ALL_TOOLS_TEST_RESULTS.json"
@@ -191,6 +191,12 @@ _evidence(
     verifier="scripts/verify_job_diagnostics_live.py",
     readback="correlated bounded structured records with credential redaction",
 )
+_evidence(
+    "get_runtime_status",
+    date="2026-08-27",
+    verifier="tests/test_runtime_status.py",
+    readback="atomic supervisor state, exit/restart evidence and protocol-level health",
+)
 
 OVERRIDES = {
     "spawn_nvidia_asset": {
@@ -248,10 +254,12 @@ def build(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     tools = inventory()
     if len(tools) != len({item["tool"] for item in tools}):
         raise RuntimeError("duplicate named tools found in source inventory")
-    if snapshot and snapshot.get("extension_command_count") != len(tools):
+    expected_extension_commands = extension_tool_count()
+    if snapshot and snapshot.get("extension_command_count") != expected_extension_commands:
         raise RuntimeError(
             "source/runtime tool count mismatch: "
-            f"source={len(tools)}, runtime={snapshot.get('extension_command_count')}"
+            f"mcp_tools={len(tools)}, mcp_local={len(MCP_LOCAL_TOOL_NAMES)}, "
+            f"expected_extension={expected_extension_commands}, runtime={snapshot.get('extension_command_count')}"
         )
     results = []
     for item in tools:
@@ -272,6 +280,18 @@ def build(snapshot: dict[str, Any] | None) -> dict[str, Any]:
         }
         if item["tool"] in OVERRIDES:
             entry.update(OVERRIDES[item["tool"]])
+        if item["tool"] == "get_runtime_status":
+            entry["prerequisites"] = ["Python MCP Server", "optional supervised launcher state file"]
+            entry["evidence"] = {
+                "type": "offline_contract_and_windows_launcher",
+                "verified_at": profile["date"],
+                "source": profile["verifier"],
+            }
+            entry["kit_log"] = {"checked": False, "result": "The MCP-local tool remains available without Kit."}
+            entry["artifacts"] = {"required": False, "integrity": "atomic bounded JSON state"}
+            entry["limitations"] = (
+                "Reports supervised process and protocol health; it does not diagnose arbitrary native root causes."
+            )
         if item["tool"] == "list_nvidia_assets" and snapshot:
             entry["evidence"] = {
                 "type": "read_only_live",
@@ -378,7 +398,13 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="validate inventory/live evidence without rewriting docs")
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args()
-    report = build(live_snapshot(args.port) if args.live else None)
+    snapshot = live_snapshot(args.port) if args.live else None
+    if snapshot is None and RESULT_PATH.exists():
+        try:
+            snapshot = json.loads(RESULT_PATH.read_text(encoding="utf-8")).get("live_snapshot")
+        except (OSError, ValueError, json.JSONDecodeError):
+            snapshot = None
+    report = build(snapshot)
     if not args.check:
         RESULT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         REPORT_PATH.write_text(markdown(report), encoding="utf-8")

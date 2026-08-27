@@ -24,7 +24,7 @@
 .\.venv\Scripts\python.exe .\scripts\generate_tool_inventory.py --check
 ```
 
-禁止在 package metadata 或手工維護的 README 內新增固定 tool count。All-tools evidence generator 同樣使用 `isaac_mcp.tool_inventory`；搭配 `--live` 時，source inventory 與 active extension command count 不一致會直接失敗。
+禁止在 package metadata 或手工維護的 README 內新增固定 tool count。All-tools evidence generator 同樣使用 `isaac_mcp.tool_inventory`；搭配 `--live` 時，active extension command count 必須等於 source inventory 的 Extension-routed subset。`MCP_LOCAL_TOOL_NAMES` 明確列出不依賴 Extension 的 server-local tools，目前包含 `get_runtime_status`。
 
 ## Versions
 

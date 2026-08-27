@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 TOOLS_ROOT = Path(__file__).resolve().parent / "tools"
+MCP_LOCAL_TOOL_NAMES = frozenset({"get_runtime_status"})
 
 
 def inventory() -> list[dict[str, Any]]:
@@ -63,6 +64,20 @@ def tool_names() -> tuple[str, ...]:
 def tool_count() -> int:
     """Return the source-derived public tool count."""
     return len(tool_names())
+
+
+def extension_tool_names() -> tuple[str, ...]:
+    """Return public tools whose implementation requires an extension command."""
+    names = tool_names()
+    unknown = MCP_LOCAL_TOOL_NAMES.difference(names)
+    if unknown:
+        raise RuntimeError(f"unknown MCP-local tools: {sorted(unknown)}")
+    return tuple(name for name in names if name not in MCP_LOCAL_TOOL_NAMES)
+
+
+def extension_tool_count() -> int:
+    """Return the expected active extension command count."""
+    return len(extension_tool_names())
 
 
 def _tool_name(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:

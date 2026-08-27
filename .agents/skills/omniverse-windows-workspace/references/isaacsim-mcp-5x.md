@@ -74,6 +74,14 @@
 
 2026-08-25 final live 驗收以 intentional `carb.log_warn` 與 captured stdout 取得 dispatcher、Kit、stdout 三種 source；structured/legacy log 都只保留 `[REDACTED]`，raw synthetic token absent。Scratch root absent、timeline stopped、TCP `8766` PID 31576 Responding、新增 dump 0。PID 與 record count 屬單次歷史數值。
 
+## Runtime supervision 與 crash recovery
+
+- `scripts/run_isaac_sim_supervised.ps1` 是 opt-in process owner。它沿用 `run_isaac_sim.ps1` 的 6.0.1、Extension、port 與 Physics GPU guard，只對非零 exit code 做 bounded restart；正常 exit `0` 不重啟。
+- 狀態檔預設位於 `%LOCALAPPDATA%\IsaacSim-MCP\runtime-state.json`，由 atomic replace 發布。只包含 bounded lifecycle、exit、health 與 restart evidence，不保存 environment、command source 或任意 log body。
+- `get_runtime_status` 是 MCP-local read-only tool，不依賴 TCP `8766`。Health 必須送出 `system.get_capabilities` protocol probe，不能用 port-open 取代。
+- Connection failure 使用 `ISAAC_RUNTIME_RECOVERING`、`ISAAC_RUNTIME_CRASHED` 或 `ISAAC_RUNTIME_UNAVAILABLE`。送出後斷線的 write 標成 `command_delivery=unknown`，不得自動 replay；恢復後先 read-back。
+- Supervisor 遇到 alive-but-unresponsive 程序只回報狀態，不擅自終止 Kit。這避免把暫時無回應或 crash reporter 誤判成可安全 kill 的程序。
+
 ## 驗證與發布
 
 Offline safe suite：
@@ -97,7 +105,7 @@ uv build
 ## Current-claim checklist
 
 1. 重新記錄 canonical checkout、remote、branch、HEAD、status 與 verified backup。
-2. 確認 Isaac Sim 6.0.1、source inventory 與 runtime command registry 一致、capability flags、TCP `8766`、Kit PID/response 與 physics GPU policy。
+2. 確認 Isaac Sim 6.0.1、source inventory 的 Extension-routed subset 與 runtime command registry 一致、capability flags、TCP `8766`、Kit PID/response 與 physics GPU policy。
 3. 只執行對應專用 verifier，並使用每次 run 唯一 idempotency key，避免歷史 replay 被誤判為新執行。
 4. Camera live job 先完成 Play 與 bounded warmup；SDG cancel 等待至少一個 completed-frame safe point。
 5. 捕捉 terminal state、repeat-query equality、redaction、cleanup、timeline、port、logs 與 dumps。沒有重跑 verifier 時，所有數值都標記為 historical。

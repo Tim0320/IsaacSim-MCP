@@ -9,7 +9,7 @@ import time
 import uuid
 
 from isaac_mcp.connection import IsaacConnection
-from isaac_mcp.tool_inventory import tool_count
+from isaac_mcp.tool_inventory import extension_tool_count
 
 ROOT = "/World/MCP_Task_5_3_5_4"
 CAMERA = f"{ROOT}/Camera"
@@ -49,7 +49,7 @@ def main() -> int:
         _data(connection.send_command("simulation.stop"))
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1")
-        assert capabilities["extension"]["command_count"] == tool_count()
+        assert capabilities["extension"]["command_count"] == extension_tool_count()
         assert capabilities["feature_flags"]["job.lifecycle"]["state"] == "supported"
         assert capabilities["feature_flags"]["diagnostics.correlation"]["state"] == "supported"
         assert capabilities["feature_flags"]["transport.limits"]["state"] == "supported"

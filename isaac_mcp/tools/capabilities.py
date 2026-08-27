@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Callable
 from mcp.server.fastmcp import FastMCP
 
 from isaac_mcp import __version__
+from isaac_mcp.runtime_status import IsaacRuntimeUnavailableError
+from isaac_mcp.runtime_status import get_runtime_status as read_runtime_status
 
 if TYPE_CHECKING:
     from isaac_mcp.connection import IsaacConnection
@@ -37,5 +39,27 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
                 "live_control_port": conn.port,
             }
             return json.dumps(result, indent=2, sort_keys=True)
+        except IsaacRuntimeUnavailableError as exc:
+            return json.dumps(exc.to_response(), indent=2, sort_keys=True)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)}, indent=2, sort_keys=True)
+
+    @mcp.tool("get_runtime_status")
+    def get_runtime_status() -> str:
+        """Read supervisor, crash, restart, and protocol-health state without requiring Isaac Sim.
+
+        This local diagnostic remains available when the extension socket is
+        closed. It never starts, stops, or mutates Isaac Sim and never replays a
+        failed command.
+        """
+        runtime = read_runtime_status()
+        return json.dumps(
+            {
+                "status": "success",
+                "code": "RUNTIME_STATUS_READ",
+                "message": "Read Isaac Sim runtime supervisor status",
+                "data": {"runtime": runtime},
+            },
+            indent=2,
+            sort_keys=True,
+        )

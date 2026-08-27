@@ -30,7 +30,10 @@ import socket
 import threading
 import time
 
-from isaac_mcp.connection import IsaacConnection
+import pytest
+
+from isaac_mcp.connection import IsaacConnection, IsaacRuntimeUnavailableError
+from isaac_mcp.tools import _runtime_aware_connection_provider, register_all_tools
 
 
 def test_connection_module_exists():
@@ -257,3 +260,77 @@ def test_send_command_rejects_oversized_request_before_send(monkeypatch):
     assert result["code"] == "REQUEST_TOO_LARGE"
     assert result["command_id"] == "oversized"
     assert sent == []
+
+
+def test_send_command_exposes_runtime_recovery_state_when_connect_fails(monkeypatch):
+    conn = IsaacConnection(host="127.0.0.1", port=8766)
+    conn.connect = lambda: False
+    monkeypatch.setattr(
+        "isaac_mcp.connection.get_runtime_status",
+        lambda **_kwargs: {
+            "state": "restart_backoff",
+            "availability_code": "ISAAC_RUNTIME_RECOVERING",
+            "runtime_responding": False,
+            "recommended_actions": ["wait_for_recovery", "do_not_replay_write"],
+        },
+    )
+
+    with pytest.raises(IsaacRuntimeUnavailableError) as error:
+        conn.send_command("scene.get_info", command_id="status-read")
+
+    response = error.value.to_response()
+    assert response["code"] == "ISAAC_RUNTIME_RECOVERING"
+    assert response["command_id"] == "status-read"
+    assert response["data"]["runtime"]["state"] == "restart_backoff"
+
+
+def test_runtime_aware_provider_preserves_diagnostics_through_legacy_tool_catches():
+    status = {
+        "state": "recovery_failed",
+        "availability_code": "ISAAC_RUNTIME_CRASHED",
+        "runtime_responding": False,
+        "port": 8766,
+        "recommended_actions": ["inspect_last_crash", "do_not_replay_write"],
+    }
+    provider = _runtime_aware_connection_provider(
+        lambda: (_ for _ in ()).throw(IsaacRuntimeUnavailableError(status, command_id="legacy-tool"))
+    )
+
+    result = provider().send_command("simulation.play")
+
+    assert result["code"] == "ISAAC_RUNTIME_CRASHED"
+    assert result["command_id"] == "legacy-tool"
+    assert result["data"]["runtime"]["state"] == "recovery_failed"
+
+
+def test_registered_legacy_tool_returns_stable_runtime_crash_envelope():
+    class _MCP:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self, name):
+            def decorator(function):
+                self.tools[name] = function
+                return function
+
+            return decorator
+
+    status = {
+        "state": "recovery_failed",
+        "availability_code": "ISAAC_RUNTIME_CRASHED",
+        "runtime_responding": False,
+        "port": 8766,
+        "recommended_actions": ["inspect_last_crash", "do_not_replay_write"],
+    }
+    mcp = _MCP()
+    register_all_tools(
+        mcp,
+        lambda: (_ for _ in ()).throw(IsaacRuntimeUnavailableError(status, command_id="scene-read")),
+    )
+
+    result = json.loads(mcp.tools["get_scene_info"]())
+
+    assert result["status"] == "error"
+    assert result["code"] == "ISAAC_RUNTIME_CRASHED"
+    assert result["command_id"] == "scene-read"
+    assert result["data"]["runtime"]["state"] == "recovery_failed"

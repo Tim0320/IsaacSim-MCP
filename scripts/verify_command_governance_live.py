@@ -8,7 +8,7 @@ import socket
 import time
 
 from isaac_mcp.connection import IsaacConnection
-from isaac_mcp.tool_inventory import tool_count
+from isaac_mcp.tool_inventory import extension_tool_count
 
 ROOT = "/World/MCP_Task_5_1_5_2"
 IDEMPOTENT_PRIM = f"{ROOT}/IdempotentCube"
@@ -47,7 +47,7 @@ def main() -> int:
         _data(connection.send_command("simulation.stop"))
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1"), capabilities["runtime"]
-        assert capabilities["extension"]["command_count"] == tool_count(), capabilities["extension"]
+        assert capabilities["extension"]["command_count"] == extension_tool_count(), capabilities["extension"]
         assert capabilities["feature_flags"]["execute_script"]["state"] == "supported"
         assert capabilities["feature_flags"]["command.governance"]["state"] == "supported"
 

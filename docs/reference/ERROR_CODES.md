@@ -34,13 +34,17 @@
 | `*_ROLLED_BACK` | Apply 失敗但 rollback read-back 成功。 | 否 | 否 | 可選 | 修正 root cause | 是 |
 | `*_ROLLBACK_FAILED` | Apply 與 rollback 都未能完成，state 不可信。 | 否 | 可選 | 可選 | 停止自動操作並要求人工檢查 | 是 |
 | `INTERNAL_ERROR`、`SOCKET_DISPATCH_ERROR`、`MCP_TOOL_ERROR` | 未分類的 server/runtime failure。 | read only | 是 | 可選 | 收集 diagnostics 與 read-back | 是 |
+| `ISAAC_RUNTIME_RECOVERING` | Supervisor 已偵測異常退出，正在 backoff 或重新啟動。 | bounded read | 是 | 否 | 等待 `get_runtime_status` 回 ready | 是 |
+| `ISAAC_RUNTIME_CRASHED` | Isaac Sim 異常退出且 bounded restart budget 已用盡。 | 否 | 否 | 否 | 讀取 `last_crash`、修復原因、重啟 supervisor | 是 |
+| `ISAAC_RUNTIME_UNAVAILABLE` | Extension protocol health 不可用，且沒有進行中的 recovery。 | bounded read | 是 | 否 | 啟動 supervised runtime | 是 |
 
 ## 提案名稱與目前 contract 的差異
 
 - Timeline guard 的實際 stable code 是 `TIMELINE_NOT_STOPPED`；目前沒有 `TIMELINE_MUST_BE_STOPPED`。
 - Backend support 由 `get_capabilities.backend_matrix` 與各 domain 的 `*_UNSUPPORTED` code 表達；目前沒有通用 `BACKEND_UNSUPPORTED`。
 - Ownership 使用 `HUMAN_NOT_OWNED`、`ROS2_WORKFLOW_NOT_OWNED` 等 domain-specific code；目前沒有通用 `RESOURCE_NOT_OWNED`。
-- `CONNECTION_LOST` 目前是 MCP client transport condition，尚未保證出現在 response envelope。連線中斷時可 reconnect，但 read 才能直接重送；write 必須先 read-back，或以原本相同的 `idempotency_key` 重送。
+- Connection loss 會依 supervisor 與 protocol health 狀態回 `ISAAC_RUNTIME_RECOVERING`、`ISAAC_RUNTIME_CRASHED` 或 `ISAAC_RUNTIME_UNAVAILABLE`。若 write 的 delivery state 不明，response 會保留 `command_delivery=unknown`；必須先 read-back，或確認 contract 後使用原本相同的 `idempotency_key` 重送。
+- `CONNECTION_LOST` 保留為舊版或提案中的 umbrella name；目前 wire contract 使用上述三個 runtime code。任何 delivery state 不明的 write 必須先 read-back，不能改用新的 idempotency key 盲目重送。
 
 Agent 不得把尚未存在的 umbrella name 當成 wire contract。未識別的 code 一律保留原 response、fail closed，並依 `status` 採最保守的 read-back／diagnostics 路徑。
 

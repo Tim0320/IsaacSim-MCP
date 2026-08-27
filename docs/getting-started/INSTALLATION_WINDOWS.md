@@ -50,7 +50,7 @@ py -3.10 -m venv .venv
 ## 3. 啟動 Isaac Sim live extension
 
 ```powershell
-.\scripts\run_isaac_sim.ps1
+.\scripts\run_isaac_sim_supervised.ps1
 ```
 
 launcher 會：
@@ -61,10 +61,20 @@ launcher 會：
 - 讓 extension 在 `127.0.0.1:8766` 監聽。
 - 依目前唯一 `display_active=Enabled` GPU 選擇明確 PhysX GPU ordinal。
 
+Supervised launcher 另外會對非零 exit code 做 bounded restart，並把 crash／restart／health evidence 寫入 `%LOCALAPPDATA%\IsaacSim-MCP\runtime-state.json`。預設 300 秒內最多重啟 3 次；正常 exit code `0` 不重啟。若 `8766` 已通過 protocol health probe，或 port 已被無回應程序占用，launcher 會拒絕啟動第二份 Isaac Sim。MCP Server 即使在 `8766` 關閉時也能用 `get_runtime_status` 讀取該狀態。
+
+完整 supervisor state、錯誤碼與 no-replay 規則見 [Runtime supervision 與 crash recovery](../concepts/RUNTIME_SUPERVISION.md)。
+
+需要 one-shot launcher 時仍可執行：
+
+```powershell
+.\scripts\run_isaac_sim.ps1
+```
+
 不要把 `/physics/cudaDevice=-1` 當成一般預設。雙 GPU normal Kit host loop 已知可能在 Timeline Stop 後於 `PhysXGpu_64.dll` crash。需要 override 時使用：
 
 ```powershell
-.\scripts\run_isaac_sim.ps1 -PhysicsGpu 1
+.\scripts\run_isaac_sim_supervised.ps1 -PhysicsGpu 1
 ```
 
 ## 4. 確認 8766 live route
@@ -78,7 +88,7 @@ Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8766 -State Listen
 
 - `runtime.isaac_sim_version` 以 `6.0.1` 開頭。
 - `runtime.adapter=IsaacAdapterV6`。
-- `extension.command_count` 與 [`TOOL_INVENTORY.md`](../reference/TOOL_INVENTORY.md) 的 source-derived count 一致。
+- `extension.command_count` 與 source inventory 中需要 Extension 的 commands 一致。`get_runtime_status` 在 MCP Server 本機執行，不計入 Extension registry。
 - `runtime.physics_backend` 與 backend matrix 一致。
 
 `8766` 是 live-control TCP socket。`9904` 是文件查詢 MCP，不能用來證明 Stage 已改變。
@@ -177,6 +187,8 @@ tailscale funnel --bg 8000 off
 |---|---|
 | 8766 沒有 listener | 查看 Isaac Sim console 是否載入 `isaac.sim.mcp_extension`，確認 checkout 與 launcher path。 |
 | MCP client 能列 tools，但操作回連線錯誤 | stdio server 已啟動，但 Isaac Sim extension/8766 尚未 ready。 |
+| `ISAAC_RUNTIME_RECOVERING` | Supervisor 已偵測異常退出並在 bounded backoff／restart；呼叫 `get_runtime_status` 查詢。 |
+| `ISAAC_RUNTIME_CRASHED` | Restart budget 已用盡；檢查 `last_crash.exit_code` 與 health evidence，修復原因後重新啟動 supervisor。 |
 | 9904 可用，Stage 沒變 | 9904 是 documentation route；改用 `isaac-sim-live`/8766。 |
 | `STAGE_NOT_READY` | Stage 尚未建立完成；以相同 read-only request bounded retry。 |
 | ROS 2 tools blocked | 先讀 `get_ros2_status`；bridge/core/nodes 必須啟用，且 external subscriber 才能證明 publish。 |

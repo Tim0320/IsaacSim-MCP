@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — bounded Isaac Sim runtime supervision
+
+- Added an opt-in Windows supervisor that restarts Isaac Sim after bounded nonzero exits while preserving normal one-shot and MCP transport launchers.
+- Added the local `get_runtime_status` tool and shared atomic state file for crash, restart, exit-code, and protocol-health evidence even while TCP `8766` is unavailable.
+- Added stable `ISAAC_RUNTIME_RECOVERING`, `ISAAC_RUNTIME_CRASHED`, and `ISAAC_RUNTIME_UNAVAILABLE` envelopes; ambiguous writes are never replayed automatically.
+
 ### Added — CI v2 and recovery-oriented error reference
 
 - Expanded CI to run on pull requests and pushes to `main`, test Python 3.10/3.11/3.12, verify both platform launchers and generated tool inventory, build a wheel, and smoke-install it in a clean environment.

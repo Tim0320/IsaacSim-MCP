@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, get_type_hints
 
 from isaac_mcp.command_context import command_id_var, idempotency_key_var
 from isaac_mcp.responses import normalize_response
+from isaac_mcp.runtime_status import IsaacRuntimeUnavailableError
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -71,6 +72,7 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
     )
 
     schema_mcp = _ResponseSchemaMCP(mcp)
+    runtime_aware_connection = _runtime_aware_connection_provider(get_connection)
 
     for module in [
         capabilities,
@@ -92,7 +94,44 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
         simulation,
         graphs,
     ]:
-        module.register_tools(schema_mcp, get_connection)
+        module.register_tools(schema_mcp, runtime_aware_connection)
+
+
+class _RuntimeAwareConnection:
+    """Keep legacy tool-local catch blocks from discarding runtime diagnostics."""
+
+    def __init__(self, connection: IsaacConnection | None, unavailable: IsaacRuntimeUnavailableError | None = None):
+        self._connection = connection
+        self._unavailable = unavailable
+
+    def __getattr__(self, name: str) -> Any:
+        if self._connection is not None:
+            return getattr(self._connection, name)
+        if name == "port" and self._unavailable is not None:
+            return self._unavailable.status.get("port", 8766)
+        raise AttributeError(name)
+
+    def send_command(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        if self._unavailable is not None:
+            return self._unavailable.to_response()
+        if self._connection is None:  # pragma: no cover - guarded by provider construction
+            raise RuntimeError("runtime-aware connection has no underlying connection")
+        try:
+            return self._connection.send_command(*args, **kwargs)
+        except IsaacRuntimeUnavailableError as exc:
+            return exc.to_response()
+
+
+def _runtime_aware_connection_provider(
+    get_connection: Callable[[], IsaacConnection],
+) -> Callable[[], _RuntimeAwareConnection]:
+    def provide() -> _RuntimeAwareConnection:
+        try:
+            return _RuntimeAwareConnection(get_connection())
+        except IsaacRuntimeUnavailableError as exc:
+            return _RuntimeAwareConnection(None, exc)
+
+    return provide
 
 
 def _serialize_tool_response(value: Any, elapsed_ms: float) -> str:
@@ -122,6 +161,8 @@ def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
                 value = {"status": "cancelled", "code": "CANCELLED", "message": "Tool execution was cancelled"}
             except TimeoutError as exc:
                 value = {"status": "timeout", "code": "TIMEOUT", "message": str(exc)}
+            except IsaacRuntimeUnavailableError as exc:
+                value = exc.to_response()
             except Exception as exc:
                 value = {"status": "error", "code": "MCP_TOOL_ERROR", "message": str(exc)}
             finally:
@@ -140,6 +181,8 @@ def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
                 value = function(*args, **kwargs)
             except TimeoutError as exc:
                 value = {"status": "timeout", "code": "TIMEOUT", "message": str(exc)}
+            except IsaacRuntimeUnavailableError as exc:
+                value = exc.to_response()
             except Exception as exc:
                 value = {"status": "error", "code": "MCP_TOOL_ERROR", "message": str(exc)}
             finally:

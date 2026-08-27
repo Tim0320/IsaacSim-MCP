@@ -112,6 +112,7 @@ def test_named_tool_inventory_matches_authoritative_source_inventory():
     assert len(names) == len(set(names))
     assert {"start_job", "get_job_status", "cancel_job", "list_jobs"} <= set(names)
     assert "get_capabilities" in names
+    assert "get_runtime_status" in names
     assert {
         "compute_ik",
         "plan_joint_trajectory",

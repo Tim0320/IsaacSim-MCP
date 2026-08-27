@@ -18,12 +18,28 @@ flowchart LR
     Sim --> Adapter --> Handler --> Dispatcher --> Extension --> Server --> LLM
 ```
 
+Isaac Sim 程序由獨立 supervisor 擁有，MCP Server 只擁有 protocol transport：
+
+```mermaid
+flowchart TD
+    Supervisor[run_isaac_sim_supervised.ps1] -->|launch / monitor / bounded restart| SimProcess[Isaac Sim process]
+    SimProcess --> ExtensionSocket[Extension TCP 8766]
+    Supervisor -->|atomic lifecycle evidence| State[runtime-state.json]
+    State --> RuntimeStatus[get_runtime_status]
+    RuntimeStatus --> Server[Python MCP Server]
+    Server -->|protocol health / commands| ExtensionSocket
+```
+
+多個 stdio／HTTP MCP Server 可以共存，但同一個 runtime port 只能有一個 process owner。Supervisor 在 launch 前檢查 protocol health 與 port occupation，避免再啟動一份 Isaac Sim。
+
 ## 各層責任
 
 | Layer | 位置 | 責任 |
 |---|---|---|
 | Skill | `.agents/skills/omniverse-windows-workspace/` | 判斷任務類型、選擇 documentation/code/live route，只載入需要的 1.x～6.x reference。 |
 | MCP Server | `isaac_mcp/` | 提供 named tools、驗證 public inputs、正規化 response，並連線到 runtime socket。 |
+| Runtime supervisor | `isaac_mcp/runtime_supervisor.py`、`scripts/run_isaac_sim_supervised.ps1` | 啟動 Isaac Sim、監控 exit、執行 bounded restart，並發布 atomic state。 |
+| Runtime diagnostics | `isaac_mcp/runtime_status.py` | 在 Extension 不可用時提供 protocol health、crash/restart evidence 與 stable recovery code。 |
 | TCP transport | `isaac_mcp/connection.py` 與 extension server | 透過 loopback TCP `8766` 傳輸 bounded JSON request/response。 |
 | Isaac Extension | `isaac.sim.mcp_extension/` | 在 Kit 內執行、註冊 commands、套用 governance 並派送 runtime 工作。 |
 | Handler | `isaac_sim_mcp_extension/handlers/` | 實作 domain workflow、prerequisites、rollback、lifecycle 與 read-back。 |
@@ -90,6 +106,8 @@ Graph、ROS2、Replicator與Human目前仍由handler擁有：raw Isaac API與sta
 6. Handler 執行 read-back 或 rollback，共用 response layer 回傳 stable envelope。
 
 Transport success 不代表 Stage 已改變。Write acceptance 必須有 operation-specific read-back；live verification 也需依功能檢查 cleanup、Kit health、TCP health、logs 與 native dumps。
+
+Process recovery 不代表 command recovery。Supervisor 不 replay command；send 後斷線的 write delivery state 不明，runtime ready 後必須先 read-back。完整契約見 [Runtime supervision 與 crash recovery](docs/concepts/RUNTIME_SUPERVISION.md)。
 
 ## Runtime routes
 

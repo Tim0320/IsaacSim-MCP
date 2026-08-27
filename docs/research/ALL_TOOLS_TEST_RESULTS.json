@@ -8,7 +8,7 @@
     "unsupported": "the active runtime or backend explicitly rejects the capability",
     "fail": "invocation reached the implementation and exposed a code or contract defect"
   },
-  "git_head": "75cc090e5f640858b550d62ac8fef9965fccaa26",
+  "git_head": "a676cea7348ae65a31c88a5b7940fbe8089681e2",
   "live_snapshot": {
     "captured_at": "2026-08-25T16:28:11.755152+00:00",
     "port": 8766,
@@ -25,10 +25,10 @@
       "sample_count": 1
     }
   },
-  "tool_count": 128,
+  "tool_count": 129,
   "counts": {
     "blocked": 11,
-    "pass": 117
+    "pass": 118
   },
   "results": [
     {
@@ -3429,6 +3429,33 @@
           "enabled Isaac Sim ROS 2 bridge/core/nodes"
         ]
       }
+    },
+    {
+      "tool": "get_runtime_status",
+      "module": "capabilities",
+      "purpose": "Read supervisor, crash, restart, and protocol-health state without requiring Isaac Sim.",
+      "input": [],
+      "status": "pass",
+      "prerequisites": [
+        "Python MCP Server",
+        "optional supervised launcher state file"
+      ],
+      "readback": "atomic supervisor state, exit/restart evidence and protocol-level health",
+      "evidence": {
+        "type": "offline_contract_and_windows_launcher",
+        "verified_at": "2026-08-27",
+        "source": "tests/test_runtime_status.py"
+      },
+      "kit_log": {
+        "checked": false,
+        "result": "The MCP-local tool remains available without Kit."
+      },
+      "artifacts": {
+        "required": false,
+        "integrity": "atomic bounded JSON state"
+      },
+      "limitations": "Reports supervised process and protocol health; it does not diagnose arbitrary native root causes.",
+      "blocker": null
     },
     {
       "tool": "get_scene_info",

@@ -491,6 +491,35 @@ def test_tool_adds_mcp_server_metadata_and_uses_system_command():
     }
 
 
+def test_runtime_status_tool_does_not_require_extension_connection(monkeypatch):
+    class _MCP:
+        def __init__(self):
+            self.tools = {}
+
+        def tool(self, name):
+            def decorator(function):
+                self.tools[name] = function
+                return function
+
+            return decorator
+
+    monkeypatch.setattr(
+        "isaac_mcp.tools.capabilities.read_runtime_status",
+        lambda: {
+            "state": "restart_backoff",
+            "availability_code": "ISAAC_RUNTIME_RECOVERING",
+            "runtime_responding": False,
+        },
+    )
+    mcp = _MCP()
+    register_tools(mcp, lambda: (_ for _ in ()).throw(AssertionError("connection must not be requested")))
+
+    result = json.loads(mcp.tools["get_runtime_status"]())
+
+    assert result["code"] == "RUNTIME_STATUS_READ"
+    assert result["data"]["runtime"]["availability_code"] == "ISAAC_RUNTIME_RECOVERING"
+
+
 def test_server_extension_and_manifest_versions_match():
     root = Path(__file__).parents[1]
     manifest = tomllib.loads(

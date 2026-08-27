@@ -8,7 +8,7 @@ import math
 import time
 
 from isaac_mcp.connection import IsaacConnection
-from isaac_mcp.tool_inventory import tool_count
+from isaac_mcp.tool_inventory import extension_tool_count
 
 ROBOT_PATH = "/World/MCP_Task_2_3_Robot"
 OWNED_PHYSICS_PATHS = ("/World/groundPlane", "/World/PhysicsScene")
@@ -80,7 +80,7 @@ def main() -> int:
         capabilities = _data(connection.send_command("system.get_capabilities"))
         assert capabilities["runtime"]["isaac_sim_version"].startswith("6.0.1")
         assert capabilities["runtime"]["physics_backend"] == "physx"
-        assert capabilities["extension"]["command_count"] == tool_count()
+        assert capabilities["extension"]["command_count"] == extension_tool_count()
         assert capabilities["feature_flags"]["motion.ik_and_planning"]["state"] == "supported"
 
         _assert_scratch_stage(connection)

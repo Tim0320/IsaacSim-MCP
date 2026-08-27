@@ -92,20 +92,27 @@ Streamable HTTP 使用另一組設定：
 | `ISAAC_MCP_HTTP_HOST` | `127.0.0.1` | MCP HTTP listener address。 |
 | `ISAAC_MCP_HTTP_PORT` | `8000` | MCP HTTP listener port。 |
 | `MCP_ALLOWED_HOSTS` | 未設定 | 額外允許送到 HTTP endpoint 的 exact Host header，以逗號分隔；loopback hosts 永遠保留。 |
+| `ISAAC_MCP_RUNTIME_STATE_FILE` | `%LOCALAPPDATA%\IsaacSim-MCP\runtime-state.json` | Supervisor 與 MCP Server 共用的 bounded crash/restart 狀態檔。 |
+| `ISAAC_MCP_RUNTIME_PROBE_TIMEOUT_SECONDS` | `1` | `get_runtime_status` protocol health probe timeout。 |
 
 `ISAAC_MCP_HOST=127.0.0.1` 與 `ISAAC_MCP_PORT=8766` 仍屬於 Python MCP Server 和 Isaac Sim Extension 間的 runtime TCP socket。不要把它們改成 HTTP endpoint 設定。
 
 ## Running IsaacSim-MCP
 
-先啟動 Isaac Sim 與 Extension：
+建議用 supervisor 啟動 Isaac Sim 與 Extension：
 
 ```powershell
-# 提供env isaacsim安裝路徑
-$env:ISAACSIM_ROOT=""
-.\scripts\run_isaac_sim.ps1
+$env:ISAACSIM_ROOT = "C:\isaacsim"
+.\scripts\run_isaac_sim_supervised.ps1
 ```
 
-Launcher 會驗證 Isaac Sim 6.0.1、載入 `isaac.sim.mcp_extension`，並在 `127.0.0.1:8766` 啟動 loopback runtime socket。Windows 多 GPU 環境會依 active display GPU 選擇明確的 PhysX GPU ordinal；只有需要刻意覆寫時才使用 `-PhysicsGpu`。
+Supervisor 會沿用既有 launcher 的 Isaac Sim 6.0.1、Extension、port 與 Physics GPU guard。非零 exit code 視為異常退出，預設最多在 300 秒內重啟 3 次並使用 exponential backoff；exit code `0` 視為正常關閉，不會自動重開。啟動前若 protocol health probe 已找到健康 runtime，或 `8766` 已被無回應程序占用，supervisor 都會拒絕再啟動一份 Isaac Sim。需要 one-shot 行為時仍可使用 `.\scripts\run_isaac_sim.ps1`。
+
+Supervisor 與 MCP Server 是兩個獨立程序。Codex／Claude 仍由 client 用 stdio 啟動 `isaac_mcp.server`；Streamable HTTP 仍用下方命令啟動。Supervisor 狀態預設寫入 `%LOCALAPPDATA%\IsaacSim-MCP\runtime-state.json`，不包含 environment、command source 或 log 內容。
+
+當 Isaac Sim crash、正在重啟或超過 restart budget 時，MCP tools 會回傳 `ISAAC_RUNTIME_RECOVERING`、`ISAAC_RUNTIME_CRASHED` 或 `ISAAC_RUNTIME_UNAVAILABLE`。呼叫 `get_runtime_status` 可在 `8766` 關閉時讀到 exit code、時間、attempt、restart count、health 狀態與建議動作。Connection loss 後不會自動 replay write；runtime 恢復後必須先 read-back，再決定是否用原 idempotency key 重送。
+
+完整 process ownership、state schema、restart budget 與 Agent recovery contract 見 [Runtime supervision 與 crash recovery](docs/concepts/RUNTIME_SUPERVISION.md)。
 
 本機 Codex／Claude Desktop 會依上一節設定，以 stdio 自動啟動 MCP Server。需要 Streamable HTTP 時，在另一個 PowerShell session 啟動：
 
@@ -272,6 +279,10 @@ Funnel 可用，但本機 MCP Server 沒有在 Funnel 指向的 port listening�
 ### Works locally but ChatGPT cannot connect
 
 確認公開 URL 使用 HTTPS 且以 `/mcp` 結尾，並確認使用 Tailscale Funnel。Tailscale Serve 只有 tailnet 內部可達，ChatGPT 無法透過它連線。
+
+### `COMMAND_FAILED / Not connected to Isaac`
+
+MCP Server 仍在執行，但 Isaac Sim Extension 沒有回應。改用 `.\scripts\run_isaac_sim_supervised.ps1` 啟動 runtime，並呼叫 `get_runtime_status`。Agent 應依 `availability_code` 處理：`ISAAC_RUNTIME_RECOVERING` 等待 bounded recovery；`ISAAC_RUNTIME_CRASHED` 檢查 `last_crash` 並修正 root cause；`ISAAC_RUNTIME_UNAVAILABLE` 啟動 supervisor。任何 write 在連線中斷後都必須先 read-back，不能盲目重送。
 
 ## Development
 

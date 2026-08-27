@@ -3,13 +3,13 @@
 > 由 `scripts/generate_tool_inventory.py` 從 `isaac_mcp/tools/*.py` 自動產生，請勿手工修改。
 
 Package version：`0.6.0`
-Source-derived tool count：`128`
+Source-derived tool count：`129`
 
 | Module | 數量 | Named tools |
 |---|---:|---|
 | `artifacts` | 4 | `cleanup_artifacts`, `delete_artifact`, `get_artifact_info`, `read_artifact` |
 | `assets` | 6 | `generate_3d`, `import_urdf`, `list_nvidia_assets`, `load_usd`, `search_usd`, `spawn_nvidia_asset` |
-| `capabilities` | 1 | `get_capabilities` |
+| `capabilities` | 2 | `get_capabilities`, `get_runtime_status` |
 | `controllers` | 6 | `close_gripper`, `list_controller_profiles`, `open_gripper`, `set_gripper_width`, `set_mobile_base_velocity`, `stop_mobile_base` |
 | `graphs` | 12 | `configure_script_node`, `connect_action_graph`, `create_action_graph`, `delete_action_graph`, `disconnect_action_graph`, `edit_action_graph`, `evaluate_action_graph`, `get_action_graph`, `get_action_graph_status`, `list_action_graphs`, `reload_script_node`, `set_action_graph_enabled` |
 | `humans` | 10 | `bake_navmesh`, `delete_human`, `get_human`, `get_navmesh_status`, `list_humans`, `set_human_behavior`, `set_human_idle`, `set_human_look_at`, `set_human_target`, `spawn_human` |

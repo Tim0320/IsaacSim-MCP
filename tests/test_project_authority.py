@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from isaac_mcp.tool_inventory import tool_count, tool_names
+from isaac_mcp.tool_inventory import extension_tool_count, tool_count, tool_names
 from isaac_mcp.tools import register_all_tools
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +35,11 @@ def test_package_metadata_does_not_hardcode_a_tool_count():
     description = re.search(r'^description\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     assert description
     assert not re.search(r"\b\d+\s+tools?\b", description.group(1), re.IGNORECASE)
+
+
+def test_mcp_local_runtime_status_is_not_counted_as_an_extension_command():
+    assert "get_runtime_status" in tool_names()
+    assert extension_tool_count() == tool_count() - 1
 
 
 def test_authority_document_separates_source_runtime_and_history():

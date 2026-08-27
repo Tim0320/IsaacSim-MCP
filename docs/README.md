@@ -11,6 +11,7 @@
 - [Artifact transport](concepts/ARTIFACT_TRANSPORT.md)
 - [Command governance](concepts/COMMAND_GOVERNANCE.md)
 - [Jobs 與 diagnostics](concepts/JOB_DIAGNOSTICS.md)
+- [Runtime supervision 與 crash recovery](concepts/RUNTIME_SUPERVISION.md)
 - [Protocol versions 與 migration](concepts/PROTOCOL_VERSIONING_AND_MIGRATION.md)
 
 ## Reference

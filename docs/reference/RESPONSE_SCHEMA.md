@@ -59,6 +59,11 @@ IsaacSim-MCP 的 source-registered named tools 統一回傳 JSON text，解碼�
 - `INVALID_COMMAND_METADATA`：command ID 或 idempotency key 格式無效。
 - `INVALID_COMMAND_PARAMS`：socket command 的 `params` 不是 object。
 - `IDEMPOTENCY_KEY_CONFLICT`：相同 key 已用於不同 command type 或 canonical params。
+- `ISAAC_RUNTIME_RECOVERING`：Supervisor 已偵測異常退出，正在 bounded backoff 或重啟。
+- `ISAAC_RUNTIME_CRASHED`：Isaac Sim 異常退出且 bounded restart budget 已用盡。
+- `ISAAC_RUNTIME_UNAVAILABLE`：Extension protocol health 不可用，且沒有進行中的 recovery。
+
+Runtime transport errors 會在 `data.runtime` 附上 bounded supervisor evidence。`get_runtime_status` 不依賴 Extension socket，可在 `8766` 關閉時回傳 state、exit code、restart count、health 與 recovery actions。若 connection loss 發生於送出 write 之後，`command_delivery=unknown` 表示不得自動 replay；runtime 恢復後必須先 read-back。
 
 rolling upgrade 期間，MCP Server 仍可接收舊 extension 的 `{status, result}` response，並在回給 client 前轉成 schema 1.0。
 

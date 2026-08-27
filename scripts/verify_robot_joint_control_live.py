@@ -13,6 +13,8 @@ from typing import Any
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from isaac_mcp.tool_inventory import MCP_LOCAL_TOOL_NAMES
+
 ROBOT_PATH = "/World/MCP_Task_2_1_Robot"
 REQUIRED_ENVELOPE_FIELDS = {
     "schema_version",
@@ -122,7 +124,7 @@ async def main() -> int:
                 data = capabilities["data"]
                 assert data["runtime"]["isaac_sim_version"].startswith("6.0.1")
                 assert data["runtime"]["adapter"] == "IsaacAdapterV6"
-                assert data["extension"]["command_count"] == len(tools)
+                assert data["extension"]["command_count"] == len(tools - MCP_LOCAL_TOOL_NAMES)
                 assert data["feature_flags"]["robot.joint_state"]["state"] == "supported"
                 assert data["feature_flags"]["robot.joint_command"]["state"] == "supported"
 

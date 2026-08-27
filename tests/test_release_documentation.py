@@ -25,6 +25,7 @@ def test_readme_is_a_compact_entrypoint_and_routes_the_documentation_hierarchy()
         "docs/README.md",
         "docs/getting-started/INSTALLATION_WINDOWS.md",
         "docs/concepts/PROTOCOL_VERSIONING_AND_MIGRATION.md",
+        "docs/concepts/RUNTIME_SUPERVISION.md",
         "docs/development/RELEASE_GATE.md",
         "docs/reference/AUTHORITY.md",
     ):
@@ -41,6 +42,23 @@ def test_architecture_documents_the_complete_control_chain():
     assert "LLM → Skill → MCP Server → TCP → Isaac Extension → Handler → Adapter → Isaac Sim" in architecture
     for location in ("isaac_mcp/", "isaac.sim.mcp_extension/", "handlers/", "adapters/"):
         assert location in architecture
+
+
+def test_runtime_supervision_contract_is_routed_and_fail_closed():
+    contract = _text("docs/concepts/RUNTIME_SUPERVISION.md")
+    docs_index = _text("docs/README.md")
+    architecture = _text("ARCHITECTURE.md")
+    for value in (
+        "run_isaac_sim_supervised.ps1",
+        "get_runtime_status",
+        "ISAAC_RUNTIME_RECOVERING",
+        "ISAAC_RUNTIME_CRASHED",
+        "command_delivery=unknown",
+        "不重送",
+    ):
+        assert value in contract
+    assert "concepts/RUNTIME_SUPERVISION.md" in docs_index
+    assert "runtime-state.json" in architecture
 
 
 def test_protocol_versions_and_migration_boundaries_are_explicit():

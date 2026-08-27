@@ -1,4 +1,4 @@
-# Isaac Sim 6.0.1：128 tools 統一證據報告
+# Isaac Sim 6.0.1：129 tools 統一證據報告
 
 本報告逐項聚合已完成的 guarded live verifier 證據。產生器本身只做 source inventory 與 read-only live snapshot，不會清除或改寫 Stage。
 
@@ -16,7 +16,7 @@
 - Adapter / backend：`IsaacAdapterV6` / `physx`
 - Extension commands：`128`
 - Timeline / stage：`stopped` / ``
-- 結果：`128` tools；blocked=11、pass=117
+- 結果：`129` tools；blocked=11、pass=118
 
 ## 逐項證據
 
@@ -94,6 +94,7 @@
 | `get_replicator_status` | Read Replicator extension, orchestrator, job, writer, and trigger state. | `(無)`; Isaac Sim 6.0.1, TCP 8766, dedicated scratch namespace for writes | job state, frame manifest, deterministic trace hash and cleanup | **pass** | `scripts/verify_replicator_sdg_live.py` (2026-08-25)；PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise. |
 | `get_robot_info` | Get robot joint information including names, DOF count, joint types, and limits. | `(prim_path*)`; Isaac Sim 6.0.1, TCP 8766, dedicated scratch namespace for writes | robot/DOF inventory, targets, measured state and atomic failure | **pass** | `scripts/verify_robot_joint_control_live.py` (2026-08-24)；PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise. |
 | `get_ros2_status` | Read ROS 2 bridge/core/nodes state, domain source, distro, and workflow count. | `(無)`; Isaac Sim 6.0.1, TCP 8766, dedicated scratch namespace for writes | workflow graph/prim plus external subscriber message and cleanup | **blocked** | `scripts/verify_ros2_workflows_live.py` (2026-08-25)；Previously live-verified with an external subscriber; current runtime extensions are disabled.；blocker=runtime_prerequisite: enabled Isaac Sim ROS 2 bridge/core/nodes |
+| `get_runtime_status` | Read supervisor, crash, restart, and protocol-health state without requiring Isaac Sim. | `(無)`; Python MCP Server, optional supervised launcher state file | atomic supervisor state, exit/restart evidence and protocol-level health | **pass** | `tests/test_runtime_status.py` (2026-08-27)；Reports supervised process and protocol health; it does not diagnose arbitrary native root causes. |
 | `get_scene_info` | Ping the Isaac Sim extension server and return scene information including stage path, assets root, and prim count. | `(無)`; Isaac Sim 6.0.1, TCP 8766, dedicated scratch namespace for writes | stage path, prim inventory, authored fixture or cleanup postcondition | **pass** | `docs/research/ALL_TOOLS_TEST_REPORT_2026-08-20_42_TOOLS.md` (2026-08-20)；PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise. |
 | `get_script_audit_log` | Return bounded script audit metadata. Source code is represented only by SHA-256. | `(count)`; Isaac Sim 6.0.1, TCP 8766, dedicated scratch namespace for writes | timeline/physics state, bounded script policy, audit and correlated logs | **pass** | `scripts/verify_command_governance_live.py` (2026-08-25)；PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise. |
 | `get_script_policy` | Return the current execute/reload policy without exposing script source or credentials. | `(無)`; Isaac Sim 6.0.1, TCP 8766, dedicated scratch namespace for writes | timeline/physics state, bounded script policy, audit and correlated logs | **pass** | `scripts/verify_command_governance_live.py` (2026-08-25)；PhysX evidence only; Newton remains separately untested or unsupported unless capability data says otherwise. |

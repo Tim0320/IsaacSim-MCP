@@ -34,7 +34,7 @@
 - `unsupported`：active runtime/backend 明確拒絕能力。
 - `fail`：已進入實作並暴露 code/contract defect。
 
-`isaac_mcp.tool_inventory` 從 tool decorators 推導唯一 names 與 count。`scripts/generate_tool_inventory.py` 產生 reference inventory；`scripts/generate_all_tools_report.py --live` 只做 bounded read-only runtime/catalog snapshot，並在 source/runtime count 不一致時 fail closed。新增、刪除或改名 tool 時，不得新增另一個手工數字來源。
+`isaac_mcp.tool_inventory` 從 tool decorators 推導唯一 names 與 count，並以 `MCP_LOCAL_TOOL_NAMES` 區分不依賴 Extension 的 server-local tools。`scripts/generate_tool_inventory.py` 產生 reference inventory；`scripts/generate_all_tools_report.py --live` 只做 bounded read-only runtime/catalog snapshot，並在 Extension-routed subset 與 runtime count 不一致時 fail closed。新增、刪除或改名 tool 時，不得新增另一個手工數字來源。
 
 2026-08-26 歷史聚合是 `117 pass / 11 blocked / 0 fail`。8 個 ROS 2 tools 因當時 extensions disabled blocked；`search_usd`／`generate_3d` 缺外部 provider 設定；`spawn_nvidia_asset` 缺 preserved dedicated scratch live postcondition。這些狀態會隨 runtime 改變，宣稱目前結果前必須重跑 `--live --check`。
 
@@ -49,7 +49,7 @@
 3. tracked 與 untracked publish candidates 的 credential-like filename/value；
 4. verified backup 與 restore comparison；
 5. offline pyramid、Windows launcher、Ruff、publish-candidate format 與 diff integrity；
-6. TCP 8766 read-only source-complete matrix，且 runtime command count 等於 source inventory；
+6. TCP 8766 read-only source-complete matrix，且 runtime command count 等於 source inventory 的 Extension-routed subset；
 7. wheel build與全新 temporary venv install/import；
 8. worktree fingerprint 前後一致。
 

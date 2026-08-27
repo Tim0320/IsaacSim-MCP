@@ -35,6 +35,7 @@ from typing import Any, Dict, Optional
 
 from isaac_mcp.command_context import command_id_var, idempotency_key_var
 from isaac_mcp.responses import normalize_response
+from isaac_mcp.runtime_status import IsaacRuntimeUnavailableError, get_runtime_status
 
 logger = logging.getLogger("IsaacMCPServer")
 
@@ -178,11 +179,14 @@ class IsaacConnection:
         command_id: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
+        command_id = str(command_id or command_id_var.get() or uuid.uuid4())
         # connect() also validates a cached socket, so always route through it.
         if not self.connect():
-            raise ConnectionError("Not connected to Isaac")
+            raise IsaacRuntimeUnavailableError(
+                get_runtime_status(host=self.host, port=self.port),
+                command_id=command_id,
+            )
 
-        command_id = str(command_id or command_id_var.get() or uuid.uuid4())
         command = {"type": command_type, "params": params or {}, "command_id": command_id}
         effective_key = idempotency_key or idempotency_key_var.get()
         if effective_key is not None:
@@ -221,7 +225,10 @@ class IsaacConnection:
             )
         except (ConnectionError, BrokenPipeError, ConnectionResetError) as e:
             self.sock = None
-            raise Exception(f"Connection to Isaac lost: {e}")
+            status = get_runtime_status(host=self.host, port=self.port)
+            status["command_delivery"] = "unknown"
+            status["transport_error"] = str(e)[:512]
+            raise IsaacRuntimeUnavailableError(status, command_id=command_id) from e
         except json.JSONDecodeError as e:
             self.sock = None
             raise Exception(f"Invalid response from Isaac: {e}")
@@ -238,10 +245,11 @@ def get_isaac_connection() -> IsaacConnection:
     global _isaac_connection
     if _isaac_connection is not None:
         return _isaac_connection
-    _isaac_connection = IsaacConnection(host="localhost")
+    _isaac_connection = IsaacConnection(host=os.getenv("ISAAC_MCP_HOST", "127.0.0.1"))
     if not _isaac_connection.connect():
+        status = get_runtime_status(host=_isaac_connection.host, port=_isaac_connection.port)
         _isaac_connection = None
-        raise Exception("Could not connect to Isaac. Make sure the Isaac addon is running.")
+        raise IsaacRuntimeUnavailableError(status, command_id=command_id_var.get())
     return _isaac_connection
 
 
