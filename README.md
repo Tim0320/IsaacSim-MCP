@@ -49,6 +49,8 @@ py -3.10 -m venv .venv
 ### 2. 啟動 Isaac Sim 與 Extension
 
 ```powershell
+# 提供env isaacsim安裝路徑
+$env:ISAACSIM_ROOT=""
 .\scripts\run_isaac_sim.ps1
 ```
 
