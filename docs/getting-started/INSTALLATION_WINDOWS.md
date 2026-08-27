@@ -114,6 +114,7 @@ server，請在啟動 MCP server 的 PowerShell session 設定：
 $env:ISAAC_MCP_TRANSPORT = "streamable-http"
 $env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
 $env:ISAAC_MCP_HTTP_PORT = "8000"
+$env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 
 .\.venv\Scripts\python.exe -m isaac_mcp.server
 ```
@@ -126,6 +127,31 @@ $env:ISAAC_MCP_HTTP_PORT = "8000"
 
 HTTP transport 不會取代或變更 8766。若需從其他主機直接連入，還必須另行設計
 認證、TLS 與網路邊界；本專案預設只綁定 loopback，讓 tunnel 在本機終結連線。
+
+### Tailscale Funnel hostname
+
+Tailscale Funnel 會把 public HTTPS request 轉送到本機 `8000`。請把 Funnel 顯示的完整 hostname 加入 `MCP_ALLOWED_HOSTS` 後再啟動 MCP Server：
+
+```powershell
+$env:ISAAC_MCP_TRANSPORT = "streamable-http"
+$env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
+$env:ISAAC_MCP_HTTP_PORT = "8000"
+$env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1,your-device.your-tailnet.ts.net"
+
+.\.venv\Scripts\python.exe -m isaac_mcp.server
+```
+
+FastMCP 對 `MCP_ALLOWED_HOSTS` 採 exact Host matching。專案會替每個完整 hostname 接受有 port 與無 port 形式，但不接受 `.ts.net` suffix 或 `*.ts.net` wildcard。必須使用完整 hostname；loopback hosts 永遠保留，供本機 HTTP request 使用。
+
+在另一個 PowerShell session 啟動、檢查或停止 Funnel：
+
+```powershell
+tailscale funnel --bg 8000
+tailscale funnel status
+tailscale funnel --bg 8000 off
+```
+
+公開 MCP URL 是 `https://your-device.your-tailnet.ts.net/mcp`。完整安裝、Serve／Funnel 差異、curl 驗證與 ChatGPT Connector 設定見 [README Remote MCP Access](../../README.md#remote-mcp-access)，CLI 細節見 [Tailscale Funnel 官方文件](https://tailscale.com/docs/reference/tailscale-cli/funnel)。IsaacSim-MCP 目前沒有 HTTP authentication；公開 Funnel 前請確認風險並在使用完畢後停止 Funnel。
 
 ## 7. 離線與 read-only 驗證
 

@@ -4,6 +4,23 @@ IsaacSim-MCP 讓支援 MCP 的 AI client 透過具名、可驗證的 tools 控�
 
 主要驗證環境是 Windows 與 Isaac Sim 6.0.1。本專案延伸自 [whats2000/isaacsim-mcp-server](https://github.com/whats2000/isaacsim-mcp-server)，沿用 MIT License。
 
+## Table of Contents
+
+- [核心功能](#核心功能)
+- [架構](#架構)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running IsaacSim-MCP](#running-isaacsim-mcp)
+- [Remote MCP Access](#remote-mcp-access)
+  - [Tailscale Funnel](#tailscale-funnel)
+  - [ChatGPT MCP Connector](#chatgpt-mcp-connector)
+- [支援版本](#支援版本)
+- [文件入口](#文件入口)
+- [Safety 與 verification](#safety-與-verification)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [License](#license)
+
 ## 核心功能
 
 - 建立、查詢、變形、組合、儲存與驗證 USD Stage。
@@ -34,9 +51,9 @@ flowchart LR
 
 各層責任、request lifecycle、runtime routes 與權威來源見 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-## Quick Start
+## Installation
 
-### 1. 安裝 MCP Server
+安裝 MCP Server：
 
 ```powershell
 git clone https://github.com/Tim0320/IsaacSim-MCP.git
@@ -46,17 +63,11 @@ py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 ```
 
-### 2. 啟動 Isaac Sim 與 Extension
+Windows 的完整環境需求與安裝方式見 [Windows 安裝指南](docs/getting-started/INSTALLATION_WINDOWS.md)。
 
-```powershell
-# 提供env isaacsim安裝路徑
-$env:ISAACSIM_ROOT=""
-.\scripts\run_isaac_sim.ps1
-```
+## Configuration
 
-Launcher 會驗證 Isaac Sim 6.0.1、載入 `isaac.sim.mcp_extension`，並在 `127.0.0.1:8766` 啟動 loopback runtime socket。Windows 多 GPU 環境會依 active display GPU 選擇明確的 PhysX GPU ordinal；只有需要刻意覆寫時才使用 `-PhysicsGpu`。
-
-### 3. 設定 MCP Client
+stdio 是預設 transport。Codex／Claude Desktop 可以沿用現有設定，不需要新增 HTTP 環境變數：
 
 ```json
 {
@@ -73,27 +84,136 @@ Launcher 會驗證 Isaac Sim 6.0.1、載入 `isaac.sim.mcp_extension`，並在 `
 }
 ```
 
-先呼叫 `get_capabilities`，再呼叫 `get_scene_info`，確認 runtime 與 Stage 後才執行 write。完整安裝與疑難排解見 [Windows 安裝指南](docs/getting-started/INSTALLATION_WINDOWS.md)。
+Streamable HTTP 使用另一組設定：
 
-### ChatGPT / Streamable HTTP
+| Variable | Default | Purpose |
+|---|---|---|
+| `ISAAC_MCP_TRANSPORT` | `stdio` | 設為 `streamable-http` 或 alias `http` 以啟用 HTTP transport。 |
+| `ISAAC_MCP_HTTP_HOST` | `127.0.0.1` | MCP HTTP listener address。 |
+| `ISAAC_MCP_HTTP_PORT` | `8000` | MCP HTTP listener port。 |
+| `MCP_ALLOWED_HOSTS` | 未設定 | 額外允許送到 HTTP endpoint 的 exact Host header，以逗號分隔；loopback hosts 永遠保留。 |
 
-本機 Codex／Claude Desktop 的 stdio transport 仍是預設；沒有設定
-`ISAAC_MCP_TRANSPORT` 時，原有啟動方式與 MCP client 設定不變。若要讓
-Secure MCP Tunnel 連到本機 MCP server，可在 Windows PowerShell 啟動
-Streamable HTTP：
+`ISAAC_MCP_HOST=127.0.0.1` 與 `ISAAC_MCP_PORT=8766` 仍屬於 Python MCP Server 和 Isaac Sim Extension 間的 runtime TCP socket。不要把它們改成 HTTP endpoint 設定。
+
+## Running IsaacSim-MCP
+
+先啟動 Isaac Sim 與 Extension：
+
+```powershell
+# 提供env isaacsim安裝路徑
+$env:ISAACSIM_ROOT=""
+.\scripts\run_isaac_sim.ps1
+```
+
+Launcher 會驗證 Isaac Sim 6.0.1、載入 `isaac.sim.mcp_extension`，並在 `127.0.0.1:8766` 啟動 loopback runtime socket。Windows 多 GPU 環境會依 active display GPU 選擇明確的 PhysX GPU ordinal；只有需要刻意覆寫時才使用 `-PhysicsGpu`。
+
+本機 Codex／Claude Desktop 會依上一節設定，以 stdio 自動啟動 MCP Server。需要 Streamable HTTP 時，在另一個 PowerShell session 啟動：
 
 ```powershell
 $env:ISAAC_MCP_TRANSPORT = "streamable-http"
 $env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
 $env:ISAAC_MCP_HTTP_PORT = "8000"
+$env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 
 .\.venv\Scripts\python.exe -m isaac_mcp.server
 ```
 
-MCP HTTP endpoint 是 `http://127.0.0.1:8000/mcp`；`http` 也可作為
-`streamable-http` 的 alias。這個 `8000/mcp` endpoint 供 MCP client／tunnel
-連線，`127.0.0.1:8766` 則維持為 Python MCP Server 與 Isaac Sim Extension
-之間的 runtime TCP socket，兩者用途不同。
+MCP HTTP endpoint 是 `http://127.0.0.1:8000/mcp`。先呼叫 `get_capabilities`，再呼叫 `get_scene_info`，確認 runtime 與 Stage 後才執行 write。
+
+## Remote MCP Access
+
+IsaacSim-MCP 預設只在本機使用。ChatGPT 等雲端 MCP client 無法直接連到 `localhost`、`127.0.0.1` 或 `192.168.x.x` 私有位址。它們需要能從 public internet 存取的 HTTPS endpoint，例如 Tailscale Funnel：
+
+```text
+ChatGPT
+   ↓ HTTPS
+Public MCP Endpoint
+   ↓
+IsaacSim-MCP
+   ↓ TCP 127.0.0.1:8766
+Isaac Sim
+```
+
+| Method | Tailnet only | Public Internet | ChatGPT can access |
+|---|---:|---:|---:|
+| localhost | No | No | No |
+| Tailscale Serve | Yes | No | No |
+| Tailscale Funnel | Yes | Yes | Yes |
+
+[Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve) 只把服務提供給同一個 tailnet；[Tailscale Funnel](https://tailscale.com/docs/features/tailscale-funnel) 會建立 public internet 可達的 HTTPS endpoint。ChatGPT MCP Connector 需要 Funnel 或其他 public HTTPS deployment。
+
+### Tailscale Funnel
+
+1. 從 [Tailscale Download](https://tailscale.com/download) 安裝適合目前作業系統的版本，登入後啟用本機 Tailscale：
+
+   ```bash
+   tailscale up
+   ```
+
+2. 啟動 Isaac Sim Extension，接著在 repository 根目錄啟動 Streamable HTTP server。將範例 hostname 換成 `tailscale funnel` 顯示的完整 hostname：
+
+   ```powershell
+   $env:ISAAC_MCP_TRANSPORT = "streamable-http"
+   $env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
+   $env:ISAAC_MCP_HTTP_PORT = "8000"
+   $env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1,your-device.your-tailnet.ts.net"
+
+   .\.venv\Scripts\python.exe -m isaac_mcp.server
+   ```
+
+   `MCP_ALLOWED_HOSTS` 使用 FastMCP 的 exact Host matching。專案會替每個完整 hostname 接受有 port 與無 port 形式，但不接受 `.ts.net` suffix 或 `*.ts.net` wildcard。loopback hosts 永遠保留，所以加入外部 hostname 不會破壞本機 HTTP 存取。
+
+3. 在另一個 terminal 建立背景 Funnel。`8000` 是 repository 的預設 HTTP MCP port：
+
+   ```bash
+   tailscale funnel --bg 8000
+   ```
+
+   預期輸出類似：
+
+   ```text
+   Available on the internet:
+
+   https://your-device.your-tailnet.ts.net
+
+   |-- / proxy http://127.0.0.1:8000
+   ```
+
+   公開 MCP URL 是 `https://your-device.your-tailnet.ts.net/mcp`。
+
+4. 查看狀態或停止同一個 Funnel：
+
+   ```bash
+   tailscale funnel status
+   tailscale funnel --bg 8000 off
+   ```
+
+   `tailscale funnel reset` 會清除本機全部 Funnel configuration。完整參數以 [Tailscale Funnel CLI](https://tailscale.com/docs/reference/tailscale-cli/funnel) 為準。
+
+5. 從外部網路驗證：
+
+   ```bash
+   curl -i https://your-device.your-tailnet.ts.net/mcp
+   ```
+
+   Streamable HTTP 對一般 GET 的回應會依 request header 和 transport 狀態而異，`200`、`405` 或 `406` 都可能表示請求已到達 endpoint。結果不應再是 `421 Misdirected Request`／`Invalid Host header`，也不應出現 `502 Bad Gateway` 或 timeout。
+
+### ChatGPT MCP Connector
+
+Funnel 驗證成功後，依 [OpenAI Developer mode 與 MCP apps 官方說明](https://help.openai.com/en/articles/12584461-developer-mode-apps-and-full-mcp-connectors-in-chatgpt-beta) 在 ChatGPT Developer Mode 新增 MCP Connector：
+
+```text
+Name:
+IsaacSim
+
+MCP Server URL:
+https://your-device.your-tailnet.ts.net/mcp
+
+Authentication:
+No authentication
+```
+
+IsaacSim-MCP 目前沒有 HTTP authentication。`MCP_ALLOWED_HOSTS` 只防止不受信任的 Host header，不是身分驗證。公開 Funnel 會讓任何能連到該 URL 的人嘗試呼叫 MCP tools，可能控制本機 Isaac Sim。只在你接受這個風險時啟用，使用完立即停止 Funnel；正式共享環境應在 MCP server 前加入 authentication、authorization 與存取稽核。
 
 ## 支援版本
 
@@ -129,7 +249,31 @@ Agent 的 retry、reconnect、read-back 與 fail-closed 行為見 [Error Codes a
 - API keys 只供外部資產 provider 選用，不可寫入 source、MCP JSON、report 或 commit。
 - Release 前建立 verified backup 並執行 strict [release gate](docs/development/RELEASE_GATE.md)。Commit 與 push 仍需使用者明確授權。
 
-## 開發檢查
+## Troubleshooting
+
+### `421 Misdirected Request / Invalid Host header`
+
+Tailscale Funnel 已成功轉發，但 Funnel hostname 尚未被 MCP Server 信任。把完整 hostname 加入 `MCP_ALLOWED_HOSTS`，例如：
+
+```powershell
+$env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1,your-device.your-tailnet.ts.net"
+```
+
+不要使用 `.ts.net` 或 `*.ts.net`；FastMCP 只接受設定中的 exact hostname。專案會自動接受該 hostname 有 port 與無 port 的形式。
+
+### `502 Bad Gateway`
+
+Funnel 可用，但本機 MCP Server 沒有在 Funnel 指向的 port listening。確認 `ISAAC_MCP_HTTP_PORT` 與 `tailscale funnel --bg 8000` 的 port 相同，並保持 MCP Server process 執行中。
+
+### Connection timeout
+
+執行 `tailscale funnel status`，確認 Funnel 仍啟用，再檢查 firewall 與 Tailscale connection 狀態。
+
+### Works locally but ChatGPT cannot connect
+
+確認公開 URL 使用 HTTPS 且以 `/mcp` 結尾，並確認使用 Tailscale Funnel。Tailscale Serve 只有 tailnet 內部可達，ChatGPT 無法透過它連線。
+
+## Development
 
 ```powershell
 uv sync --dev

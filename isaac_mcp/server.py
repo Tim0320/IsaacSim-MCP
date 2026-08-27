@@ -32,6 +32,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Dict
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from isaac_mcp.connection import get_isaac_connection, reset_isaac_connection
 from isaac_mcp.tools import register_all_tools
@@ -121,6 +122,46 @@ author the include volume; use reload_script for reusable human interaction logi
 """
 
 
+_LOCAL_HTTP_HOSTS = (
+    "localhost",
+    "localhost:*",
+    "127.0.0.1",
+    "127.0.0.1:*",
+    "[::1]",
+    "[::1]:*",
+)
+_LOCAL_HTTP_ORIGINS = (
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "http://[::1]:*",
+)
+
+
+def _transport_security_settings() -> TransportSecuritySettings:
+    """Build FastMCP DNS-rebinding protection settings from exact host values."""
+    allowed_hosts = list(_LOCAL_HTTP_HOSTS)
+    configured_hosts = os.getenv("MCP_ALLOWED_HOSTS", "")
+
+    for value in configured_hosts.split(","):
+        host = value.strip()
+        if not host:
+            continue
+        if "*" in host or host.startswith(".") or "://" in host or "/" in host:
+            raise ValueError(
+                "MCP_ALLOWED_HOSTS must contain comma-separated exact host values without schemes, paths, or wildcards"
+            )
+
+        allowed_hosts.append(host)
+        if ":" not in host or (host.startswith("[") and host.endswith("]")):
+            allowed_hosts.append(f"{host}:*")
+
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=list(dict.fromkeys(allowed_hosts)),
+        allowed_origins=list(_LOCAL_HTTP_ORIGINS),
+    )
+
+
 def _create_mcp() -> FastMCP:
     """Create the MCP server with Streamable HTTP settings from the environment."""
     return FastMCP(
@@ -130,6 +171,7 @@ def _create_mcp() -> FastMCP:
         host=os.getenv("ISAAC_MCP_HTTP_HOST", "127.0.0.1"),
         port=int(os.getenv("ISAAC_MCP_HTTP_PORT", "8000")),
         streamable_http_path="/mcp",
+        transport_security=_transport_security_settings(),
     )
 
 
