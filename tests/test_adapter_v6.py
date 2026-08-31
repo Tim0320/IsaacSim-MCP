@@ -202,6 +202,9 @@ def test_v6_set_joint_positions_calls_set_dof_position_targets(monkeypatch):
         def is_physics_tensor_entity_initialized(self):
             return True
 
+        def is_physics_tensor_entity_valid(self):
+            return True
+
         def set_dof_position_targets(self, positions, dof_indices=None):
             captured["positions"] = positions
             captured["dof_indices"] = dof_indices
@@ -633,6 +636,7 @@ def test_v6_runtime_articulation_rebinds_stale_preplay_cache(monkeypatch):
 
     adapter = object.__new__(IsaacAdapterV6)
     adapter._robot_runtime = RobotRuntime(object(), object(), object())
+    adapter._robot_runtime._ensure_physics_world = lambda: None
     adapter._articulations = {}
     stale = adapter._new_articulation("/World/Robot")
 

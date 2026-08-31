@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sys
+import types
 from typing import Any
 
 import pytest
 from isaac_sim_mcp_extension.adapters.v6 import IsaacAdapterV6
-from isaac_sim_mcp_extension.adapters.v6_runtime.physics import PhysicsPolicyBridge
+from isaac_sim_mcp_extension.adapters.v6_runtime.physics import PhysicsPolicyBridge, PhysicsRuntime
 
 
 class _PhysicsSpy:
@@ -89,3 +91,43 @@ def test_physics_policy_bridge_delegates_shared_base_policy() -> None:
     assert bridge.get_simulation_state() == {"timeline_state": "stopped"}
     assert bridge.find_physics_scene("/PhysicsScene") == "/PhysicsScene"
     assert bridge.apply_gravity("/PhysicsScene", [0.0, 0.0, -9.81]) is True
+
+
+def test_ensure_physics_world_rebuilds_an_invalid_simulation_view(monkeypatch) -> None:
+    calls = []
+
+    class _InvalidView:
+        is_valid = False
+
+    class _SimulationManager:
+        @classmethod
+        def get_physics_simulation_view(cls):
+            return _InvalidView()
+
+        @classmethod
+        def invalidate_physics(cls):
+            calls.append("invalidate")
+
+        @classmethod
+        def _cleanup_stale_physics_scenes(cls):
+            calls.append("cleanup")
+
+        @classmethod
+        def setup_simulation(cls):
+            calls.append("setup")
+
+        @classmethod
+        def initialize_physics(cls):
+            calls.append("initialize")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "isaacsim.core.simulation_manager",
+        types.SimpleNamespace(SimulationManager=_SimulationManager),
+    )
+    runtime = object.__new__(PhysicsRuntime)
+    runtime._scene = types.SimpleNamespace(get_stage=lambda: object())
+
+    runtime._ensure_physics_world()
+
+    assert calls == ["invalidate", "cleanup", "setup", "initialize"]

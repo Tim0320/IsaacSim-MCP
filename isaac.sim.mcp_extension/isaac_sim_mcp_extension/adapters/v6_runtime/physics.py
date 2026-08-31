@@ -103,6 +103,17 @@ class PhysicsRuntime:
         except Exception:
             return
         try:
+            view = SimulationManager.get_physics_simulation_view()
+            if view is not None:
+                is_valid = getattr(view, "is_valid", False)
+                if not bool(is_valid() if callable(is_valid) else is_valid):
+                    SimulationManager.invalidate_physics()
+        except Exception:
+            # Older or stubbed SimulationManager variants may not expose a
+            # queryable view. setup_simulation/initialize_physics remains the
+            # compatibility path below.
+            pass
+        try:
             SimulationManager._cleanup_stale_physics_scenes()
         except Exception:
             pass

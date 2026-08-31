@@ -333,11 +333,19 @@ class _Attr:
 
 
 class _Drive:
-    def __init__(self, *, fail_stiffness=False):
-        self.type = _Attr("force")
-        self.stiffness = _Attr(1.0, fail_once=fail_stiffness)
-        self.damping = _Attr(2.0)
-        self.max_force = _Attr(3.0)
+    def __init__(
+        self,
+        *,
+        drive_type="force",
+        stiffness=1.0,
+        damping=2.0,
+        max_force=3.0,
+        fail_stiffness=False,
+    ):
+        self.type = _Attr(drive_type)
+        self.stiffness = _Attr(stiffness, fail_once=fail_stiffness)
+        self.damping = _Attr(damping)
+        self.max_force = _Attr(max_force)
 
     def __bool__(self):
         return True
@@ -356,8 +364,8 @@ class _Drive:
 
 
 class _PhysxJoint:
-    def __init__(self):
-        self.max_velocity = _Attr(4.0)
+    def __init__(self, max_velocity=4.0):
+        self.max_velocity = _Attr(max_velocity)
 
     def __bool__(self):
         return True
@@ -366,13 +374,28 @@ class _PhysxJoint:
         return self.max_velocity
 
 
+class _RevoluteJointSchema:
+    pass
+
+
+class _PrismaticJointSchema:
+    pass
+
+
 class _Prim:
-    def __init__(self, *, fail_stiffness=False):
+    def __init__(self, *, kind="revolute", fail_stiffness=False):
+        self.kind = kind
         self.drive = _Drive(fail_stiffness=fail_stiffness)
         self.physx = _PhysxJoint()
+        self.requested_drive_instances = []
 
     def IsValid(self):
         return True
+
+    def IsA(self, schema):
+        return (self.kind == "revolute" and schema is _RevoluteJointSchema) or (
+            self.kind == "prismatic" and schema is _PrismaticJointSchema
+        )
 
     def HasAPI(self, _schema):
         return True
@@ -391,7 +414,9 @@ class _Stage:
 
 class _DriveAPI:
     @staticmethod
-    def Get(prim, _axis):
+    def Get(prim, axis):
+        assert axis in {"angular", "linear"}
+        prim.requested_drive_instances.append(axis)
         return prim.drive
 
     @staticmethod
@@ -410,7 +435,16 @@ class _PhysxJointAPI:
 
 def _install_drive_schema_stubs(monkeypatch):
     pxr = sys.modules["pxr"]
-    monkeypatch.setattr(pxr, "UsdPhysics", types.SimpleNamespace(DriveAPI=_DriveAPI), raising=False)
+    monkeypatch.setattr(
+        pxr,
+        "UsdPhysics",
+        types.SimpleNamespace(
+            DriveAPI=_DriveAPI,
+            RevoluteJoint=_RevoluteJointSchema,
+            PrismaticJoint=_PrismaticJointSchema,
+        ),
+        raising=False,
+    )
     monkeypatch.setattr(pxr, "PhysxSchema", types.SimpleNamespace(PhysxJointAPI=_PhysxJointAPI), raising=False)
 
 
@@ -435,6 +469,48 @@ def test_v6_drive_config_readback_has_typed_values_and_units():
         },
     }
     assert result["joints"][1]["units"]["max_velocity"] == "meters_per_second"
+
+
+def test_v6_drive_readback_uses_explicit_usd_instances_when_tensor_dof_type_is_invalid(monkeypatch):
+    _install_drive_schema_stubs(monkeypatch)
+
+    class _InvalidTensorMetadata(_DriveArticulation):
+        dof_types = ["DofType.Rotation", "DofType.Invalid"]
+
+        def get_dof_gains(self, **_kwargs):
+            raise RuntimeError("PhysicsDriveAPI, a non-empty instance name must be provided")
+
+    art = _InvalidTensorMetadata()
+    revolute = _Prim(kind="revolute")
+    revolute.drive = _Drive(
+        drive_type="force",
+        stiffness=100.0 * math.pi / 180.0,
+        damping=10.0 * math.pi / 180.0,
+        max_force=80.0,
+    )
+    revolute.physx = _PhysxJoint(2.0 * 180.0 / math.pi)
+    prismatic = _Prim(kind="prismatic")
+    prismatic.drive = _Drive(drive_type="acceleration", stiffness=200.0, damping=20.0, max_force=40.0)
+    prismatic.physx = _PhysxJoint(0.2)
+    adapter = _DriveAdapter(
+        art,
+        stage=_Stage(
+            {
+                art.dof_paths[0][0]: revolute,
+                art.dof_paths[0][1]: prismatic,
+            }
+        ),
+    )
+
+    result = adapter.get_joint_drive_config("/World/Robot")
+
+    assert [joint["name"] for joint in result["joints"]] == ["shoulder", "finger"]
+    assert math.isclose(result["joints"][0]["stiffness"], 100.0)
+    assert math.isclose(result["joints"][0]["max_velocity"], 2.0)
+    assert result["joints"][1]["stiffness"] == 200.0
+    assert result["joints"][1]["max_velocity"] == 0.2
+    assert revolute.requested_drive_instances == ["angular"]
+    assert prismatic.requested_drive_instances == ["linear"]
 
 
 def test_v6_drive_config_applies_every_requested_field_to_subset(monkeypatch):

@@ -1,5 +1,7 @@
 import ast
 import inspect
+import sys
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -99,3 +101,48 @@ def test_facade_forwarding_preserves_monkeypatch_targets() -> None:
     adapter._asset_runtime = runtime
     assert adapter.import_urdf("robot.urdf", "/World/R", fix_base=True)[1] == {"fix_base": True}
     assert calls == ["play"]
+
+
+def test_step_observes_joint_names_and_values_from_one_runtime_snapshot(monkeypatch) -> None:
+    class _SimulationManager:
+        @classmethod
+        def step(cls, steps):
+            assert steps == 1
+
+    monkeypatch.setitem(
+        sys.modules,
+        "isaacsim.core.simulation_manager",
+        types.SimpleNamespace(SimulationManager=_SimulationManager),
+    )
+
+    class _Bridge:
+        def ensure_physics_world(self):
+            return None
+
+        def arm_reset_point(self):
+            return None
+
+        def get_joint_state(self, prim_path):
+            assert prim_path == "/World/Panda"
+            return {
+                "joint_names": ["panda_joint1", "panda_finger_joint1"],
+                "positions": [3.037, 0.02],
+            }
+
+        def get_joint_positions(self, _prim_path):
+            raise AssertionError("joint positions must not be queried separately")
+
+        def get_joint_names(self, _prim_path):
+            raise AssertionError("joint names must not be queried separately")
+
+    runtime = object.__new__(SimulationRuntime)
+    runtime._bridge = _Bridge()
+
+    result = runtime.step(observe_joints=["/World/Panda"])
+
+    assert result["joint_states"] == [
+        {
+            "prim_path": "/World/Panda",
+            "joints": {"panda_joint1": 3.037, "panda_finger_joint1": 0.02},
+        }
+    ]

@@ -80,6 +80,9 @@ def test_five_named_tools_forward_to_motion_commands():
         "motion.cancel",
         "motion.get_status",
     ]
+    for _command, params in connection.calls:
+        assert all(not callable(value) for value in params.values())
+        json.dumps(params)
 
 
 def test_handler_validates_inputs_before_adapter_calls():

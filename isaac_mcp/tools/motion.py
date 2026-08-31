@@ -35,7 +35,22 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         and random seed make repeated requests reproducible. The result reports
         achieved end-effector errors and whether collision checking was done.
         """
-        return send("motion.compute_ik", locals())
+        return send(
+            "motion.compute_ik",
+            {
+                "prim_path": prim_path,
+                "target_position": target_position,
+                "end_effector_frame": end_effector_frame,
+                "target_orientation": target_orientation,
+                "seed_joint_positions": seed_joint_positions,
+                "random_seed": random_seed,
+                "position_tolerance": position_tolerance,
+                "orientation_tolerance": orientation_tolerance,
+                "max_iterations": max_iterations,
+                "timeout_ms": timeout_ms,
+                "robot_model": robot_model,
+            },
+        )
 
     @mcp.tool("plan_joint_trajectory")
     def plan_joint_trajectory(
@@ -55,19 +70,47 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         collision_checked=false. start_joint_positions defaults to measured state;
         pass it explicitly for reproducible offline planning. This call never executes.
         """
-        return send("motion.plan_joint_trajectory", locals())
+        return send(
+            "motion.plan_joint_trajectory",
+            {
+                "prim_path": prim_path,
+                "goal_joint_positions": goal_joint_positions,
+                "start_joint_positions": start_joint_positions,
+                "planner": planner,
+                "random_seed": random_seed,
+                "max_iterations": max_iterations,
+                "timeout_ms": timeout_ms,
+                "robot_model": robot_model,
+            },
+        )
 
     @mcp.tool("execute_trajectory")
     def execute_trajectory(trajectory_id: str, timeout_ms: int = 30000) -> str:
         """Start a trajectory job and return immediately without blocking the MCP worker."""
-        return send("motion.execute_trajectory", locals())
+        return send(
+            "motion.execute_trajectory",
+            {
+                "trajectory_id": trajectory_id,
+                "timeout_ms": timeout_ms,
+            },
+        )
 
     @mcp.tool("cancel_motion")
     def cancel_motion(job_id: str) -> str:
         """Cancel a running motion job and hold its last commanded position."""
-        return send("motion.cancel", locals())
+        return send(
+            "motion.cancel",
+            {
+                "job_id": job_id,
+            },
+        )
 
     @mcp.tool("get_motion_status")
     def get_motion_status(job_id: str) -> str:
         """Read motion job state, progress, timing, and terminal error details."""
-        return send("motion.get_status", locals())
+        return send(
+            "motion.get_status",
+            {
+                "job_id": job_id,
+            },
+        )

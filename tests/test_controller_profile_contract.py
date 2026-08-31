@@ -41,9 +41,7 @@ class _Adapter:
     def get_robot_joint_info(self, _prim_path):
         return {
             "joint_names": self.names,
-            "joint_limits": [
-                {"name": name, "type": joint_type} for name, joint_type in zip(self.names, self.types)
-            ],
+            "joint_limits": [{"name": name, "type": joint_type} for name, joint_type in zip(self.names, self.types)],
         }
 
     def get_simulation_state(self):
@@ -111,14 +109,15 @@ def test_six_named_tools_forward_explicit_profile():
         "controllers.set_mobile_base_velocity",
         "controllers.stop_mobile_base",
     ]
+    for _command, params in connection.calls:
+        assert all(not callable(value) for value in params.values())
+        json.dumps(params)
 
 
 def test_franka_width_maps_symmetrically_and_reads_back():
     names = ["panda_joint1", "panda_finger_joint1", "panda_finger_joint2"]
     adapter = _Adapter(names, ["revolute", "prismatic", "prismatic"])
-    result = controllers.set_gripper_width(
-        adapter, "/World/Franka", "franka_parallel_gripper", width_m=0.06
-    )
+    result = controllers.set_gripper_width(adapter, "/World/Franka", "franka_parallel_gripper", width_m=0.06)
     assert result["status"] == "success"
     assert result["requested_width_m"] == 0.06
     assert adapter.commands == [("/World/Franka", "position", [0.03, 0.03], [1, 2])]
@@ -128,9 +127,7 @@ def test_franka_width_maps_symmetrically_and_reads_back():
 def test_profile_mismatch_and_invalid_width_apply_nothing():
     adapter = _Adapter(["finger_left", "finger_right"], ["prismatic", "prismatic"])
     mismatch = controllers.open_gripper(adapter, "/World/Other", "franka_parallel_gripper")
-    invalid = controllers.set_gripper_width(
-        adapter, "/World/Other", "franka_parallel_gripper", width_m=math.nan
-    )
+    invalid = controllers.set_gripper_width(adapter, "/World/Other", "franka_parallel_gripper", width_m=math.nan)
     unknown = controllers.close_gripper(adapter, "/World/Other", "unknown")
     assert mismatch["code"] == "CONTROLLER_PROFILE_MISMATCH"
     assert invalid["code"] == "INVALID_GRIPPER_WIDTH"
@@ -180,9 +177,7 @@ def test_kaya_geometry_failure_applies_nothing_with_stable_code():
             raise ValueError("USD mecanum joints do not match")
 
     adapter = BrokenGeometryAdapter(["axle_0_joint", "axle_1_joint", "axle_2_joint"], ["revolute"] * 3)
-    result = controllers.set_mobile_base_velocity(
-        adapter, "/World/Kaya", "nvidia_kaya_holonomic", forward_mps=0.1
-    )
+    result = controllers.set_mobile_base_velocity(adapter, "/World/Kaya", "nvidia_kaya_holonomic", forward_mps=0.1)
     assert result["status"] == "error"
     assert result["code"] == "HOLONOMIC_GEOMETRY_INVALID"
     assert result["applied"] is False
@@ -190,9 +185,7 @@ def test_kaya_geometry_failure_applies_nothing_with_stable_code():
 
 
 def test_nonzero_mobile_command_requires_playing_timeline():
-    adapter = _Adapter(
-        ["left_wheel_joint", "right_wheel_joint"], ["revolute", "revolute"], timeline_state="paused"
-    )
+    adapter = _Adapter(["left_wheel_joint", "right_wheel_joint"], ["revolute", "revolute"], timeline_state="paused")
     result = controllers.set_mobile_base_velocity(
         adapter, "/World/Jetbot", "nvidia_jetbot_differential", forward_mps=0.1
     )

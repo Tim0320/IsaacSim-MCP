@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from typing import Any
 
 import pytest
@@ -83,3 +85,81 @@ def test_robot_runtime_stop_hook_target_clears_only_articulation_cache() -> None
     runtime.clear_runtime_cache()
 
     assert runtime._articulations == {}
+
+
+def test_robot_runtime_rejects_a_fresh_but_invalid_tensor_entity(monkeypatch) -> None:
+    created = []
+
+    class _Articulation:
+        def __init__(self, paths):
+            created.append(paths)
+
+        def is_physics_tensor_entity_valid(self):
+            return False
+
+    monkeypatch.setitem(
+        sys.modules,
+        "isaacsim.core.experimental.prims",
+        types.SimpleNamespace(Articulation=_Articulation),
+    )
+    runtime = RobotRuntime(types.SimpleNamespace(get_stage=lambda: object()), object(), object())
+    runtime._ensure_physics_world = lambda: None
+
+    with pytest.raises(RuntimeError, match="physics tensor entity"):
+        runtime._runtime_articulation("/World/Robot")
+
+    assert created == [["/World/Robot"], ["/World/Robot"]]
+
+
+def test_robot_runtime_does_not_reuse_articulation_across_stage_identity(monkeypatch) -> None:
+    created = []
+    active_stage = [object()]
+
+    class _Articulation:
+        def __init__(self, paths):
+            self.paths = paths
+            created.append(self)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "isaacsim.core.experimental.prims",
+        types.SimpleNamespace(Articulation=_Articulation),
+    )
+    runtime = RobotRuntime(types.SimpleNamespace(get_stage=lambda: active_stage[0]), object(), object())
+
+    first = runtime._new_articulation("/World/Robot")
+    active_stage[0] = object()
+    second = runtime._new_articulation("/World/Robot")
+
+    assert second is not first
+    assert len(created) == 2
+
+
+def test_robot_runtime_rebinds_same_path_when_usd_joint_identity_changes(monkeypatch) -> None:
+    created = []
+
+    class _Articulation:
+        def __init__(self, paths):
+            self.paths = paths
+            self.dof_names = ["fr3_joint1"] if not created else ["panda_joint1"]
+            created.append(self)
+
+        def is_physics_tensor_entity_valid(self):
+            return True
+
+    monkeypatch.setitem(
+        sys.modules,
+        "isaacsim.core.experimental.prims",
+        types.SimpleNamespace(Articulation=_Articulation),
+    )
+    stage = object()
+    runtime = RobotRuntime(types.SimpleNamespace(get_stage=lambda: stage), object(), object())
+    runtime._ensure_physics_world = lambda: None
+    runtime._usd_joint_names = lambda _path: ["panda_joint1"]
+    stale = runtime._new_articulation("/World/Robot")
+
+    rebound = runtime._runtime_articulation("/World/Robot")
+
+    assert stale.dof_names == ["fr3_joint1"]
+    assert rebound.dof_names == ["panda_joint1"]
+    assert rebound is not stale

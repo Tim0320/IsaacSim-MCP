@@ -50,6 +50,7 @@ class RobotRuntime:
         self._physics = physics
         self._bridge = bridge
         self._articulations: Dict[str, Any] = {}
+        self._articulation_stage_identity: Any = None
 
     def clear_runtime_cache(self) -> None:
         self._articulations.clear()
@@ -83,6 +84,17 @@ class RobotRuntime:
     def _new_articulation(self, prim_path: str) -> Any:
         from isaacsim.core.experimental.prims import Articulation
 
+        try:
+            stage = self.get_stage()
+            try:
+                stage_identity: Any = ("root_layer", str(stage.GetRootLayer().identifier))
+            except Exception:
+                stage_identity = ("object", id(stage))
+            if self._articulation_stage_identity != stage_identity:
+                self._articulations.clear()
+                self._articulation_stage_identity = stage_identity
+        except Exception:
+            pass
         cached = self._articulations.get(prim_path)
         if cached is not None:
             return cached
@@ -98,15 +110,41 @@ class RobotRuntime:
         have no valid tensor entity. Runtime state and command calls must evict
         it and bind a fresh wrapper to the active SimulationView.
         """
-        art = self._new_articulation(prim_path)
-        try:
-            tensor_valid = bool(art.is_physics_tensor_entity_valid())
-        except Exception:
-            tensor_valid = False
-        if tensor_valid:
-            return art
-        self._articulations.pop(prim_path, None)
-        return self._new_articulation(prim_path)
+        self._ensure_physics_world()
+        for _attempt in range(2):
+            art = self._new_articulation(prim_path)
+            try:
+                tensor_valid = bool(art.is_physics_tensor_entity_valid())
+            except Exception:
+                tensor_valid = False
+            if tensor_valid:
+                try:
+                    usd_names = self._usd_joint_names(prim_path)
+                except Exception:
+                    usd_names = []
+                tensor_names = list(getattr(art, "dof_names", []) or [])
+                if not usd_names or (len(usd_names) == len(tensor_names) and set(usd_names) == set(tensor_names)):
+                    return art
+            self._articulations.pop(prim_path, None)
+            self._ensure_physics_world()
+        raise RuntimeError(
+            f"Articulation physics tensor entity is unavailable at {prim_path}; "
+            "the current SimulationView could not bind the articulation"
+        )
+
+    def _usd_joint_names(self, prim_path: str) -> List[str]:
+        """Read current joint identity without consulting a cached Articulation wrapper."""
+        from pxr import Usd, UsdPhysics
+
+        stage = self.get_stage()
+        root_prim = stage.GetPrimAtPath(prim_path)
+        if not root_prim.IsValid():
+            return []
+        return [
+            desc.GetName()
+            for desc in Usd.PrimRange(root_prim)
+            if desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint)
+        ]
 
     def discover_robots(self) -> Dict[str, Dict[str, str]]:
         """Scan the Isaac Sim asset server for all available robot USD files."""
@@ -304,23 +342,12 @@ class RobotRuntime:
 
     def _get_joint_names(self, prim_path: str) -> List[str]:
         try:
-            self._ensure_physics_world()
-            art = self._new_articulation(prim_path)
+            art = self._runtime_articulation(prim_path)
             if art.dof_names:
                 return list(art.dof_names)
         except Exception:
             pass
-        from pxr import Usd, UsdPhysics
-
-        stage = self.get_stage()
-        root_prim = stage.GetPrimAtPath(prim_path)
-        if not root_prim.IsValid():
-            return []
-        names: List[str] = []
-        for desc in Usd.PrimRange(root_prim):
-            if desc.IsA(UsdPhysics.RevoluteJoint) or desc.IsA(UsdPhysics.PrismaticJoint):
-                names.append(desc.GetName())
-        return names
+        return self._usd_joint_names(prim_path)
 
     def get_joint_positions(self, prim_path: str) -> List[float]:
         try:
@@ -534,16 +561,21 @@ class RobotRuntime:
         if not names:
             raise ValueError(f"No articulation DOFs found at {prim_path}")
 
-        stiffnesses_raw, dampings_raw = art.get_dof_gains()
-        stiffnesses = self._flatten_joint_values(stiffnesses_raw)
-        dampings = self._flatten_joint_values(dampings_raw)
-        max_forces = self._flatten_joint_values(art.get_dof_max_efforts())
-        drive_types_raw = art.get_dof_drive_types()
-        drive_types = list(drive_types_raw[0]) if drive_types_raw else []
-        if self._engine == "newton":
-            max_velocities: List[Optional[float]] = [None] * len(names)
-        else:
-            max_velocities = self._flatten_joint_values(art.get_dof_max_velocities())
+        try:
+            if len(types) != len(names) or any(value not in {"revolute", "prismatic"} for value in types):
+                raise RuntimeError("Tensor DOF type metadata is incomplete")
+            stiffnesses_raw, dampings_raw = art.get_dof_gains()
+            stiffnesses = self._flatten_joint_values(stiffnesses_raw)
+            dampings = self._flatten_joint_values(dampings_raw)
+            max_forces = self._flatten_joint_values(art.get_dof_max_efforts())
+            drive_types_raw = art.get_dof_drive_types()
+            drive_types = list(drive_types_raw[0]) if drive_types_raw else []
+            if self._engine == "newton":
+                max_velocities: List[Optional[float]] = [None] * len(names)
+            else:
+                max_velocities = self._flatten_joint_values(art.get_dof_max_velocities())
+        except Exception:
+            return self._get_joint_drive_config_from_usd(prim_path, art, names)
 
         values_by_field = {
             "joint_types": types,
@@ -570,6 +602,63 @@ class RobotRuntime:
                     "max_force": max_forces[index],
                     "max_velocity": max_velocities[index],
                     "drive_type": drive_types[index],
+                    "units": self._drive_units(joint_type),
+                }
+            )
+        return {"prim_path": prim_path, "joint_count": len(joints), "joints": joints}
+
+    def _get_joint_drive_config_from_usd(self, prim_path: str, art: Any, names: List[str]) -> Dict[str, Any]:
+        """Read drives with explicit multiple-apply instances when tensor metadata is invalid."""
+        from pxr import PhysxSchema, UsdPhysics
+
+        paths = list((art.dof_paths or [[]])[0])
+        if len(paths) != len(names):
+            raise RuntimeError(f"Articulation returned {len(paths)} DOF paths for {len(names)} joints")
+        stage = self.get_stage()
+        joints = []
+        for index, (name, path) in enumerate(zip(names, paths)):
+            prim = stage.GetPrimAtPath(path)
+            if not prim.IsValid():
+                raise ValueError(f"Joint prim not found: {path}")
+            if prim.IsA(UsdPhysics.RevoluteJoint):
+                joint_type = "revolute"
+                drive_instance = "angular"
+            elif prim.IsA(UsdPhysics.PrismaticJoint):
+                joint_type = "prismatic"
+                drive_instance = "linear"
+            else:
+                raise ValueError(f"Unsupported joint schema at {path}")
+
+            drive = UsdPhysics.DriveAPI.Get(prim, drive_instance)
+            stiffness = damping = max_force = drive_type = None
+            if drive:
+                stiffness = drive.GetStiffnessAttr().Get()
+                damping = drive.GetDampingAttr().Get()
+                max_force = drive.GetMaxForceAttr().Get()
+                drive_type = drive.GetTypeAttr().Get()
+            if joint_type == "revolute":
+                if stiffness is not None:
+                    stiffness = float(stiffness) * 180.0 / math.pi
+                if damping is not None:
+                    damping = float(damping) * 180.0 / math.pi
+
+            max_velocity: Optional[float] = None
+            if self._engine != "newton" and prim.HasAPI(PhysxSchema.PhysxJointAPI):
+                max_velocity_attr = PhysxSchema.PhysxJointAPI(prim).GetMaxJointVelocityAttr()
+                max_velocity = max_velocity_attr.Get() if max_velocity_attr else None
+                if max_velocity is not None and joint_type == "revolute":
+                    max_velocity = float(max_velocity) * math.pi / 180.0
+
+            joints.append(
+                {
+                    "index": index,
+                    "name": name,
+                    "type": joint_type,
+                    "stiffness": stiffness,
+                    "damping": damping,
+                    "max_force": max_force,
+                    "max_velocity": max_velocity,
+                    "drive_type": drive_type,
                     "units": self._drive_units(joint_type),
                 }
             )

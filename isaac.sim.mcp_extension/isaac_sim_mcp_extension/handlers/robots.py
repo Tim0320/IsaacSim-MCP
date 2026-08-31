@@ -66,6 +66,11 @@ FALLBACK_ROBOT_LIBRARY: Dict[str, Dict[str, str]] = {
 # Cached discovered robots — populated on first call to list_robots.
 _discovered_robots: Optional[Dict[str, Dict[str, str]]] = None
 
+ROBOT_ALIASES = {
+    "franka": "frankapanda",
+    "panda": "frankapanda",
+}
+
 
 def _get_robot_library(adapter: IsaacAdapterBase) -> Dict[str, Dict[str, str]]:
     """Return the robot library, discovering from the asset server on first call.
@@ -93,6 +98,7 @@ def _find_robot(adapter: IsaacAdapterBase, query: str) -> Optional[Dict[str, Any
     """Find a robot by name. Tries exact key match, then partial match on key/description/manufacturer."""
     library = _get_robot_library(adapter)
     q = query.lower().strip()
+    q = ROBOT_ALIASES.get(q, q)
 
     # Exact key match
     if q in library:

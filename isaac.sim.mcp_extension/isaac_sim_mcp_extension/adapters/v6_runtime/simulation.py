@@ -75,6 +75,9 @@ class SimulationPolicyBridge:
     def get_joint_names(self, prim_path: str) -> List[str]:
         return self._adapter()._get_joint_names(prim_path)
 
+    def get_joint_state(self, prim_path: str) -> Dict[str, Any]:
+        return self._adapter().get_joint_state(prim_path)
+
 
 class SimulationRuntime:
     """Own V6 timeline/physics stepping and script runtime state."""
@@ -166,8 +169,9 @@ class SimulationRuntime:
             joint_states = []
             for path in observe_joints:
                 try:
-                    positions = self._bridge.get_joint_positions(path)
-                    names = self._bridge.get_joint_names(path)
+                    snapshot = self._bridge.get_joint_state(path)
+                    positions = list(snapshot.get("positions") or [])
+                    names = list(snapshot.get("joint_names") or [])
                     joints_dict = dict(zip(names, positions)) if names else {"positions": positions}
                     joint_states.append({"prim_path": path, "joints": joints_dict})
                 except Exception as exc:
