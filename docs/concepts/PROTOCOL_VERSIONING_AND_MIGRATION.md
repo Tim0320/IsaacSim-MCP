@@ -54,6 +54,12 @@ client 必須以 `status` 與 `code` 判斷結果。`message` 只供人閱讀。
 9. 新增的 Stage/ROS 2/Replicator/Human/Graph writes 多數預設 `preview=true`。client 必須明確 `preview=false` 才 apply，並讀回 exact postcondition。
 10. `execute_script` 與 `reload_script` 受 allowed roots、timeout、output/source bytes 與 background policy 限制。named tools 優先。
 
+## Tool profile migration
+
+`ISAAC_MCP_TOOL_PROFILE=legacy` 是預設值，保留既有 129-tool public contract。`consolidated` 將同一資源的讀寫或控制 wrappers 合併成 98-tool surface；底層 Extension command、response envelope、安全預設、preview、idempotency 與 read-back semantics 不變。`full` 同時公開新舊名稱，只適合遷移測試。
+
+切換 profile 會改變 MCP initialization 回傳的 tool list，因此 client 必須重新啟動或重新連線。`get_capabilities.data.mcp_server` 會回報 `tool_profile`、`public_tool_count`、可用 profiles 與 consolidated replacement map。完整對照見 [`TOOL_PROFILES.md`](../reference/TOOL_PROFILES.md)。
+
 ## Server 與 extension rolling upgrade
 
 建議順序：

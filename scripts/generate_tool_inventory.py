@@ -11,20 +11,24 @@ from isaac_mcp import __version__
 from isaac_mcp.tool_inventory import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "docs" / "reference" / "TOOL_INVENTORY.md"
+OUTPUTS = {
+    "legacy": ROOT / "docs" / "reference" / "TOOL_INVENTORY.md",
+    "consolidated": ROOT / "docs" / "reference" / "TOOL_INVENTORY_CONSOLIDATED.md",
+}
 
 
-def render() -> str:
-    tools = inventory()
+def render(profile: str = "legacy") -> str:
+    tools = inventory(profile)
     grouped: dict[str, list[str]] = defaultdict(list)
     for item in tools:
         grouped[item["module"]].append(item["tool"])
     lines = [
         "# MCP Tool Inventory",
         "",
-        "> 由 `scripts/generate_tool_inventory.py` 從 `isaac_mcp/tools/*.py` 自動產生，請勿手工修改。",
+        "> 由 `scripts/generate_tool_inventory.py` 從 `isaac_mcp/tools/*.py` 與 `isaac_mcp/tool_profiles.py` 自動產生，請勿手工修改。",
         "",
         f"Package version：`{__version__}`",
+        f"Tool profile：`{profile}`",
         f"Source-derived tool count：`{len(tools)}`",
         "",
         "| Module | 數量 | Named tools |",
@@ -46,14 +50,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--check", action="store_true", help="fail if the tracked inventory differs from source")
     args = parser.parse_args()
-    expected = render()
-    if args.check:
-        actual = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
-        if actual != expected:
-            raise SystemExit("tracked tool inventory is stale; run scripts/generate_tool_inventory.py")
-    else:
-        OUTPUT.write_text(expected, encoding="utf-8")
-    print(f"tools={len(inventory())}; path={OUTPUT}; mode={'check' if args.check else 'write'}")
+    counts = []
+    for profile, output in OUTPUTS.items():
+        expected = render(profile)
+        if args.check:
+            actual = output.read_text(encoding="utf-8") if output.exists() else ""
+            if actual != expected:
+                raise SystemExit(f"tracked {profile} tool inventory is stale; run scripts/generate_tool_inventory.py")
+        else:
+            output.write_text(expected, encoding="utf-8")
+        counts.append(f"{profile}={len(inventory(profile))}")
+    print(f"tools={','.join(counts)}; mode={'check' if args.check else 'write'}")
     return 0
 
 

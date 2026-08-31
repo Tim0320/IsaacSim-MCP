@@ -35,6 +35,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from isaac_mcp.connection import get_isaac_connection, reset_isaac_connection
+from isaac_mcp.tool_profiles import resolve_tool_profile
 from isaac_mcp.tools import register_all_tools
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -121,6 +122,21 @@ author the include volume; use reload_script for reusable human interaction logi
   robot.initialize()).
 """
 
+_CONSOLIDATED_INSTRUCTIONS = """
+
+## Consolidated tool profile
+
+This server exposes conversation-oriented merged tools. Use action selectors:
+query_prim, semantic_labels, typed_attribute, physics_body_config,
+collision_group, physics_joint, control_timeline, robot_library,
+control_gripper, control_mobile_base_velocity, motion_job,
+capture_camera_output, material_definition, material_binding, light_config,
+query_human, set_human_action, create_ros2_publisher, sdg_job_control,
+job_control, query_action_graph, action_graph_connection, and
+script_node_source. get_joint_state and set_joint_command remain canonical.
+Do not call the replaced legacy names because they are intentionally hidden.
+"""
+
 
 _LOCAL_HTTP_HOSTS = (
     "localhost",
@@ -164,9 +180,10 @@ def _transport_security_settings() -> TransportSecuritySettings:
 
 def _create_mcp() -> FastMCP:
     """Create the MCP server with Streamable HTTP settings from the environment."""
+    profile = resolve_tool_profile()
     return FastMCP(
         "IsaacSimMCP",
-        instructions=_INSTRUCTIONS,
+        instructions=_INSTRUCTIONS + (_CONSOLIDATED_INSTRUCTIONS if profile == "consolidated" else ""),
         lifespan=server_lifespan,
         host=os.getenv("ISAAC_MCP_HTTP_HOST", "127.0.0.1"),
         port=int(os.getenv("ISAAC_MCP_HTTP_PORT", "8000")),
@@ -182,16 +199,18 @@ register_all_tools(mcp, get_isaac_connection)
 
 def main():
     transport = os.getenv("ISAAC_MCP_TRANSPORT", "stdio").strip().lower()
+    profile = resolve_tool_profile()
 
     if transport == "stdio":
-        logger.info("Starting MCP using stdio transport")
+        logger.info("Starting MCP using stdio transport with %s tool profile", profile)
         mcp.run()
     elif transport in {"http", "streamable-http"}:
         logger.info(
-            "Starting MCP using Streamable HTTP at http://%s:%s%s",
+            "Starting MCP using Streamable HTTP at http://%s:%s%s with %s tool profile",
             mcp.settings.host,
             mcp.settings.port,
             mcp.settings.streamable_http_path,
+            profile,
         )
         mcp.run(transport="streamable-http")
     else:

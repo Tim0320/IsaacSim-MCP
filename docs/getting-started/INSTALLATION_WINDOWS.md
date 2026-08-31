@@ -124,6 +124,7 @@ server，請在啟動 MCP server 的 PowerShell session 設定：
 $env:ISAAC_MCP_TRANSPORT = "streamable-http"
 $env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
 $env:ISAAC_MCP_HTTP_PORT = "8000"
+$env:ISAAC_MCP_TOOL_PROFILE = "consolidated"
 $env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 
 .\.venv\Scripts\python.exe -m isaac_mcp.server
@@ -131,6 +132,8 @@ $env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 
 預設 Streamable HTTP endpoint 是 `http://127.0.0.1:8000/mcp`；
 `ISAAC_MCP_TRANSPORT=http` 是相同模式的 alias。請保持兩條連線的用途分離：
+
+`ISAAC_MCP_TOOL_PROFILE` 預設為 `legacy`，完整保留既有 129 tools。ChatGPT 可選 `consolidated` 取得 98-tool 精簡 surface；切換後需重新啟動 MCP Server。對照見 [`TOOL_PROFILES.md`](../reference/TOOL_PROFILES.md)。
 
 - `127.0.0.1:8000/mcp`：Secure MCP Tunnel／HTTP MCP client 連到 Python MCP Server。
 - `127.0.0.1:8766`：Python MCP Server 連到 Isaac Sim Extension 的 runtime TCP socket。

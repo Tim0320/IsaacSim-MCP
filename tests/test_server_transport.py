@@ -123,6 +123,7 @@ def test_create_mcp_uses_http_environment_settings(
     expected_host,
     expected_port,
 ):
+    monkeypatch.delenv("ISAAC_MCP_TOOL_PROFILE", raising=False)
     if host is None:
         monkeypatch.delenv("ISAAC_MCP_HTTP_HOST", raising=False)
     else:
@@ -146,3 +147,13 @@ def test_create_mcp_uses_http_environment_settings(
         streamable_http_path="/mcp",
         transport_security=server._transport_security_settings(),
     )
+
+
+def test_create_mcp_appends_consolidated_instructions(monkeypatch):
+    monkeypatch.setenv("ISAAC_MCP_TOOL_PROFILE", "consolidated")
+    fast_mcp = MagicMock()
+    monkeypatch.setattr(server, "FastMCP", fast_mcp)
+
+    server._create_mcp()
+
+    assert fast_mcp.call_args.kwargs["instructions"] == server._INSTRUCTIONS + server._CONSOLIDATED_INSTRUCTIONS

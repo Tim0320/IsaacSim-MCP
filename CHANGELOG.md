@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — profile-aware consolidated MCP tools
+
+- Added an opt-in `consolidated` tool profile that maps 53 legacy wrappers into 25 canonical resource-oriented tools, reducing the public surface from 129 to 98 tools without changing Extension commands or response semantics.
+- Kept `legacy` as the default compatibility profile and added `full` for migration/testing.
+- Added profile-aware generated inventories, capability metadata, startup instructions, exhaustive dispatch tests, and RGB routing through `capture_camera_output`.
+
 ### Added — bounded Isaac Sim runtime supervision
 
 - Added an opt-in Windows supervisor that restarts Isaac Sim after bounded nonzero exits while preserving normal one-shot and MCP transport launchers.

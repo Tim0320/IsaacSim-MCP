@@ -117,13 +117,13 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         return_mode: str = "artifact",
         inline_max_bytes: int = 1024 * 1024,
     ) -> str:
-        """Capture a typed RTX camera annotator output.
+        """Capture RGB or a typed RTX camera annotator output.
 
         Args:
             prim_path: Prim path of the camera.
-            output_type: depth, distance_to_image_plane, semantic_segmentation,
+            output_type: rgb, depth, distance_to_image_plane, semantic_segmentation,
                 instance_segmentation, instance_id_segmentation, normals, or motion_vectors.
-            output_path: Optional explicit .npy path for artifact mode.
+            output_path: Optional RGB image path or typed-output .npy path for artifact mode.
             return_mode: metadata, artifact, or inline. Defaults to artifact.
             inline_max_bytes: Maximum raw bytes allowed in inline mode. Maximum is 4 MiB.
         """
@@ -131,13 +131,16 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
             conn = get_connection()
             params = {
                 "prim_path": prim_path,
-                "output_type": output_type,
                 "return_mode": return_mode,
                 "inline_max_bytes": inline_max_bytes,
             }
             if output_path:
                 params["output_path"] = output_path
-            result = conn.send_command("sensors.capture_camera_output", params)
+            if output_type.strip().lower() == "rgb":
+                result = conn.send_command("sensors.capture_image", params)
+            else:
+                params["output_type"] = output_type
+                result = conn.send_command("sensors.capture_camera_output", params)
             return json.dumps(result, indent=2)
         except Exception as e:
             return json.dumps({"status": "error", "message": str(e)})

@@ -26,7 +26,7 @@
 import ast
 import os
 
-from isaac_mcp.tool_inventory import tool_names
+from isaac_mcp.tool_inventory import all_tool_names, tool_names
 from isaac_mcp.tools import register_all_tools
 
 TOOLS_DIR = os.path.join(os.path.dirname(__file__), "..", "isaac_mcp", "tools")
@@ -34,6 +34,7 @@ TOOLS_DIR = os.path.join(os.path.dirname(__file__), "..", "isaac_mcp", "tools")
 EXPECTED_MODULES = [
     "capabilities.py",
     "controllers.py",
+    "consolidated.py",
     "artifacts.py",
     "scene.py",
     "objects.py",
@@ -73,6 +74,7 @@ def test_init_imports_all_modules():
         content = f.read()
     for module_name in [
         "capabilities",
+        "consolidated",
         "artifacts",
         "scene",
         "objects",
@@ -108,7 +110,7 @@ def test_named_tool_inventory_matches_authoritative_source_inventory():
                     if isinstance(name, ast.Constant) and isinstance(name.value, str):
                         names.append(name.value)
 
-    assert set(names) == set(tool_names())
+    assert set(names) == set(all_tool_names())
     assert len(names) == len(set(names))
     assert {"start_job", "get_job_status", "cancel_job", "list_jobs"} <= set(names)
     assert "get_capabilities" in names

@@ -18,6 +18,8 @@
 
 - [Authority and Generated Metadata](reference/AUTHORITY.md)
 - [Generated MCP Tool Inventory](reference/TOOL_INVENTORY.md)
+- [Tool profiles 與合併對照](reference/TOOL_PROFILES.md)
+- [Generated consolidated tool inventory](reference/TOOL_INVENTORY_CONSOLIDATED.md)
 - [Capabilities](reference/CAPABILITIES.md)
 - [Backend capability matrix](reference/BACKEND_CAPABILITY_MATRIX.md)
 - [Response schema](reference/RESPONSE_SCHEMA.md)

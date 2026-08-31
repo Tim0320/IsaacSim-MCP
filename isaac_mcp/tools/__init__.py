@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, get_type_hints
 from isaac_mcp.command_context import command_id_var, idempotency_key_var
 from isaac_mcp.responses import normalize_response
 from isaac_mcp.runtime_status import IsaacRuntimeUnavailableError
+from isaac_mcp.tool_profiles import ADDED_CONSOLIDATED_TOOLS, REPLACED_LEGACY_TOOLS, resolve_tool_profile
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -54,6 +55,7 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
         artifacts,
         assets,
         capabilities,
+        consolidated,
         controllers,
         graphs,
         humans,
@@ -72,6 +74,8 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
     )
 
     schema_mcp = _ResponseSchemaMCP(mcp)
+    profile = resolve_tool_profile()
+    schema_mcp.tool_profile = profile
     runtime_aware_connection = _runtime_aware_connection_provider(get_connection)
 
     for module in [
@@ -93,8 +97,28 @@ def register_all_tools(mcp: FastMCP, get_connection: Callable[[], IsaacConnectio
         assets,
         simulation,
         graphs,
+        consolidated,
     ]:
         module.register_tools(schema_mcp, runtime_aware_connection)
+
+    hidden = (
+        ADDED_CONSOLIDATED_TOOLS if profile == "legacy" else REPLACED_LEGACY_TOOLS if profile == "consolidated" else ()
+    )
+    for name in hidden:
+        _remove_registered_tool(mcp, name)
+
+
+def _remove_registered_tool(mcp: FastMCP, name: str) -> None:
+    """Remove a tool from real FastMCP or the lightweight contract-test fake."""
+    manager = getattr(mcp, "_tool_manager", None)
+    if manager is not None and hasattr(manager, "remove_tool"):
+        manager.remove_tool(name)
+        return
+    tools = getattr(mcp, "tools", None)
+    if isinstance(tools, dict):
+        tools.pop(name, None)
+        return
+    raise TypeError(f"MCP implementation cannot remove profile-hidden tool {name!r}")
 
 
 class _RuntimeAwareConnection:
@@ -221,6 +245,7 @@ class _ResponseSchemaMCP:
 
     def __init__(self, mcp: FastMCP) -> None:
         self._mcp = mcp
+        self._original_tools: dict[str, Callable[..., Any]] = {}
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._mcp, name)
@@ -229,6 +254,16 @@ class _ResponseSchemaMCP:
         register = self._mcp.tool(*args, **kwargs)
 
         def decorator(function: Callable[..., Any]) -> Callable[..., Any]:
+            name = args[0] if args else kwargs.get("name") or function.__name__
+            self._original_tools[str(name)] = function
             return register(_wrap_tool(function))
 
         return decorator
+
+    def call_registered_tool(self, name: str, **kwargs: Any) -> Any:
+        """Invoke an unwrapped tool implementation for consolidated dispatch."""
+        try:
+            function = self._original_tools[name]
+        except KeyError as exc:
+            raise KeyError(f"unknown registered tool {name!r}") from exc
+        return function(**kwargs)

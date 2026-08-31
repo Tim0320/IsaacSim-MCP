@@ -14,6 +14,8 @@ from mcp.server.fastmcp import FastMCP
 from isaac_mcp import __version__
 from isaac_mcp.runtime_status import IsaacRuntimeUnavailableError
 from isaac_mcp.runtime_status import get_runtime_status as read_runtime_status
+from isaac_mcp.tool_inventory import tool_count
+from isaac_mcp.tool_profiles import CONSOLIDATED_REPLACEMENTS, VALID_TOOL_PROFILES
 
 if TYPE_CHECKING:
     from isaac_mcp.connection import IsaacConnection
@@ -32,11 +34,16 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         try:
             conn = get_connection()
             result = conn.send_command("system.get_capabilities")
+            tool_profile = str(getattr(mcp, "tool_profile", "legacy"))
             result.setdefault("data", {})["mcp_server"] = {
                 "name": "isaacsim-mcp-server",
                 "version": __version__,
                 "transport": "stdio_to_tcp",
                 "live_control_port": conn.port,
+                "tool_profile": tool_profile,
+                "public_tool_count": tool_count(tool_profile),
+                "available_tool_profiles": sorted(VALID_TOOL_PROFILES),
+                "consolidated_replacements": CONSOLIDATED_REPLACEMENTS if tool_profile == "consolidated" else {},
             }
             return json.dumps(result, indent=2, sort_keys=True)
         except IsaacRuntimeUnavailableError as exc:

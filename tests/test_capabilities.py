@@ -488,6 +488,10 @@ def test_tool_adds_mcp_server_metadata_and_uses_system_command():
         "version": server_version,
         "transport": "stdio_to_tcp",
         "live_control_port": 8766,
+        "tool_profile": "legacy",
+        "public_tool_count": 129,
+        "available_tool_profiles": ["consolidated", "full", "legacy"],
+        "consolidated_replacements": {},
     }
 
 

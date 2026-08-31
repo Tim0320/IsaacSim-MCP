@@ -9,7 +9,7 @@
 |---|---|
 | outer `schema_version` | 共用 response envelope 版本，目前為 `1.0` |
 | `capability_schema_version` | capability data 版本，目前為 `1.1` |
-| `mcp_server` | MCP package 版本、`stdio_to_tcp` transport 與 live control port |
+| `mcp_server` | MCP package 版本、`stdio_to_tcp` transport、live control port、目前 tool profile、public tool count 與合併 replacement map |
 | `runtime` | Isaac Sim 版本、adapter、adapter generation、active physics backend、stage 是否存在 |
 | `extension` | `isaac.sim.mcp_extension` 版本與目前 command names/count |
 | `extensions` | Camera、RTX LiDAR、Replicator、IRA、ROS 2、motion generation、Newton 等 extension 的 enabled state |

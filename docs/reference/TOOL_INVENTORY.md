@@ -1,8 +1,9 @@
 # MCP Tool Inventory
 
-> 由 `scripts/generate_tool_inventory.py` 從 `isaac_mcp/tools/*.py` 自動產生，請勿手工修改。
+> 由 `scripts/generate_tool_inventory.py` 從 `isaac_mcp/tools/*.py` 與 `isaac_mcp/tool_profiles.py` 自動產生，請勿手工修改。
 
 Package version：`0.6.0`
+Tool profile：`legacy`
 Source-derived tool count：`129`
 
 | Module | 數量 | Named tools |

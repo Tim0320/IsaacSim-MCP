@@ -4,7 +4,7 @@
 
 | Claim | 權威來源 | 衍生或驗證 artifacts |
 |---|---|---|
-| Public tool names 與 count | `isaac_mcp/tools/*.py` 內的 `@mcp.tool(<name>)` decorators | `isaac_mcp/tool_inventory.py`、`docs/reference/TOOL_INVENTORY.md`、registration tests |
+| Public tool names 與 count | `isaac_mcp/tools/*.py` 內的 `@mcp.tool(<name>)` decorators，加上 `isaac_mcp/tool_profiles.py` 的 profile selection | `isaac_mcp/tool_inventory.py`、兩份 generated inventory、registration tests |
 | Package release version | `isaac_mcp.__version__` | dynamic `pyproject.toml` version、extension version 與 manifest parity tests |
 | 目前 runtime version、backend、extensions、command registry、feature flags | Active extension 的 `get_capabilities` | capability schema 與 backend matrix contracts |
 | Response 與 migration semantics | versioned contract documents 與 tests | `RESPONSE_SCHEMA.md`、protocol migration、contract tests |
@@ -12,7 +12,7 @@
 
 ## Tool inventory
 
-從 source 產生 tracked reference：
+從 source 產生 `legacy` 與 `consolidated` 兩份 tracked reference：
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\generate_tool_inventory.py
@@ -24,7 +24,7 @@
 .\.venv\Scripts\python.exe .\scripts\generate_tool_inventory.py --check
 ```
 
-禁止在 package metadata 或手工維護的 README 內新增固定 tool count。All-tools evidence generator 同樣使用 `isaac_mcp.tool_inventory`；搭配 `--live` 時，active extension command count 必須等於 source inventory 的 Extension-routed subset。`MCP_LOCAL_TOOL_NAMES` 明確列出不依賴 Extension 的 server-local tools，目前包含 `get_runtime_status`。
+`legacy` 是預設相容 surface；`consolidated` 由同一份 decorators 與 replacement map 衍生。禁止在 package metadata 內新增固定 tool count。All-tools evidence generator 預設仍驗證 `legacy` 與 active extension command registry；合併 wrapper 不會新增 Extension command。`MCP_LOCAL_TOOL_NAMES` 明確列出不依賴 Extension 的 server-local tools，目前包含 `get_runtime_status`。
 
 ## Versions
 

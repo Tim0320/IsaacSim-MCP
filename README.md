@@ -31,7 +31,7 @@ IsaacSim-MCP 讓支援 MCP 的 AI client 透過具名、可驗證的 tools 控�
 - 透過 managed artifact 傳輸大型輸出，支援 hash、bounded chunk、TTL 與 cleanup。
 - 提供 command ID、idempotency、policy limit、job、cancel、read-back、rollback 與 redacted diagnostics。
 
-[MCP Tool Inventory](docs/reference/TOOL_INVENTORY.md) 由 source decorators 自動產生；目前 runtime 支援狀態以 `get_capabilities` 為準。
+[MCP Tool Inventory](docs/reference/TOOL_INVENTORY.md) 由 source decorators 自動產生；[Tool profiles](docs/reference/TOOL_PROFILES.md) 說明 129-tool 相容模式與 98-tool 合併模式。目前 runtime 支援狀態以 `get_capabilities` 為準。
 
 ## 架構
 
@@ -73,7 +73,7 @@ stdio 是預設 transport。Codex／Claude Desktop 可以沿用現有設定，�
 {
   "mcpServers": {
     "isaac-sim-live": {
-      "command": "D:\\Dev\\IsaacSim-MCP\\.venv\\Scripts\\python.exe",
+      "command": "F:\\IsaacSim-MCP\\.venv\\Scripts\\python.exe",
       "args": ["-m", "isaac_mcp.server"],
       "env": {
         "ISAAC_MCP_HOST": "127.0.0.1",
@@ -91,11 +91,22 @@ Streamable HTTP 使用另一組設定：
 | `ISAAC_MCP_TRANSPORT` | `stdio` | 設為 `streamable-http` 或 alias `http` 以啟用 HTTP transport。 |
 | `ISAAC_MCP_HTTP_HOST` | `127.0.0.1` | MCP HTTP listener address。 |
 | `ISAAC_MCP_HTTP_PORT` | `8000` | MCP HTTP listener port。 |
+| `ISAAC_MCP_TOOL_PROFILE` | `legacy` | `legacy` 保留既有 129 tools；`consolidated` 提供 98-tool 合併 surface；`full` 僅供遷移與測試。 |
 | `MCP_ALLOWED_HOSTS` | 未設定 | 額外允許送到 HTTP endpoint 的 exact Host header，以逗號分隔；loopback hosts 永遠保留。 |
 | `ISAAC_MCP_RUNTIME_STATE_FILE` | `%LOCALAPPDATA%\IsaacSim-MCP\runtime-state.json` | Supervisor 與 MCP Server 共用的 bounded crash/restart 狀態檔。 |
 | `ISAAC_MCP_RUNTIME_PROBE_TIMEOUT_SECONDS` | `1` | `get_runtime_status` protocol health probe timeout。 |
 
 `ISAAC_MCP_HOST=127.0.0.1` 與 `ISAAC_MCP_PORT=8766` 仍屬於 Python MCP Server 和 Isaac Sim Extension 間的 runtime TCP socket。不要把它們改成 HTTP endpoint 設定。
+
+### Tool profiles
+
+預設 `legacy` 不改任何既有 tool name 或 schema。ChatGPT 等需要較小 action space 的 client，可在啟動 MCP Server 前設定：
+
+```powershell
+$env:ISAAC_MCP_TOOL_PROFILE = "consolidated"
+```
+
+`consolidated` 用 `action` 或 `publisher_type` 合併同一資源的讀寫／控制操作，公開 98 tools。它只調整 MCP tool surface，仍呼叫原本的 Isaac Extension commands。修改 profile 後必須重新啟動 MCP Server，讓 client 重新取得 tool list。完整對照見 [Tool profiles](docs/reference/TOOL_PROFILES.md)。
 
 ## Running IsaacSim-MCP
 
@@ -120,6 +131,7 @@ Supervisor 與 MCP Server 是兩個獨立程序。Codex／Claude 仍由 client �
 $env:ISAAC_MCP_TRANSPORT = "streamable-http"
 $env:ISAAC_MCP_HTTP_HOST = "127.0.0.1"
 $env:ISAAC_MCP_HTTP_PORT = "8000"
+$env:ISAAC_MCP_TOOL_PROFILE = "consolidated"
 $env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 
 .\.venv\Scripts\python.exe -m isaac_mcp.server
