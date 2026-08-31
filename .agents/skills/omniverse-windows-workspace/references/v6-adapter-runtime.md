@@ -20,6 +20,17 @@ The maintained component/dependency table is in [ARCHITECTURE.md](../../../../AR
 - `MaterialRuntime`, `LightingRuntime` and `AssetRuntime`: cohesive authoring/integration operations with no job state.
 - Facade: component composition and cross-domain timeline-stop coordination only.
 
+## Articulation and physics-tensor lifecycle
+
+- Cache identity includes the current Stage/root-layer identity. Never reuse an articulation wrapper after Stage replacement.
+- Same-path robot replacement must compare current USD joint identity with tensor DOF names. A `/World/Franka` FR3-to-Panda replacement requires a fresh wrapper even when the prim path is unchanged.
+- Before binding a new articulation, inspect `SimulationManager.get_physics_simulation_view()`. If the view exists but `is_valid` is false, invalidate physics, then run cleanup/setup/initialize before retrying.
+- A fresh wrapper with an invalid tensor entity is a hard failure. Do not return it to motion, joint-state, or drive code and do not instruct callers to loop Play/Pause indefinitely.
+- Joint observations must obtain names and values from one `get_joint_state` snapshot. Separate name and position reads can map arm values onto finger names after lifecycle changes.
+- `UsdPhysics.DriveAPI` is multiple-apply. USD fallback must call `DriveAPI.Get(prim, "angular")` or `DriveAPI.Get(prim, "linear")`; an empty instance name is invalid.
+
+The maintained cross-domain contract and 2026-08-31 verification evidence are in [ROBOT_RUNTIME_LIFECYCLE.md](../../../../docs/reference/ROBOT_RUNTIME_LIFECYCLE.md).
+
 ## Deferred handler domains
 
 Do not create `GraphRuntime`, `Ros2Runtime`, `ReplicatorRuntime` or `HumanRuntime` merely to complete a directory shape. Their raw Isaac calls are currently interleaved with handler-owned stable errors, prerequisites, ownership, job/artifact or workflow orchestration. A Phase F change must first define and test a raw-operation boundary without making handlers depend on V6 internals.

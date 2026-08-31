@@ -20,7 +20,8 @@ Use the repository virtual environment so the client can launch the server witho
       "command": "<repository>\\.venv\\Scripts\\python.exe",
       "args": ["-m", "isaac_mcp.server"],
       "env": {
-        "ISAAC_MCP_PORT": "8766"
+        "ISAAC_MCP_PORT": "8766",
+        "ISAAC_MCP_TOOL_PROFILE": "legacy"
       }
     }
   }
@@ -28,6 +29,8 @@ Use the repository virtual environment so the client can launch the server witho
 ```
 
 Store machine-specific absolute paths in the MCP client's local configuration, never in this portable skill.
+
+`legacy` is the compatibility default and exposes 129 tools. Set `ISAAC_MCP_TOOL_PROFILE=consolidated` before server startup when a client benefits from the 98-tool conversation-oriented surface. Use `full` only for migration/testing. Changing the profile requires an MCP Server restart and fresh tool discovery; it never changes the Extension TCP command registry. Read [Tool profiles](../../../../docs/reference/TOOL_PROFILES.md) for the exact replacement map.
 
 ## Documentation MCP rule
 

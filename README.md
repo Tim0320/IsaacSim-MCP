@@ -25,6 +25,7 @@ IsaacSim-MCP 讓支援 MCP 的 AI client 透過具名、可驗證的 tools 控�
 
 - 建立、查詢、變形、組合、儲存與驗證 USD Stage。
 - 控制 articulation、joint drive、motion planning、gripper 與 mobile base。
+- 在 Stage／robot replacement 後重建失效的 physics tensor 與 articulation binding，並保持 joint name/value 對應一致。
 - 擷取 Camera RGB 與 typed RTX outputs，設定 LiDAR 並取得點雲。
 - 建立 PhysX scene、body、collider、joint、PBR material 與 physics material。
 - 管理 Action Graph、ScriptNode、ROS 2 publisher、Replicator SDG job 與 human behavior lifecycle。
@@ -258,6 +259,7 @@ Package、extension、response、capability 與 backend-matrix version 各有獨
 
 Agent 工作流程在 [.agents/skills/omniverse-windows-workspace/SKILL.md](.agents/skills/omniverse-windows-workspace/SKILL.md)。Tool、version 與 capability 的權威來源見 [Authority and Generated Metadata](docs/reference/AUTHORITY.md)。
 Agent 的 retry、reconnect、read-back 與 fail-closed 行為見 [Error Codes and Agent Recovery](docs/reference/ERROR_CODES.md)。
+Robot articulation、physics tensor、joint mapping、DriveAPI 與 IK lifecycle 見 [Robot Runtime Lifecycle](docs/reference/ROBOT_RUNTIME_LIFECYCLE.md)。
 
 ## Safety 與 verification
 
@@ -295,6 +297,14 @@ Funnel 可用，但本機 MCP Server 沒有在 Funnel 指向的 port listening�
 ### `COMMAND_FAILED / Not connected to Isaac`
 
 MCP Server 仍在執行，但 Isaac Sim Extension 沒有回應。改用 `.\scripts\run_isaac_sim_supervised.ps1` 啟動 runtime，並呼叫 `get_runtime_status`。Agent 應依 `availability_code` 處理：`ISAAC_RUNTIME_RECOVERING` 等待 bounded recovery；`ISAAC_RUNTIME_CRASHED` 檢查 `last_crash` 並修正 root cause；`ISAAC_RUNTIME_UNAVAILABLE` 啟動 supervisor。任何 write 在連線中斷後都必須先 read-back，不能盲目重送。
+
+### `IK_FAILED / physics tensor entity is not valid`
+
+目前版本會在 Stage 或 robot identity 改變後丟棄舊 articulation wrapper，並重建 invalid Physics SimulationView。若仍看到此訊息，先確認 MCP Server 與 Isaac Extension 都來自同一個最新 checkout，再重新啟動 Isaac Sim 載入新 Extension。不要用重複 Play/Pause 當成修復，也不要重送未確認結果的 write。
+
+### `PhysicsDriveAPI, a non-empty instance name must be provided`
+
+目前 USD fallback 會依 joint type 使用 `angular` 或 `linear` DriveAPI instance。若舊 runtime 仍回此錯誤，重新啟動 Isaac Sim 以載入更新後的 Extension，接著先用 `get_joint_config` 做 read-only 驗證。
 
 ## Development
 

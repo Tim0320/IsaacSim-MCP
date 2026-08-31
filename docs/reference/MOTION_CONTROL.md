@@ -23,6 +23,12 @@ IK quaternion 採 `[w, x, y, z]`。位置單位是 meters，revolute joint 是 r
 `execute_trajectory` 依 Kit update callback 推進。timeline Stop/Pause 時 job 狀態為 `paused`，Play
 後繼續；超過 deadline 轉成 `timeout`。同一 articulation 同時只允許一個 active job。
 
+## Articulation lifecycle
+
+Motion tools resolve the current prim and require a valid current physics tensor entity before constructing Lula state. Stage replacement or same-path robot replacement invalidates the cached articulation. An invalid `SimulationView` is rebuilt before retrying a fresh wrapper; repeated Play/Pause calls are not accepted as recovery. Details and regression coverage are in [`ROBOT_RUNTIME_LIFECYCLE.md`](ROBOT_RUNTIME_LIFECYCLE.md).
+
+MCP motion wrappers build explicit parameter dictionaries. Do not use `locals()` inside `register_tools()` closures because it can include the `send` function and fail JSON serialization.
+
 ## Live 驗證
 
 在 Isaac Sim 6.0.1、TCP 8766、scratch stage 執行：

@@ -21,8 +21,8 @@ Test-Path C:\isaacsim\python.bat
 ## 1. 全新 checkout
 
 ```powershell
-git clone https://github.com/Tim0320/IsaacSim-MCP.git D:\Dev\IsaacSim-MCP
-Set-Location D:\Dev\IsaacSim-MCP
+git clone https://github.com/Tim0320/IsaacSim-MCP.git F:\IsaacSim-MCP
+Set-Location F:\IsaacSim-MCP
 git remote get-url origin
 git status --short
 ```

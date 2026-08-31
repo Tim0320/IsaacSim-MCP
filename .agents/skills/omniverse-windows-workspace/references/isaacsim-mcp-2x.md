@@ -14,6 +14,7 @@ Use this reference for Phase 2 Robot control work in
 - [Recorded 2.2 evidence](#recorded-22-evidence)
 - [Recorded final 2.3 acceptance](#recorded-final-23-acceptance)
 - [Task 2.4 controller profile invariants](#task-24-controller-profile-invariants)
+- [Runtime lifecycle corrections](#runtime-lifecycle-corrections)
 - [Recorded 2.4 read-only guard evidence](#recorded-24-read-only-guard-evidence)
 - [Recorded 2.4 failed scratch rerun](#recorded-24-failed-scratch-rerun)
 - [Recorded final 2.4 acceptance](#recorded-final-24-acceptance)
@@ -66,7 +67,7 @@ Recorded results are historical baselines. A current live claim requires a fresh
 
 ## 2.1 invariants
 
-- Resolve the canonical repository as `D:\Dev\IsaacSim-MCP` and preserve its
+- Resolve the canonical repository as `F:\IsaacSim-MCP` and preserve its
   worktree and verified backup before editing.
 - Use joint names or zero-based DOF indices, never both. Preserve caller order.
 - Validate every selector, value, duplicate, range, and value count before the
@@ -84,6 +85,19 @@ Recorded results are historical baselines. A current live claim requires a fresh
 - Current live support claims require a scratch articulation, Play/Pause or
   step evidence, target and measured read-back for all three modes, invalid-name
   atomicity, cleanup, TCP survival, and log/native-dump review.
+
+## Runtime lifecycle corrections
+
+The 2026-08-31 Q2 benchmark exposed stale SimulationView/articulation state after robot recreation. The maintained rules are centralized in [Robot runtime lifecycle](../../../../docs/reference/ROBOT_RUNTIME_LIFECYCLE.md):
+
+- `franka` and `panda` resolve explicitly to `frankapanda`; fuzzy matching must not select FR3.
+- Rebuild an invalid physics simulation view before creating a fresh articulation wrapper.
+- Invalidate caches on Stage identity changes and on same-path USD/tensor joint-identity mismatch.
+- Read joint names and values atomically from one joint-state snapshot.
+- Fall back to explicit `angular`/`linear` `PhysicsDriveAPI` instances when tensor DOF metadata is invalid.
+- MCP wrappers must build JSON-safe payload dictionaries explicitly; do not send `locals()` from a closure.
+
+These corrections preserve the public joint, drive, motion, and controller contracts. Treat the 2026-08-31 paused-Panda IK/joint/drive result as dated evidence and rerun guarded Q2 acceptance before declaring a new current pass.
 
 ## Recorded 2.1 evidence
 

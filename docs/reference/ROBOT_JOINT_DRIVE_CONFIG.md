@@ -40,6 +40,8 @@ Articulation API, which converts angular USD attributes stored per degree into
 runtime per-radian values. Responses therefore never expose raw per-degree
 gains as if they were SI gains.
 
+If tensor DOF metadata is invalid or incomplete, read-back falls back to the current USD joint schemas. `UsdPhysics.DriveAPI` is multiple-apply, so this path must request the explicit `angular` instance for revolute joints or `linear` instance for prismatic joints. Calling `DriveAPI.Get()` with an empty instance name is invalid. The full recovery route is documented in [`ROBOT_RUNTIME_LIFECYCLE.md`](ROBOT_RUNTIME_LIFECYCLE.md).
+
 ## Lifecycle and atomicity
 
 The timeline must be `stopped`. The handler validates the complete request,

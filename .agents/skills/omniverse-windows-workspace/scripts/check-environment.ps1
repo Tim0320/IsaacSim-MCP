@@ -53,7 +53,7 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     }
 }
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
-    foreach ($fallbackRoot in @('D:\Dev\IsaacSim-MCP', 'D:\Dev\isaacsim-mcp-server')) {
+    foreach ($fallbackRoot in @('F:\IsaacSim-MCP', 'D:\Dev\IsaacSim-MCP', 'D:\Dev\isaacsim-mcp-server')) {
         if (Test-Path -LiteralPath $fallbackRoot -PathType Container) {
             $RepositoryRoot = $fallbackRoot
             break

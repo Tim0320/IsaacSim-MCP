@@ -15,7 +15,7 @@
 | 研究項目 | Task item | 能力 | 主要檔案 |
 |---|---|---|---|
 | 6.1 | Phase 6 item 24 | pytest test pyramid、Windows/Unix launcher CI、exact scratch-stage guard、unique namespace cleanup | `pyproject.toml`、`tests/conftest.py`、`isaac_mcp/live_testing.py`、`docs/development/LIVE_TEST_HARNESS.md` |
-| 6.2 | Phase 6 item 25 | source-derived named-tool inventory、逐項 evidence/status、read-only live snapshot、tracked JSON | `isaac_mcp/tool_inventory.py`、`scripts/generate_tool_inventory.py`、`scripts/generate_all_tools_report.py`、`docs/reference/TOOL_INVENTORY.md`、`docs/research/ALL_TOOLS_TEST_RESULTS.json` |
+| 6.2 | Phase 6 item 25 | profile-aware named-tool inventory、逐項 evidence/status、read-only live snapshot、tracked JSON | `isaac_mcp/tool_profiles.py`、`isaac_mcp/tool_inventory.py`、`scripts/generate_tool_inventory.py`、`scripts/generate_all_tools_report.py`、`docs/reference/TOOL_INVENTORY.md`、`docs/reference/TOOL_INVENTORY_CONSOLIDATED.md`、`docs/research/ALL_TOOLS_TEST_RESULTS.json` |
 | 6.3 | Phase 6 item 26 | secret-free install、protocol/version migration、wheel/fresh-venv/repository release gate | `docs/getting-started/INSTALLATION_WINDOWS.md`、`docs/concepts/PROTOCOL_VERSIONING_AND_MIGRATION.md`、`docs/development/RELEASE_GATE.md`、`scripts/release_gate.ps1` |
 
 ## 6.1 測試與 scratch-stage 不變條件
@@ -34,7 +34,7 @@
 - `unsupported`：active runtime/backend 明確拒絕能力。
 - `fail`：已進入實作並暴露 code/contract defect。
 
-`isaac_mcp.tool_inventory` 從 tool decorators 推導唯一 names 與 count，並以 `MCP_LOCAL_TOOL_NAMES` 區分不依賴 Extension 的 server-local tools。`scripts/generate_tool_inventory.py` 產生 reference inventory；`scripts/generate_all_tools_report.py --live` 只做 bounded read-only runtime/catalog snapshot，並在 Extension-routed subset 與 runtime count 不一致時 fail closed。新增、刪除或改名 tool 時，不得新增另一個手工數字來源。
+`isaac_mcp.tool_inventory` 從 tool decorators 與 `isaac_mcp.tool_profiles` 推導唯一 names 與 count，並以 `MCP_LOCAL_TOOL_NAMES` 區分不依賴 Extension 的 server-local tools。`legacy` 仍是 129-tool release/evidence baseline；`consolidated` 是 98-tool public surface；`full` 只供 migration/testing。`scripts/generate_tool_inventory.py` 同時產生兩份 tracked reference。`scripts/generate_all_tools_report.py --live` 仍以 legacy Extension-routed subset 對 runtime command registry fail closed，因為 consolidated wrappers 不新增 Extension commands。新增、刪除、合併或改名 tool 時，不得新增手工數字來源。
 
 2026-08-26 歷史聚合是 `117 pass / 11 blocked / 0 fail`。8 個 ROS 2 tools 因當時 extensions disabled blocked；`search_usd`／`generate_3d` 缺外部 provider 設定；`spawn_nvidia_asset` 缺 preserved dedicated scratch live postcondition。這些狀態會隨 runtime 改變，宣稱目前結果前必須重跑 `--live --check`。
 

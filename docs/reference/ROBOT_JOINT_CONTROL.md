@@ -10,6 +10,8 @@ Task 2.1 adds two named tools for Isaac Sim 6.0.1 articulations:
 Both use the live Isaac Sim route on TCP `8766`. The documentation MCP on port
 `9904` cannot provide stage-control evidence.
 
+Articulation cache invalidation, same-path robot replacement, physics tensor recovery, and atomic name/value observation are defined in [`ROBOT_RUNTIME_LIFECYCLE.md`](ROBOT_RUNTIME_LIFECYCLE.md).
+
 ## Joint selection
 
 The caller may provide exactly one selector:
@@ -33,6 +35,8 @@ selected DOFs, and every value must be finite.
 `type`, measured values, target values, and these units. Isaac Sim 6 reads the
 measured effort through `get_dof_projected_joint_forces()` and the current
 effort command through `get_dof_efforts()`.
+
+Joint names and values in `step_simulation` observations must come from this same snapshot. Combining a separate name lookup with `get_joint_positions` can mislabel arm radians as finger meters after an articulation lifecycle change.
 
 ## Command semantics
 

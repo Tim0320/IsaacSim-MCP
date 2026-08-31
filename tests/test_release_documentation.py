@@ -78,7 +78,7 @@ def test_protocol_versions_and_migration_boundaries_are_explicit():
 
 def test_fresh_install_is_secret_free_and_uses_exact_live_route():
     installation = _text("docs/getting-started/INSTALLATION_WINDOWS.md")
-    assert "git clone https://github.com/Tim0320/IsaacSim-MCP.git D:\\Dev\\IsaacSim-MCP" in installation
+    assert "git clone https://github.com/Tim0320/IsaacSim-MCP.git F:\\IsaacSim-MCP" in installation
     assert '"isaac-sim-live"' in installation
     assert "127.0.0.1:8766" in installation
     assert "9904" in installation and "documentation route" in installation

@@ -23,11 +23,11 @@ The environment check reports state; it does not authorize installation, process
 ## Load the relevant capability reference
 
 - [1.x](references/isaacsim-mcp-1x.md): Camera, LiDAR, artifacts, and sensor lifecycle.
-- [2.x](references/isaacsim-mcp-2x.md): robot joints, drives, motion, grippers, and mobile bases.
+- [2.x](references/isaacsim-mcp-2x.md): robot joints, drives, motion, grippers, mobile bases, and articulation/physics-tensor lifecycle recovery.
 - [3.x](references/isaacsim-mcp-3x.md): physics parameters, backend capability, authoring, materials, and Stage composition.
 - [4.x](references/isaacsim-mcp-4x.md): OmniGraph, ScriptNode, ROS 2, Replicator SDG, humans, Behavior Agents, and NavMesh.
 - [5.x](references/isaacsim-mcp-5x.md): script policy, command governance, idempotency, jobs, transport, and diagnostics.
-- [6.x](references/isaacsim-mcp-6x.md): test layers, scratch-stage safety, generated inventory, evidence reports, migration, release gates, and publishing.
+- [6.x](references/isaacsim-mcp-6x.md): test layers, scratch-stage safety, profile-aware generated inventory, evidence reports, migration, release gates, and publishing.
 - [V6 adapter runtime](references/v6-adapter-runtime.md): read before changing `IsaacAdapterV6`, `v6_runtime`, component state ownership, hot reload order, or the deferred Graph/ROS2/Replicator/Human boundary.
 
 These references contain dated acceptance evidence. They do not replace current `get_capabilities` output or a guarded live verifier.
@@ -35,12 +35,14 @@ These references contain dated acceptance evidence. They do not replace current 
 ## Repository and capability authority
 
 - Resolve the repository from this skill location. Do not infer it from a similar repository name.
-- Public tool names/count come from `@mcp.tool(...)` decorators and `isaac_mcp.tool_inventory`, not README prose.
+- Public tool names/count come from `@mcp.tool(...)` decorators, `isaac_mcp.tool_profiles`, and `isaac_mcp.tool_inventory`, not README prose. Read [Tool profiles](../../../docs/reference/TOOL_PROFILES.md) before adding, removing, merging, or hiding public tools.
 - Package version comes from `isaac_mcp.__version__`; extension copies must pass parity tests.
 - Current backend, extension, command registry, and support state come from `get_capabilities` on the active runtime.
 - Reports under `docs/research/` are historical snapshots. Registry presence alone is not a live pass.
 
 Read [docs/reference/AUTHORITY.md](../../../docs/reference/AUTHORITY.md) before changing public tools, versions, capabilities, or evidence generation.
+
+For stale articulation wrappers, invalid physics tensor entities, same-path robot replacement, joint name/value mismatch, or `PhysicsDriveAPI` instance errors, read [Robot runtime lifecycle](../../../docs/reference/ROBOT_RUNTIME_LIFECYCLE.md) and the [V6 adapter runtime reference](references/v6-adapter-runtime.md) before editing.
 
 ## Live workflow
 
