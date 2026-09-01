@@ -17,6 +17,20 @@ $env:ISAAC_MCP_TOOL_PROFILE = "consolidated"
 
 變更後必須重新啟動 MCP Server，讓 client 重新取得 tool list。未知 profile 會在啟動時直接回報 `ValueError`。
 
+`.env.example` 是設定範例，server 不會自動載入。環境變數必須存在於啟動 `python -m isaac_mcp.server` 的 process；修改檔案或在另一個 PowerShell 設定環境變數，不會重建已執行 server 的 tool surface。
+
+## Runtime discovery
+
+不要從 README、connector 畫面或歷史 task 推測 active profile。連到實際 endpoint 後查詢 MCP `tools/list` 與 `get_capabilities.data.mcp_server`：
+
+| Active profile | `public_tool_count` | Probe tools |
+|---|---:|---|
+| `legacy` | 129 | 有 `play_simulation`、`open_gripper`；沒有 `control_timeline`、`control_gripper`。 |
+| `consolidated` | 98 | 有 `control_timeline`、`control_gripper`；沒有 `play_simulation`、`open_gripper`。 |
+| `full` | 151 | 新舊名稱都存在，只供 migration 與 contract verification。 |
+
+若 client 顯示 legacy 名稱，但 active endpoint 回報 `consolidated` 並對 legacy call 回 `Unknown tool`，代表 client 保存了舊 tool schema，或 public URL 指向另一個 server instance。先核對 public endpoint 的 `tools/list`，再重新連線並讓 connector 重新 discovery。短期 migration 可使用 `full`；完成更新後應回到選定的 production profile。
+
 ## 合併對照
 
 | 類別 | Consolidated tool | `action` / selector | 被取代的 legacy tools |

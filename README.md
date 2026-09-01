@@ -109,6 +109,8 @@ $env:ISAAC_MCP_TOOL_PROFILE = "consolidated"
 
 `consolidated` 用 `action` 或 `publisher_type` 合併同一資源的讀寫／控制操作，公開 98 tools。它只調整 MCP tool surface，仍呼叫原本的 Isaac Extension commands。修改 profile 後必須重新啟動 MCP Server，讓 client 重新取得 tool list。完整對照見 [Tool profiles](docs/reference/TOOL_PROFILES.md)。
 
+`.env.example` 只列出可用設定，server 不會自動載入它。請在啟動 `python -m isaac_mcp.server` 的同一個 process environment 設定 profile。啟動後可用 MCP `tools/list` 與 `get_capabilities.data.mcp_server` 核對實際公開 surface；`consolidated` 應回報 98 tools。
+
 ## Running IsaacSim-MCP
 
 建議用 supervisor 啟動 Isaac Sim 與 Extension：
@@ -293,6 +295,15 @@ Funnel 可用，但本機 MCP Server 沒有在 Funnel 指向的 port listening�
 ### Works locally but ChatGPT cannot connect
 
 確認公開 URL 使用 HTTPS 且以 `/mcp` 結尾，並確認使用 Tailscale Funnel。Tailscale Serve 只有 tailnet 內部可達，ChatGPT 無法透過它連線。
+
+### ChatGPT 顯示 legacy tools，但呼叫回 `Unknown tool`
+
+這代表 connector 保存的 tool schema 與目前 server profile 不一致。先對實際 HTTP endpoint 執行 MCP `tools/list`，再呼叫 `get_capabilities`：
+
+- `legacy` 應公開 129 tools，包含 `play_simulation`、`open_gripper`、`list_available_robots`。
+- `consolidated` 應公開 98 tools，改用 `control_timeline`、`control_gripper`、`robot_library`。
+
+確認 server process 啟動前已設定 `ISAAC_MCP_TOOL_PROFILE`，重新啟動 server，接著讓 ChatGPT Connector 重新連線並重新取得 tool schema。若 connector migration 期間仍保存舊名稱，可暫時使用 `full` 同時公開新舊名稱；完成 schema 更新後切回 `consolidated`。不要永久使用 `full`，它會把 action space 增加到 151 tools。
 
 ### `COMMAND_FAILED / Not connected to Isaac`
 

@@ -135,6 +135,8 @@ $env:MCP_ALLOWED_HOSTS = "localhost,127.0.0.1"
 
 `ISAAC_MCP_TOOL_PROFILE` 預設為 `legacy`，完整保留既有 129 tools。ChatGPT 可選 `consolidated` 取得 98-tool 精簡 surface；切換後需重新啟動 MCP Server。對照見 [`TOOL_PROFILES.md`](../reference/TOOL_PROFILES.md)。
 
+`.env.example` 不會被 server 自動載入。請在啟動 MCP Server 的同一個 PowerShell 設定環境變數。若 ChatGPT 仍顯示 `play_simulation` 等 legacy names，但 server 回 `Unknown tool`，請用 `tools/list`／`get_capabilities` 確認 endpoint 是否為 98-tool `consolidated` surface，接著重新連線並讓 Connector 重新取得 schema。
+
 - `127.0.0.1:8000/mcp`：Secure MCP Tunnel／HTTP MCP client 連到 Python MCP Server。
 - `127.0.0.1:8766`：Python MCP Server 連到 Isaac Sim Extension 的 runtime TCP socket。
 
