@@ -96,6 +96,8 @@ connect_action_graph(
 
 `configure_script_node` 用於指定新的 mode/source；`reload_script_node` 可保留 current mode/source，或原子換成新的 source。兩者都要求 exact `graph_path` 和 `node_path`。
 
+`simulation.reload_script` 的 cross-graph file lookup 只檢查 `omni.graph.scriptnode.ScriptNode`。Render、SDG 與其他 OmniGraph nodes 不會被查詢不存在的 `inputs:scriptPath`；單一 malformed ScriptNode 也不會中止同 graph 後續 node 的掃描。
+
 ### Inline mode
 
 ```text
@@ -152,7 +154,7 @@ Delete 在 apply 前讀取 graph/node 狀態，暫時停用 graph，清除 Scrip
 DeletePrimsCommand(paths=[graph_path], destructive=False, stage=stage)
 ```
 
-一個 Kit update 後必須同時確認 OmniGraph registry 與 backing USD prim 都不存在。若刪除或 read-back 失敗，handler 呼叫同一 command 的 `undo()`、更新 Kit、重新取得 graph，還原原 enabled state並比較 node count。
+一個 awaited Kit update 後必須同時確認 OmniGraph registry 與 backing USD prim 都不存在。Handler 執行於 Kit asyncio dispatcher 時只能 `await next_update_async()`，禁止同步呼叫 `app.update()` 重新進入 event loop。若刪除或 read-back 失敗，handler 呼叫同一 command 的 `undo()`、await 下一次 Kit update、重新取得 graph，還原原 enabled state並比較 node count。ROS 2 workflow create rollback與delete沿用同一 async lifecycle。
 
 成功 response 的 `readback` 包含：
 

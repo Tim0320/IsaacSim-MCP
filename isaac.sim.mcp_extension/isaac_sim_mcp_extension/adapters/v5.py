@@ -59,7 +59,13 @@ def _recompile_scriptnodes_for_file(abs_path: str) -> list:
         graphs = []
     for graph in graphs:
         try:
-            for node in graph.get_nodes():
+            nodes = graph.get_nodes()
+        except Exception:
+            continue
+        for node in nodes:
+            try:
+                if node.get_type_name() != "omni.graph.scriptnode.ScriptNode":
+                    continue
                 attr = node.get_attribute("inputs:scriptPath")
                 if attr is None or not attr.is_valid():
                     continue
@@ -67,8 +73,8 @@ def _recompile_scriptnodes_for_file(abs_path: str) -> list:
                 if val and os.path.abspath(str(val)) == abs_path:
                     force_recompile_scriptnode(graph, node)
                     recompiled.append(node.get_prim_path())
-        except Exception:
-            continue
+            except Exception:
+                continue
     return recompiled
 
 

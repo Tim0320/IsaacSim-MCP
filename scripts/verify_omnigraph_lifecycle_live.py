@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import uuid
 from pathlib import Path
 
 from isaac_mcp.connection import IsaacConnection
@@ -13,6 +14,21 @@ GRAPH = "/World/MCP_Task_4_1"
 TICK = f"{GRAPH}/OnTick.outputs:tick"
 SCRIPT_EXEC = f"{GRAPH}/ScriptNode.inputs:execIn"
 SECOND_EXEC = f"{GRAPH}/ScriptNode2.inputs:execIn"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+ASYNC_ERROR_PATTERNS = (
+    "cannot enter into task",
+    "exception in callback",
+    "inputs:scriptpath not found",
+    "task was destroyed but it is pending",
+    "was never awaited",
+)
+REQUIRED_COMMANDS = {
+    "graphs.create_action_graph",
+    "graphs.delete_action_graph",
+    "graphs.get_action_graph",
+    "graphs.reload_script_node",
+    "simulation.reload_script",
+}
 
 
 def _data(response: dict) -> dict:
@@ -48,6 +64,29 @@ def _status(connection: IsaacConnection) -> dict:
 
 def _messages(status: dict) -> list[str]:
     return [item["message"] for item in status["messages"]]
+
+
+def _assert_no_async_lifecycle_errors(connection: IsaacConnection, command_id: str) -> dict:
+    diagnostics = _data(
+        connection.send_command(
+            "simulation.get_logs",
+            {
+                "count": 200,
+                "since_last_play": True,
+                "filter_command_id": command_id,
+            },
+        )
+    )
+    command_text = json.dumps(diagnostics["records"], sort_keys=True).lower()
+    run_text = "\n".join(str(item) for item in diagnostics["logs"]).lower()
+    for pattern in ASYNC_ERROR_PATTERNS:
+        assert pattern not in command_text, {
+            "command_id": command_id,
+            "pattern": pattern,
+            "records": diagnostics["records"],
+        }
+        assert pattern not in run_text, {"command_id": command_id, "pattern": pattern, "logs": diagnostics["logs"]}
+    return diagnostics
 
 
 def _version(connection: IsaacConnection) -> str:
@@ -98,7 +137,7 @@ def _delete_if_present(connection: IsaacConnection) -> None:
 
 def main() -> int:
     connection = IsaacConnection(port=8766)
-    temp_dir = tempfile.TemporaryDirectory(prefix="isaacsim-mcp-task-4-1-")
+    temp_dir = tempfile.TemporaryDirectory(prefix=".isaacsim-mcp-task-4-1-", dir=REPOSITORY_ROOT)
     script_file = Path(temp_dir.name) / "controller.py"
     created = False
     evidence: dict = {}
@@ -107,8 +146,15 @@ def main() -> int:
         state_before = _data(connection.send_command("simulation.get_state"))
         assert state_before["timeline_state"] == "stopped", state_before
         scene_before = _data(connection.send_command("scene.get_info"))
+        world_before = _data(connection.send_command("scene.list_prims", {"root_path": "/World"}))["prims"]
         capabilities = _data(connection.send_command("system.get_capabilities"))
-        assert capabilities["extension"]["command_count"] == 98, capabilities["extension"]
+        extension = capabilities["extension"]
+        command_names = set(extension["command_names"])
+        assert extension["command_count"] == len(command_names), extension
+        assert REQUIRED_COMMANDS <= command_names, {
+            "missing_commands": sorted(REQUIRED_COMMANDS - command_names),
+            "extension": extension,
+        }
         lifecycle = capabilities["feature_flags"]["omnigraph.lifecycle"]
         assert lifecycle["state"] == "supported", lifecycle
         assert lifecycle["enabled_state_runtime_only"] is True
@@ -256,19 +302,35 @@ def main() -> int:
         status_d = _status(connection)
         assert _version(connection) == "D", status_d
 
+        script_file.write_text(_script("E"), encoding="utf-8")
+        reload_command_id = f"verify-reload-script-{uuid.uuid4().hex}"
+        file_e = connection.send_command(
+            "simulation.reload_script",
+            {"file_path": str(script_file)},
+            command_id=reload_command_id,
+        )
+        assert file_e["status"] == "success", file_e
+        assert f"{GRAPH}/ScriptNode" in file_e["data"]["recompiled_nodes"], file_e
+        for _ in range(2):
+            _data(connection.send_command("simulation.get_state"))
+        reload_diagnostics = _assert_no_async_lifecycle_errors(connection, reload_command_id)
+        _play_and_stop(connection)
+        status_file_e = _status(connection)
+        assert _version(connection) == "E", status_file_e
+
         error_reload = connection.send_command(
             "graphs.reload_script_node",
             {
                 "graph_path": GRAPH,
                 "node_path": "ScriptNode",
                 "mode": "inline",
-                "inline_script": _script("E", fail=True),
+                "inline_script": _script("F", fail=True),
                 "preview": False,
             },
         )
         assert error_reload["status"] == "success" and error_reload["readback"]["compile_state"] == "pending_evaluation"
-        status_e = _play_capture_status_and_stop(connection)
-        assert status_e["has_errors"] is True and any("MCP_ERROR_E" in text for text in _messages(status_e)), status_e
+        status_f = _play_capture_status_and_stop(connection)
+        assert status_f["has_errors"] is True and any("MCP_ERROR_F" in text for text in _messages(status_f)), status_f
 
         recovered = connection.send_command(
             "graphs.reload_script_node",
@@ -286,22 +348,39 @@ def main() -> int:
 
         delete_preview = connection.send_command("graphs.delete_action_graph", {"graph_path": GRAPH})
         assert delete_preview["status"] == "success" and delete_preview["data"]["preview"] is True
-        deleted = connection.send_command("graphs.delete_action_graph", {"graph_path": GRAPH, "preview": False})
+        delete_command_id = f"verify-omnigraph-delete-{uuid.uuid4().hex}"
+        deleted = connection.send_command(
+            "graphs.delete_action_graph",
+            {"graph_path": GRAPH, "preview": False},
+            command_id=delete_command_id,
+        )
         assert deleted["status"] == "success" and deleted["readback"] == {
             "graph_present": False,
             "prim_present": False,
         }
+        for _ in range(2):
+            _data(connection.send_command("simulation.get_state"))
+        delete_diagnostics = _assert_no_async_lifecycle_errors(connection, delete_command_id)
         created = False
         after_graphs = _data(
             connection.send_command("graphs.list_action_graphs", {"root_path": "/World", "include_disabled": True})
         )["graphs"]
         assert after_graphs == graphs_before, {"before": graphs_before, "after": after_graphs}
+        world_after = _data(connection.send_command("scene.list_prims", {"root_path": "/World"}))["prims"]
+        assert world_after == world_before, {"before": world_before, "after": world_after}
         state_after = _data(connection.send_command("simulation.get_state"))
         assert state_after["timeline_state"] == "stopped", state_after
         scene_after = _data(connection.send_command("scene.get_info"))
-        assert scene_after == scene_before, {"before": scene_before, "after": scene_after}
+        assert scene_after["stage_path"] == scene_before["stage_path"], {
+            "before": scene_before,
+            "after": scene_after,
+        }
+        assert scene_after["assets_root_path"] == scene_before["assets_root_path"], {
+            "before": scene_before,
+            "after": scene_after,
+        }
         evidence = {
-            "command_count": capabilities["extension"]["command_count"],
+            "extension_command_count": extension["command_count"],
             "created_node_count": created_data["node_count"],
             "query_connection_count": queried["connection_count"],
             "evaluate_a_counts": evaluated_a["readback"]["compute_count_after"],
@@ -309,11 +388,19 @@ def main() -> int:
             "duplicate_code": duplicate["code"],
             "script_modes": ["inline", "file"],
             "inline_versions": ["A", "B", "RECOVERED"],
-            "file_versions": ["C", "D"],
-            "runtime_error_state": status_e["evaluation_state"],
+            "file_versions": ["C", "D", "E"],
+            "reload_script_command_id": reload_command_id,
+            "reload_script_diagnostic_records": reload_diagnostics["record_count"],
+            "runtime_error_state": status_f["evaluation_state"],
             "delete_readback": deleted["readback"],
+            "delete_command_id": delete_command_id,
+            "delete_diagnostic_records": delete_diagnostics["record_count"],
+            "async_lifecycle_errors": 0,
             "graph_list_restored": True,
-            "stage_prim_count": scene_after["prim_count"],
+            "world_prims_restored": True,
+            "stage_prim_count_before": scene_before["prim_count"],
+            "stage_prim_count_after": scene_after["prim_count"],
+            "system_prim_count_delta": scene_after["prim_count"] - scene_before["prim_count"],
             "timeline_state": state_after["timeline_state"],
         }
         print(json.dumps({"status": "success", "graph_path": GRAPH, "evidence": evidence}, indent=2))

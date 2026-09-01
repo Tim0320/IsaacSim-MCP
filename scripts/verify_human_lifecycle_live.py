@@ -99,6 +99,8 @@ def main() -> int:
         _data(baked)
         baked_readback = baked["readback"]
         assert baked_readback["ready"] is True, baked
+        assert baked_readback["reason"] in {"ready", "already_ready"}, baked_readback
+        assert "start_result" in baked_readback, baked_readback
 
         spawned = _data(
             connection.send_command(

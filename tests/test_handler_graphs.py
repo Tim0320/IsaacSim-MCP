@@ -25,6 +25,10 @@
 
 import ast
 import os
+import sys
+import types
+
+import pytest
 
 HANDLERS = os.path.join(
     os.path.dirname(__file__),
@@ -84,6 +88,87 @@ def test_reload_script_scans_scriptnodes_by_scriptpath():
             src = f.read()
         assert "inputs:scriptPath" in src  # reload matches nodes by their file
         assert "force_recompile_scriptnode" in src  # and recompiles them
+
+
+@pytest.mark.parametrize(
+    "module_name",
+    (
+        "isaac_sim_mcp_extension.adapters.v5",
+        "isaac_sim_mcp_extension.adapters.v6_runtime.simulation",
+    ),
+    ids=("v5", "v6"),
+)
+def test_reload_script_ignores_non_scriptnodes_and_keeps_scanning(monkeypatch, tmp_path, module_name):
+    """Only ScriptNodes expose scriptPath, and one bad node must not hide later matches."""
+    module = __import__(module_name, fromlist=["_recompile_scriptnodes_for_file"])
+    target = os.path.abspath(tmp_path / "controller.py")
+
+    class _Attribute:
+        def is_valid(self):
+            return True
+
+        def get(self):
+            return target
+
+    class _Node:
+        def __init__(self, path, type_name, *, broken_attribute=False):
+            self.path = path
+            self.type_name = type_name
+            self.broken_attribute = broken_attribute
+            self.attribute_calls = []
+
+        def get_type_name(self):
+            return self.type_name
+
+        def get_attribute(self, name):
+            self.attribute_calls.append(name)
+            if self.type_name != "omni.graph.scriptnode.ScriptNode":
+                raise AssertionError("non-ScriptNode attributes must not be queried")
+            if self.broken_attribute:
+                raise RuntimeError("controlled malformed ScriptNode")
+            return _Attribute()
+
+        def get_prim_path(self):
+            return self.path
+
+    non_script = _Node("/World/Graph/Tick", "omni.graph.action.OnPlaybackTick")
+    malformed_script = _Node(
+        "/World/Graph/MalformedScript",
+        "omni.graph.scriptnode.ScriptNode",
+        broken_attribute=True,
+    )
+    matching_script = _Node(
+        "/World/Graph/MatchingScript",
+        "omni.graph.scriptnode.ScriptNode",
+    )
+
+    class _Graph:
+        def get_nodes(self):
+            return [non_script, malformed_script, matching_script]
+
+    graph_core = types.ModuleType("omni.graph.core")
+    graph_core.get_all_graphs = lambda: [_Graph()]
+    graph_package = types.ModuleType("omni.graph")
+    graph_package.core = graph_core
+    monkeypatch.setitem(sys.modules, "omni.graph", graph_package)
+    monkeypatch.setitem(sys.modules, "omni.graph.core", graph_core)
+
+    from isaac_sim_mcp_extension.handlers import graphs as graph_handlers
+
+    recompiled = []
+    monkeypatch.setattr(
+        graph_handlers,
+        "force_recompile_scriptnode",
+        lambda graph, node: recompiled.append(node.get_prim_path()),
+    )
+
+    result = module._recompile_scriptnodes_for_file(target)
+
+    assert non_script.attribute_calls == []
+    assert malformed_script.attribute_calls == ["inputs:scriptPath"]
+    assert matching_script.attribute_calls == ["inputs:scriptPath"]
+    assert recompiled == ["/World/Graph/MatchingScript"]
+    assert result == recompiled
 
 
 def test_action_graph_evaluator_defaults_to_execution():

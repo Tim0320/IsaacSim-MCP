@@ -282,14 +282,14 @@ def _ensure_navmesh_volume(
     return str(volume_path), True
 
 
-async def _wait_for_navmesh(max_frames: int = 2000, force_rebake: bool = False) -> tuple[bool, int]:
+async def _wait_for_navmesh(max_frames: int = 2000, force_rebake: bool = False) -> Dict[str, Any]:
     """Bake/wait beyond IRA's 100-frame helper limit for real factory stages."""
     import omni.anim.navigation.core as nav
     import omni.kit.app
 
     interface = nav.acquire_interface()
     if interface.get_navmesh() is not None and not force_rebake:
-        return True, 0
+        return {"ready": True, "frames": 0, "reason": "already_ready", "start_result": None}
     app = omni.kit.app.get_app()
     # Navigation Core's own 110.1 tests allow five application updates after
     # authoring a NavMeshVolume before asking the native interface to bake.
@@ -297,18 +297,31 @@ async def _wait_for_navmesh(max_frames: int = 2000, force_rebake: bool = False) 
     # newly authored volume even though USD read-back already sees it.
     for _ in range(5):
         await app.next_update_async()
+    start_result = None
     if not interface.is_navmesh_baking():
         # Some Navigation Core 110.1 Python builds start the asynchronous bake
         # but return None despite the generated stub advertising bool. Only an
         # explicit False is a rejection; readiness/baking is proven below.
-        interface.start_navmesh_baking()
+        start_result = interface.start_navmesh_baking()
+        if start_result is False:
+            return {"ready": False, "frames": 0, "reason": "start_rejected", "start_result": False}
     for frame in range(1, max_frames + 1):
         await app.next_update_async()
         if interface.get_navmesh() is not None:
-            return True, frame
+            return {"ready": True, "frames": frame, "reason": "ready", "start_result": start_result}
         if not interface.is_navmesh_baking():
-            return False, frame
-    return False, max_frames
+            return {
+                "ready": False,
+                "frames": frame,
+                "reason": "completed_without_navmesh",
+                "start_result": start_result,
+            }
+    return {
+        "ready": False,
+        "frames": max_frames,
+        "reason": "max_frames_exceeded",
+        "start_result": start_result,
+    }
 
 
 async def _refresh_behavior_agents(stage: Any, character_paths: Sequence[str]) -> list[str]:
@@ -336,7 +349,9 @@ async def _refresh_behavior_agents(stage: Any, character_paths: Sequence[str]) -
     return refreshed
 
 
-def _describe_human(stage: Any, prim: Any, marker: Optional[dict[str, Any]], agent_paths: Sequence[str]) -> dict[str, Any]:
+def _describe_human(
+    stage: Any, prim: Any, marker: Optional[dict[str, Any]], agent_paths: Sequence[str]
+) -> dict[str, Any]:
     path = str(prim.GetPath())
     item: dict[str, Any] = {
         "human_path": path,
@@ -470,7 +485,11 @@ def set_human_target(
             raise ValueError("speed_mps must be a positive number")
         if target_prim_path and not stage.GetPrimAtPath(target_prim_path).IsValid():
             raise ValueError(f"Target prim does not exist: {target_prim_path}")
-        plan = {"operation": "move_to", "human_path": str(prim.GetPath()), "target": target_prim_path or list(target_position)}
+        plan = {
+            "operation": "move_to",
+            "human_path": str(prim.GetPath()),
+            "target": target_prim_path or list(target_position),
+        }
         if preview:
             return {"status": "success", "preview": True, "plan": plan}
         _require_playing(adapter)
@@ -520,7 +539,11 @@ def set_human_look_at(
             return {
                 "status": "success",
                 "preview": True,
-                "plan": {"operation": "look_at", "human_path": str(prim.GetPath()), "duration_seconds": duration_seconds},
+                "plan": {
+                    "operation": "look_at",
+                    "human_path": str(prim.GetPath()),
+                    "duration_seconds": duration_seconds,
+                },
             }
         _require_playing(adapter)
         task = _task_snapshot(agent, agent.look_at(target, float(duration_seconds)))
@@ -548,7 +571,11 @@ def set_human_idle(
         if facing_prim_path and not stage.GetPrimAtPath(facing_prim_path).IsValid():
             raise ValueError(f"Facing prim does not exist: {facing_prim_path}")
         if preview:
-            return {"status": "success", "preview": True, "plan": {"operation": "idle", "human_path": str(prim.GetPath())}}
+            return {
+                "status": "success",
+                "preview": True,
+                "plan": {"operation": "idle", "human_path": str(prim.GetPath())},
+            }
         _require_playing(adapter)
         task_id = agent.idle(facing) if facing is not None else agent.idle()
         task = _task_snapshot(agent, task_id)
@@ -592,7 +619,11 @@ def set_human_behavior(
         if not changes:
             raise ValueError("At least one behavior setting must be provided")
         if preview:
-            return {"status": "success", "preview": True, "plan": {"human_path": str(prim.GetPath()), "changes": changes}}
+            return {
+                "status": "success",
+                "preview": True,
+                "plan": {"human_path": str(prim.GetPath()), "changes": changes},
+            }
 
         before = _agent_snapshot(agent, agent_path)
         try:
@@ -687,18 +718,31 @@ async def bake_navmesh(adapter: IsaacAdapterBase, max_frames: int = 2000, previe
                 "preview": True,
                 "plan": {"operation": "bake_navmesh", "max_frames": max_frames, "volume_paths": volumes},
             }
-        ready, frames = await _wait_for_navmesh(max_frames=max_frames, force_rebake=True)
-        if not ready:
+        bake_result = await _wait_for_navmesh(max_frames=max_frames, force_rebake=True)
+        frames = bake_result["frames"]
+        if not bake_result["ready"]:
             return _error(
                 "NAVMESH_BAKE_FAILED",
-                f"NavMesh baking did not produce a NavMesh after {frames} update frames",
-                readback={"ready": False, "bake_frames": frames, "volume_paths": volumes},
+                f"NavMesh baking did not produce a NavMesh after {frames} update frames ({bake_result['reason']})",
+                readback={
+                    "ready": False,
+                    "bake_frames": frames,
+                    "volume_paths": volumes,
+                    "reason": bake_result["reason"],
+                    "start_result": bake_result["start_result"],
+                },
             )
         return {
             "status": "success",
             "preview": False,
             "message": "NavMesh bake completed",
-            "readback": {"ready": True, "bake_frames": frames, "volume_paths": volumes},
+            "readback": {
+                "ready": True,
+                "bake_frames": frames,
+                "volume_paths": volumes,
+                "reason": bake_result["reason"],
+                "start_result": bake_result["start_result"],
+            },
         }
     except Exception as exc:
         return _error("NAVMESH_BAKE_FAILED", str(exc))
@@ -728,7 +772,11 @@ def delete_human(
             return {
                 "status": "success",
                 "preview": True,
-                "plan": {"delete_paths": [exact_path], "delete_empty_group": delete_empty_group, "group_path": group_path},
+                "plan": {
+                    "delete_paths": [exact_path],
+                    "delete_empty_group": delete_empty_group,
+                    "group_path": group_path,
+                },
             }
 
         import omni.kit.commands
@@ -845,15 +893,20 @@ async def spawn(
                 ),
             }
 
-        navmesh_ready, navmesh_bake_frames = await _wait_for_navmesh()
-        if not navmesh_ready:
+        navmesh_result = await _wait_for_navmesh()
+        navmesh_bake_frames = navmesh_result["frames"]
+        if not navmesh_result["ready"]:
             return {
                 "status": "error",
                 "message": (
                     f"NavMesh baking did not produce a NavMesh after {navmesh_bake_frames} update frames. "
+                    f"Runtime reason: {navmesh_result['reason']}. "
                     "Verify that the volume overlaps a walkable collision surface."
                 ),
                 "navmesh_volume_path": navmesh_volume_path,
+                "navmesh_bake_frames": navmesh_bake_frames,
+                "navmesh_reason": navmesh_result["reason"],
+                "navmesh_start_result": navmesh_result["start_result"],
             }
 
         group_path = f"{root_prim_path.rstrip('/')}/{group_name}"
@@ -935,6 +988,8 @@ async def spawn(
             "navmesh_volume_path": navmesh_volume_path,
             "navmesh_volume_created": navmesh_volume_created,
             "navmesh_bake_frames": navmesh_bake_frames,
+            "navmesh_reason": navmesh_result["reason"],
+            "navmesh_start_result": navmesh_result["start_result"],
             "behavior_agent_paths": behavior_agent_paths,
         }
         if warning:

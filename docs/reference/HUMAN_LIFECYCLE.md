@@ -13,7 +13,7 @@ Item 19 adds typed NVIDIA IRA human lifecycle control for Isaac Sim 6.0.1. The i
 - `set_human_idle`: issues `IBehaviorAgent.idle`, optionally with one facing target.
 - `set_human_behavior`: updates the live enabled state, locomotion speed, allowed NavMesh areas, obstacle avoidance and auto avoidance.
 - `get_navmesh_status`: reports NavMesh readiness, bake state, volumes, area names and prerequisites.
-- `bake_navmesh`: starts a bounded bake and returns ready/not-ready read-back.
+- `bake_navmesh`: starts a bounded bake and returns ready/not-ready read-back with native lifecycle diagnostics.
 
 ## Safety and timeline rules
 
@@ -34,7 +34,7 @@ Task responses include the task ID, name, status, running flag and an immediate 
 - `HUMAN_TASK_REJECTED`: Behavior Core rejected the task, usually because initialization is incomplete or a target is not reachable on the NavMesh.
 - `TIMELINE_STATE_CONFLICT`: the current timeline state cannot safely perform the operation.
 - `NAVMESH_VOLUME_NOT_FOUND`: bake was requested without a NavMeshVolume.
-- `NAVMESH_BAKE_FAILED`: bounded baking ended without a usable NavMesh.
+- `NAVMESH_BAKE_FAILED`: bounded baking ended without a usable NavMesh. `readback.reason` distinguishes `start_rejected`, `completed_without_navmesh`, and `max_frames_exceeded`; `bake_frames=1` can mean the native bake completed unsuccessfully on its first update, not that the requested limit was ignored.
 - `HUMAN_DELETE_FAILED`: exact deletion or its read-back failed.
 
 ## Live validation

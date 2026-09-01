@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 from pathlib import Path
@@ -54,6 +55,22 @@ def _error(code: str, message: str, **fields: Any) -> Dict[str, Any]:
 
 def _success(code: str, message: str, data: Dict[str, Any], **fields: Any) -> Dict[str, Any]:
     return {"status": "success", "code": code, "message": message, "data": data, **fields}
+
+
+async def _next_kit_update() -> None:
+    """Yield to Kit once without re-entering its asyncio event loop."""
+    import omni.kit.app
+
+    await omni.kit.app.get_app().next_update_async()
+
+
+def _run_or_return(awaitable):
+    """Run direct offline calls, but let Kit's dispatcher await on its loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+    return awaitable
 
 
 def _require_stopped(adapter: IsaacAdapterBase) -> Optional[Dict[str, Any]]:
@@ -298,6 +315,30 @@ def create_action_graph(
     script_file: Optional[str] = None,
     inline_script: Optional[str] = None,
 ) -> Dict[str, Any]:
+    return _run_or_return(
+        _create_action_graph(
+            adapter,
+            graph_path=graph_path,
+            nodes=nodes,
+            connections=connections,
+            values=values,
+            evaluator=evaluator,
+            script_file=script_file,
+            inline_script=inline_script,
+        )
+    )
+
+
+async def _create_action_graph(
+    adapter: IsaacAdapterBase,
+    graph_path: str = "/World/ActionGraph",
+    nodes: Optional[List[Dict[str, str]]] = None,
+    connections: Optional[List[List[str]]] = None,
+    values: Optional[List[Dict[str, object]]] = None,
+    evaluator: str = "execution",
+    script_file: Optional[str] = None,
+    inline_script: Optional[str] = None,
+) -> Dict[str, Any]:
     """Create an OmniGraph Action Graph with nodes, connections and values.
 
     When script_file is provided, automatically creates OnPlaybackTick → ScriptNode,
@@ -430,6 +471,7 @@ def create_action_graph(
                     og.Controller.set(use_path_attr, False)
                     og.Controller.set(script_attr, inline_script)
                 force_recompile_scriptnode(graph, script_node)
+        await _next_kit_update()
         readback = _graph_record(graph, include_attributes=True, include_values=False)
         if readback["node_count"] != len(created_node_paths):
             raise RuntimeError("Created graph node-count read-back mismatch")
@@ -441,7 +483,6 @@ def create_action_graph(
         )
     except Exception as exc:
         try:
-            import omni.kit.app
             import omni.usd
             from omni.usd.commands import DeletePrimsCommand
 
@@ -449,7 +490,7 @@ def create_action_graph(
             prim = stage.GetPrimAtPath(graph_path)
             if prim and prim.IsValid():
                 DeletePrimsCommand(paths=[graph_path], destructive=False, stage=stage).do()
-                omni.kit.app.get_app().update()
+                await _next_kit_update()
             rolled_back = _graph_or_none(graph_path) is None
         except Exception as rollback_exc:
             return _error(
@@ -1004,6 +1045,14 @@ def delete_action_graph(
     graph_path: str,
     preview: bool = True,
 ) -> Dict[str, Any]:
+    return _run_or_return(_delete_action_graph(adapter, graph_path, preview=preview))
+
+
+async def _delete_action_graph(
+    adapter: IsaacAdapterBase,
+    graph_path: str,
+    preview: bool = True,
+) -> Dict[str, Any]:
     invalid = _validate_graph_path(graph_path)
     if invalid:
         return invalid
@@ -1011,7 +1060,6 @@ def delete_action_graph(
     if stopped:
         return stopped
     try:
-        import omni.kit.app
         import omni.usd
         from omni.usd.commands import DeletePrimsCommand
 
@@ -1037,7 +1085,7 @@ def delete_action_graph(
                 if node.get_type_name() == "omni.graph.scriptnode.ScriptNode":
                     force_recompile_scriptnode(graph, node)
             command.do()
-            omni.kit.app.get_app().update()
+            await _next_kit_update()
             remaining_graph = _graph_or_none(graph_path)
             remaining_prim = stage.GetPrimAtPath(graph_path)
             if remaining_graph is not None or (remaining_prim and remaining_prim.IsValid()):
@@ -1045,7 +1093,7 @@ def delete_action_graph(
         except Exception as exc:
             try:
                 command.undo()
-                omni.kit.app.get_app().update()
+                await _next_kit_update()
                 restored = _graph_or_none(graph_path)
                 if restored is None:
                     raise RuntimeError("DeletePrims undo did not restore graph")

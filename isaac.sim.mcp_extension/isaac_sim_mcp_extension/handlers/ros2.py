@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import os
 import re
 from typing import Any, Dict, List, Optional, Sequence
@@ -57,6 +59,19 @@ def _error(code: str, message: str, *, status: str = "error", **fields: Any) -> 
 
 def _success(code: str, message: str, data: Dict[str, Any], **fields: Any) -> Dict[str, Any]:
     return {"status": "success", "code": code, "message": message, "data": data, **fields}
+
+
+def _run_or_return(awaitable):
+    """Run direct offline calls, but let Kit's dispatcher await on its loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+    return awaitable
+
+
+async def _await_maybe(value):
+    return await value if inspect.isawaitable(value) else value
 
 
 def _extension_states() -> Dict[str, Dict[str, Any]]:
@@ -122,8 +137,12 @@ def _validate_frame(value: str) -> Optional[Dict[str, Any]]:
 
 
 def _validate_domain(domain_id: Optional[int]) -> Optional[Dict[str, Any]]:
-    if domain_id is not None and (isinstance(domain_id, bool) or not isinstance(domain_id, int) or not 0 <= domain_id <= 232):
-        return _error("INVALID_ROS2_DOMAIN_ID", "domain_id must be an integer from 0 through 232, or null to use ROS_DOMAIN_ID")
+    if domain_id is not None and (
+        isinstance(domain_id, bool) or not isinstance(domain_id, int) or not 0 <= domain_id <= 232
+    ):
+        return _error(
+            "INVALID_ROS2_DOMAIN_ID", "domain_id must be an integer from 0 through 232, or null to use ROS_DOMAIN_ID"
+        )
     return None
 
 
@@ -194,7 +213,9 @@ def _base_spec(domain_id: Optional[int], qos_profile: str, *, include_time: bool
     return {"nodes": nodes, "values": values, "connections": []}
 
 
-def _publisher_connections(publisher: str, *, include_time: bool = True, exec_source: str = "OnPlaybackTick.outputs:tick") -> List[List[str]]:
+def _publisher_connections(
+    publisher: str, *, include_time: bool = True, exec_source: str = "OnPlaybackTick.outputs:tick"
+) -> List[List[str]]:
     result = [
         [exec_source, f"{publisher}.inputs:execIn"],
         ["Context.outputs:context", f"{publisher}.inputs:context"],
@@ -305,7 +326,9 @@ def _workflow_spec(workflow_type: str, **params: Any) -> Dict[str, Any]:
     return spec
 
 
-def _common_validation(graph_path: str, topic_name: str, node_namespace: str, domain_id: Optional[int], qos_profile: str) -> Optional[Dict[str, Any]]:
+def _common_validation(
+    graph_path: str, topic_name: str, node_namespace: str, domain_id: Optional[int], qos_profile: str
+) -> Optional[Dict[str, Any]]:
     for result in (
         graphs._validate_graph_path(graph_path),
         _validate_topic(topic_name),
@@ -318,7 +341,15 @@ def _common_validation(graph_path: str, topic_name: str, node_namespace: str, do
     return None
 
 
-def _create_workflow(adapter: IsaacAdapterBase, workflow_type: str, *, graph_path: str, topic_name: str, preview: bool, **params: Any) -> Dict[str, Any]:
+async def _create_workflow(
+    adapter: IsaacAdapterBase,
+    workflow_type: str,
+    *,
+    graph_path: str,
+    topic_name: str,
+    preview: bool,
+    **params: Any,
+) -> Dict[str, Any]:
     namespace = str(params.get("node_namespace", ""))
     domain_id = params.get("domain_id")
     qos_profile = str(params.get("qos_profile", "default"))
@@ -354,20 +385,22 @@ def _create_workflow(adapter: IsaacAdapterBase, workflow_type: str, *, graph_pat
     }
     if preview:
         return _success("ROS2_WORKFLOW_PREVIEW", "ROS 2 workflow preview validated", plan)
-    created = graphs.create_action_graph(
-        adapter,
-        graph_path=graph_path,
-        nodes=spec["nodes"],
-        connections=spec["connections"],
-        values=spec["values"],
-        evaluator="execution",
+    created = await _await_maybe(
+        graphs.create_action_graph(
+            adapter,
+            graph_path=graph_path,
+            nodes=spec["nodes"],
+            connections=spec["connections"],
+            values=spec["values"],
+            evaluator="execution",
+        )
     )
     if created.get("status") != "success":
         return created
     try:
         marker = _set_marker(graph_path, workflow_type, topic_name)
     except Exception as exc:
-        rollback = graphs.delete_action_graph(adapter, graph_path, preview=False)
+        rollback = await _await_maybe(graphs.delete_action_graph(adapter, graph_path, preview=False))
         rolled_back = rollback.get("status") == "success"
         return _error(
             "ROS2_WORKFLOW_ROLLED_BACK" if rolled_back else "ROS2_WORKFLOW_ROLLBACK_FAILED",
@@ -469,16 +502,18 @@ def create_clock_publisher(
     reset_on_stop: bool = True,
     preview: bool = True,
 ) -> Dict[str, Any]:
-    return _create_workflow(
-        adapter,
-        "clock",
-        graph_path=graph_path,
-        topic_name=topic_name,
-        node_namespace=node_namespace,
-        domain_id=domain_id,
-        qos_profile=qos_profile,
-        reset_on_stop=reset_on_stop,
-        preview=bool(preview),
+    return _run_or_return(
+        _create_workflow(
+            adapter,
+            "clock",
+            graph_path=graph_path,
+            topic_name=topic_name,
+            node_namespace=node_namespace,
+            domain_id=domain_id,
+            qos_profile=qos_profile,
+            reset_on_stop=reset_on_stop,
+            preview=bool(preview),
+        )
     )
 
 
@@ -496,21 +531,25 @@ def create_tf_publisher(
 ) -> Dict[str, Any]:
     targets = [str(path) for path in target_prims or []]
     if not targets or any(not path.startswith("/") or not _valid_prim(path) for path in targets):
-        return _error("ROS2_TARGET_PRIM_NOT_FOUND", "Every target_prims entry must reference an existing absolute USD prim")
+        return _error(
+            "ROS2_TARGET_PRIM_NOT_FOUND", "Every target_prims entry must reference an existing absolute USD prim"
+        )
     if parent_prim and (not str(parent_prim).startswith("/") or not _valid_prim(str(parent_prim))):
         return _error("ROS2_PARENT_PRIM_NOT_FOUND", f"Parent prim not found: {parent_prim}")
-    return _create_workflow(
-        adapter,
-        "tf",
-        graph_path=graph_path,
-        topic_name=topic_name,
-        target_prims=targets,
-        parent_prim=parent_prim,
-        node_namespace=node_namespace,
-        domain_id=domain_id,
-        qos_profile=qos_profile,
-        static_publisher=static_publisher,
-        preview=bool(preview),
+    return _run_or_return(
+        _create_workflow(
+            adapter,
+            "tf",
+            graph_path=graph_path,
+            topic_name=topic_name,
+            target_prims=targets,
+            parent_prim=parent_prim,
+            node_namespace=node_namespace,
+            domain_id=domain_id,
+            qos_profile=qos_profile,
+            static_publisher=static_publisher,
+            preview=bool(preview),
+        )
     )
 
 
@@ -526,16 +565,18 @@ def create_joint_state_publisher(
 ) -> Dict[str, Any]:
     if not str(target_prim).startswith("/") or not _valid_prim(target_prim):
         return _error("ROS2_TARGET_PRIM_NOT_FOUND", f"Target prim not found: {target_prim}")
-    return _create_workflow(
-        adapter,
-        "joint_state",
-        graph_path=graph_path,
-        topic_name=topic_name,
-        target_prim=target_prim,
-        node_namespace=node_namespace,
-        domain_id=domain_id,
-        qos_profile=qos_profile,
-        preview=bool(preview),
+    return _run_or_return(
+        _create_workflow(
+            adapter,
+            "joint_state",
+            graph_path=graph_path,
+            topic_name=topic_name,
+            target_prim=target_prim,
+            node_namespace=node_namespace,
+            domain_id=domain_id,
+            qos_profile=qos_profile,
+            preview=bool(preview),
+        )
     )
 
 
@@ -578,20 +619,22 @@ def _create_sensor_publisher(
     allowed = CAMERA_TYPES if workflow_type == "camera" else LIDAR_TYPES
     if sensor_type not in allowed:
         return _error("INVALID_ROS2_SENSOR_TYPE", f"{type_key} must be one of: {', '.join(sorted(allowed))}")
-    return _create_workflow(
-        adapter,
-        workflow_type,
-        graph_path=graph_path,
-        topic_name=topic_name,
-        render_product_path=render_product_path,
-        sensor_prim_path=sensor_prim_path,
-        frame_id=frame_id,
-        node_namespace=node_namespace,
-        domain_id=domain_id,
-        qos_profile=qos_profile,
-        use_system_time=use_system_time,
-        preview=bool(preview),
-        **{type_key: sensor_type},
+    return _run_or_return(
+        _create_workflow(
+            adapter,
+            workflow_type,
+            graph_path=graph_path,
+            topic_name=topic_name,
+            render_product_path=render_product_path,
+            sensor_prim_path=sensor_prim_path,
+            frame_id=frame_id,
+            node_namespace=node_namespace,
+            domain_id=domain_id,
+            qos_profile=qos_profile,
+            use_system_time=use_system_time,
+            preview=bool(preview),
+            **{type_key: sensor_type},
+        )
     )
 
 
@@ -657,7 +700,19 @@ def create_lidar_publisher(
     )
 
 
-def delete_ros2_workflow(adapter: IsaacAdapterBase, graph_path: str, preview: bool = True) -> Dict[str, Any]:
+def delete_ros2_workflow(
+    adapter: IsaacAdapterBase,
+    graph_path: str,
+    preview: bool = True,
+) -> Dict[str, Any]:
+    return _run_or_return(_delete_ros2_workflow(adapter, graph_path, preview=preview))
+
+
+async def _delete_ros2_workflow(
+    adapter: IsaacAdapterBase,
+    graph_path: str,
+    preview: bool = True,
+) -> Dict[str, Any]:
     invalid = graphs._validate_graph_path(graph_path)
     if invalid:
         return invalid
@@ -669,7 +724,7 @@ def delete_ros2_workflow(adapter: IsaacAdapterBase, graph_path: str, preview: bo
         if graphs._graph_or_none(graph_path) is None:
             return _error("GRAPH_NOT_FOUND", f"Action Graph not found: {graph_path}")
         return _error("ROS2_WORKFLOW_NOT_OWNED", "Refusing to delete a graph without the MCP ROS 2 ownership marker")
-    deleted = graphs.delete_action_graph(adapter, graph_path, preview=bool(preview))
+    deleted = await _await_maybe(graphs.delete_action_graph(adapter, graph_path, preview=bool(preview)))
     if deleted.get("status") != "success":
         return deleted
     if preview:

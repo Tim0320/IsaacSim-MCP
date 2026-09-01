@@ -11,7 +11,7 @@
 | `output_path` | 無 | artifact mode 可指定的既有父目錄下 `.npz` 路徑 |
 | `inline_max_bytes` | 1 MiB | inline encoded NPZ 上限，hard cap 4 MiB |
 
-LiDAR 建立後必須播放 timeline 暖機。尚無 frame 時回 `LIDAR_FRAME_NOT_READY`，不會把零筆資料誤報為成功。
+LiDAR 建立後必須播放 timeline 暖機。尚無 frame 時，V6 runtime 先產生 stable empty-frame metadata，再由 handler 回 `LIDAR_FRAME_NOT_READY`；empty GMO buffer 不得因 Python method binding 產生 exception，也不會把零筆資料誤報為成功。
 
 ## Metadata
 

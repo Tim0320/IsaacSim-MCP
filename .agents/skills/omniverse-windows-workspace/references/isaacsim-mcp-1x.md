@@ -55,6 +55,9 @@ renderer multi-GPU setting as a substitute.
   units, byte size, and raw SHA-256.
 - Semantic ID is explicitly unavailable when the runtime provides no direct
   field. Do not infer it from object IDs.
+- Empty V6 GMO buffers use a static empty-frame helper and reach the stable
+  `LIDAR_FRAME_NOT_READY` handler path; a bound-method `TypeError` is a runtime
+  defect, not a warm-up response.
 
 ### 1.4 LiDAR configuration
 

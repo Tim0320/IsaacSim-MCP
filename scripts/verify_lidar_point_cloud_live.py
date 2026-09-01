@@ -130,6 +130,13 @@ async def main() -> int:
 
                 lidar_readback = _payload(await session.call_tool("get_prim_info", {"prim_path": LIDAR_PATH}))
                 assert lidar_readback["status"] == "success", lidar_readback
+                prewarm = _payload(
+                    await session.call_tool(
+                        "get_lidar_point_cloud",
+                        {"prim_path": LIDAR_PATH, "return_mode": "artifact"},
+                    )
+                )
+                assert prewarm["status"] == "error" and prewarm["code"] == "LIDAR_FRAME_NOT_READY", prewarm
                 target_readback = {}
                 for prim_path in TARGETS:
                     value = _payload(await session.call_tool("get_prim_info", {"prim_path": prim_path}))
@@ -201,6 +208,7 @@ async def main() -> int:
         "adapter": capabilities["data"]["runtime"]["adapter"],
         "physics_backend": capabilities["data"]["runtime"]["physics_backend"],
         "lidar_prim": LIDAR_PATH,
+        "prewarm_code": prewarm["code"],
         "target_prims": list(TARGETS),
         "point_count": point_count,
         "fields": metadata["fields"],

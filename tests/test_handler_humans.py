@@ -24,8 +24,11 @@
 """Unit tests for the NVIDIA IRA human handler's runtime-independent contract."""
 
 import asyncio
+import sys
+import types
 from unittest.mock import MagicMock
 
+import isaac_sim_mcp_extension.handlers.humans as humans
 import pytest
 from isaac_sim_mcp_extension.handlers.humans import (
     _build_routines,
@@ -35,8 +38,10 @@ from isaac_sim_mcp_extension.handlers.humans import (
     _HumanTaskRejected,
     _one_target,
     _valid_absolute_prim_path,
+    _wait_for_navmesh,
     bake_navmesh,
     register,
+    spawn,
 )
 
 
@@ -141,3 +146,152 @@ def test_navmesh_bake_validates_bound_before_touching_runtime():
 
     assert result["status"] == "error"
     assert result["code"] == "INVALID_HUMAN_REQUEST"
+
+
+def _install_navmesh_runtime(monkeypatch, interface):
+    updates = []
+
+    class _App:
+        async def next_update_async(self):
+            updates.append("update")
+
+    nav = types.ModuleType("omni.anim.navigation.core")
+    nav.acquire_interface = lambda: interface
+    kit_app = types.ModuleType("omni.kit.app")
+    kit_app.get_app = lambda: _App()
+    omni = types.ModuleType("omni")
+    omni_anim = types.ModuleType("omni.anim")
+    omni_navigation = types.ModuleType("omni.anim.navigation")
+    omni_kit = types.ModuleType("omni.kit")
+    omni.anim = omni_anim
+    omni.kit = omni_kit
+    omni_anim.navigation = omni_navigation
+    omni_navigation.core = nav
+    omni_kit.app = kit_app
+    monkeypatch.setitem(sys.modules, "omni", omni)
+    monkeypatch.setitem(sys.modules, "omni.anim", omni_anim)
+    monkeypatch.setitem(sys.modules, "omni.anim.navigation", omni_navigation)
+    monkeypatch.setitem(sys.modules, "omni.anim.navigation.core", nav)
+    monkeypatch.setitem(sys.modules, "omni.kit", omni_kit)
+    monkeypatch.setitem(sys.modules, "omni.kit.app", kit_app)
+    return updates
+
+
+def test_wait_for_navmesh_reports_explicit_start_rejection(monkeypatch):
+    interface = MagicMock()
+    interface.get_navmesh.return_value = None
+    interface.is_navmesh_baking.return_value = False
+    interface.start_navmesh_baking.return_value = False
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
+
+    assert result == {
+        "ready": False,
+        "frames": 0,
+        "reason": "start_rejected",
+        "start_result": False,
+    }
+    assert len(updates) == 5
+
+
+def test_wait_for_navmesh_reports_native_completion_without_navmesh(monkeypatch):
+    interface = MagicMock()
+    interface.get_navmesh.return_value = None
+    interface.is_navmesh_baking.side_effect = [False, False]
+    interface.start_navmesh_baking.return_value = True
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
+
+    assert result == {
+        "ready": False,
+        "frames": 1,
+        "reason": "completed_without_navmesh",
+        "start_result": True,
+    }
+    assert len(updates) == 6
+
+
+def test_wait_for_navmesh_reports_successful_frame_count(monkeypatch):
+    interface = MagicMock()
+    navmesh = object()
+    interface.get_navmesh.side_effect = [None, None, None, navmesh]
+    interface.is_navmesh_baking.side_effect = [False, True, True]
+    interface.start_navmesh_baking.return_value = None
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
+
+    assert result == {
+        "ready": True,
+        "frames": 3,
+        "reason": "ready",
+        "start_result": None,
+    }
+    assert len(updates) == 8
+
+
+def test_bake_navmesh_exposes_native_failure_diagnostics(monkeypatch):
+    stage = MagicMock()
+    volume = MagicMock()
+    volume.GetPath.return_value = "/World/NavMeshVolume"
+    volume.GetTypeName.return_value = "NavMeshVolume"
+    stage.TraverseAll.return_value = [volume]
+    adapter = MagicMock()
+    adapter.get_stage.return_value = stage
+    adapter.get_simulation_state.return_value = {"timeline_state": "stopped"}
+
+    async def _failed_wait(**_kwargs):
+        return {
+            "ready": False,
+            "frames": 1,
+            "reason": "completed_without_navmesh",
+            "start_result": True,
+        }
+
+    monkeypatch.setattr(humans, "_wait_for_navmesh", _failed_wait)
+
+    result = asyncio.run(bake_navmesh(adapter, max_frames=10, preview=False))
+
+    assert result["code"] == "NAVMESH_BAKE_FAILED"
+    assert result["readback"]["reason"] == "completed_without_navmesh"
+    assert result["readback"]["start_result"] is True
+
+
+def test_spawn_exposes_navmesh_failure_diagnostics(monkeypatch):
+    character = types.ModuleType("isaacsim.replicator.agent.core.configuration.models.character")
+    character.CharacterConfig = object
+    randomizer = types.ModuleType("isaacsim.replicator.agent.core.randomizer")
+    randomizer.Randomizer = object
+    scene_assembly = types.ModuleType("isaacsim.replicator.agent.core.scene_assembly")
+    scene_assembly.CharacterLoader = object
+    monkeypatch.setitem(sys.modules, character.__name__, character)
+    monkeypatch.setitem(sys.modules, randomizer.__name__, randomizer)
+    monkeypatch.setitem(sys.modules, scene_assembly.__name__, scene_assembly)
+
+    stage = MagicMock()
+    adapter = MagicMock()
+    adapter.get_stage.return_value = stage
+    adapter.get_simulation_state.return_value = {"timeline_state": "stopped"}
+
+    async def _enabled():
+        return True, "C:/isaacsim/exts/ira"
+
+    async def _failed_wait(**_kwargs):
+        return {
+            "ready": False,
+            "frames": 1,
+            "reason": "completed_without_navmesh",
+            "start_result": True,
+        }
+
+    monkeypatch.setattr(humans, "_enable_ira_core", _enabled)
+    monkeypatch.setattr(humans, "_ensure_navmesh_volume", lambda *_args: ("/World/NavMeshVolume", False))
+    monkeypatch.setattr(humans, "_wait_for_navmesh", _failed_wait)
+
+    result = asyncio.run(spawn(adapter))
+
+    assert result["status"] == "error"
+    assert result["navmesh_reason"] == "completed_without_navmesh"
+    assert result["navmesh_start_result"] is True

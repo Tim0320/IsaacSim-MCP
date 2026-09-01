@@ -590,6 +590,7 @@ class SensorRuntime:
             "unavailable_fields": unavailable,
         }
 
+    @staticmethod
     def _empty_lidar_frame() -> Dict[str, Any]:
         return {
             "fields": {

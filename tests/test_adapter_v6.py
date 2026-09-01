@@ -1775,3 +1775,27 @@ def test_v6_lidar_spherical_gmo_converts_to_cartesian(monkeypatch):
     assert frame["coordinate_frame"] == "sensor"
     assert frame["sensor_timestamp_ns"] == 123
     assert frame["sensor_frame_id"] == 7
+
+
+def test_v6_empty_lidar_frame_uses_static_helper_without_binding_self(monkeypatch):
+    """An empty GMO buffer must return the stable empty-frame contract."""
+
+    from isaac_sim_mcp_extension.adapters.v6_runtime.sensors import SensorRuntime
+
+    assert isinstance(SensorRuntime.__dict__["_empty_lidar_frame"], staticmethod)
+
+    rtx_mod = types.ModuleType("isaacsim.sensors.experimental.rtx")
+    rtx_mod.LidarSensor = object
+    rtx_mod.parse_generic_model_output_data = MagicMock()
+    monkeypatch.setitem(sys.modules, "isaacsim.sensors.experimental.rtx", rtx_mod)
+    adapter = _v6_with_stub_simulation_manager(monkeypatch, [])
+    adapter._lidar_sensors["/World/TestLidar"] = types.SimpleNamespace(
+        get_data=lambda _annotator: (np.zeros((0,), dtype=np.uint8), {})
+    )
+
+    frame = adapter.get_lidar_point_cloud_frame("/World/TestLidar")
+
+    assert frame["fields"]["points"]["data"].shape[0] == 0
+    assert frame["fields"]["points"]["dtype"] == "float32"
+    assert frame["coordinate_frame"] == "unknown"
+    rtx_mod.parse_generic_model_output_data.assert_not_called()

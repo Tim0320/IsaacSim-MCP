@@ -542,6 +542,7 @@ def test_lidar_reports_an_error_when_no_frame_is_available():
     result = get_point_cloud(_LidarAdapter([]), prim_path="/World/Lidar")
 
     assert result["status"] == "error"
+    assert result["code"] == "LIDAR_FRAME_NOT_READY"
     assert "/World/Lidar" in result["message"]
     assert result["point_count"] == 0
 

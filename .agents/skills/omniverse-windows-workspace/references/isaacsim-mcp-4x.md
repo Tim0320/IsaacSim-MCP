@@ -59,6 +59,11 @@ a current live-support claim.
   existing canonical `.py`; configure/reload only the exact node. A successful
   reload reports pending evaluation until a later evaluation/status proves no
   compile or runtime error.
+- Cross-graph `reload_script` lookup must filter to ScriptNode type before
+  reading `inputs:scriptPath`, and a malformed node must not hide later matches.
+- Graph create/delete read-back and rollback must await Kit updates. Never call
+  synchronous `app.update()` from the socket dispatch task; that re-enters the
+  event loop and can corrupt unrelated viewport, StagePreview, USD, or graph tasks.
 - Explicit evaluation reports compute-count deltas and node messages. It does
   not prove downstream playback behavior when OnPlaybackTick never fires.
 
@@ -108,6 +113,9 @@ a 100-frame job cancelled at a bounded safe point with all cleanup flags true.
 - Bake only with a real Navigation Core NavMeshVolume and stopped/paused
   timeline. Isaac Sim 6.0.1 needs five application updates after volume authoring
   before bake. A scaled Cube is not equivalent evidence.
+- Treat `max_frames` as a bound. A native bake may stop at frame 1 without a
+  mesh; preserve that early terminal state and report `start_rejected`,
+  `completed_without_navmesh`, or `max_frames_exceeded` explicitly.
 
 Historical 2026-08-25 evidence used the 122-command registry, IRA `1.6.8`, and
 Behavior/Navigation Core `110.1.4`. It verified NavMesh ready, owned spawn,
