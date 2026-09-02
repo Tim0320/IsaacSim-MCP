@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional
 
 SCHEMA_VERSION = "1.0"
@@ -32,6 +33,15 @@ _DEFAULT_CODES = {
     "timeout": "TIMEOUT",
     "cancelled": "CANCELLED",
 }
+
+
+@dataclass(frozen=True)
+class NativeImageResponse:
+    """Carry one validated image through the common MCP response wrapper."""
+
+    response: Mapping[str, Any]
+    data_base64: str
+    mime_type: str
 
 
 def new_command_id() -> str:

@@ -94,6 +94,7 @@ def test_capture_reports_an_error_when_no_frame_is_available():
     result = capture_image(_Adapter(_Frame((0,))), prim_path="/World/Cam")
 
     assert result["status"] == "error"
+    assert result["code"] == "CAMERA_FRAME_NOT_READY"
     assert "/World/Cam" in result["message"]
     # The message has to say what to do about it, not just that it failed.
     assert "playing" in result["message"]
@@ -104,6 +105,7 @@ def test_capture_reports_an_error_when_the_adapter_returns_none():
     result = capture_image(_Adapter(None), prim_path="/World/Cam")
 
     assert result["status"] == "error"
+    assert result["code"] == "CAMERA_FRAME_NOT_READY"
 
 
 def test_capture_succeeds_with_a_real_frame():

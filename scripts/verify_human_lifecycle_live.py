@@ -93,14 +93,26 @@ def main() -> int:
 
         status_before = _data(connection.send_command("humans.navmesh_status"))
         assert VOLUME in status_before["volume_paths"]
-        bake_preview = _data(connection.send_command("humans.bake_navmesh", {"max_frames": 2000, "preview": True}))
+        bake_preview = _data(
+            connection.send_command(
+                "humans.bake_navmesh",
+                {"max_frames": 2000, "timeout_seconds": 60.0, "preview": True},
+            )
+        )
         assert bake_preview["preview"] is True
-        baked = connection.send_command("humans.bake_navmesh", {"max_frames": 2000, "preview": False})
+        assert bake_preview["plan"]["timeout_seconds"] == 60.0, bake_preview
+        baked = connection.send_command(
+            "humans.bake_navmesh",
+            {"max_frames": 2000, "timeout_seconds": 60.0, "preview": False},
+        )
         _data(baked)
         baked_readback = baked["readback"]
         assert baked_readback["ready"] is True, baked
         assert baked_readback["reason"] in {"ready", "already_ready"}, baked_readback
         assert "start_result" in baked_readback, baked_readback
+        assert isinstance(baked_readback["elapsed_seconds"], (int, float)), baked_readback
+        assert isinstance(baked_readback["settle_frames"], int), baked_readback
+        assert "cancel_result" in baked_readback, baked_readback
 
         spawned = _data(
             connection.send_command(

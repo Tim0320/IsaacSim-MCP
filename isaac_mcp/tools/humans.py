@@ -237,6 +237,17 @@ def register_tools(mcp: FastMCP, get_connection: "Callable[[], IsaacConnection]"
         return send("humans.navmesh_status", {})
 
     @mcp.tool("bake_navmesh")
-    def bake_navmesh(max_frames: int = 2000, preview: bool = True) -> str:
-        """Bake the current stage NavMesh with a bounded wait; preview by default."""
-        return send("humans.bake_navmesh", {"max_frames": max_frames, "preview": preview})
+    def bake_navmesh(
+        max_frames: int = 2000,
+        preview: bool = True,
+        timeout_seconds: float = 120.0,
+    ) -> str:
+        """Bake NavMesh with frame/wall-clock bounds; preview by default."""
+        return send(
+            "humans.bake_navmesh",
+            {
+                "max_frames": max_frames,
+                "timeout_seconds": timeout_seconds,
+                "preview": preview,
+            },
+        )

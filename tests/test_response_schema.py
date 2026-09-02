@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
 import inspect
 import json
 
-from isaac_mcp.responses import normalize_response
+from mcp.types import CallToolResult, ImageContent, TextContent
+
+from isaac_mcp.responses import NativeImageResponse, normalize_response
 from isaac_mcp.tool_inventory import tool_count
-from isaac_mcp.tools import register_all_tools
+from isaac_mcp.tools import _serialize_tool_response, register_all_tools
 
 REQUIRED_FIELDS = {
     "schema_version",
@@ -116,3 +119,24 @@ def test_schema_wrapper_returns_all_fields_for_success_and_legacy_error():
     assert set(timeout) == REQUIRED_FIELDS
     assert timeout["status"] == "timeout"
     assert timeout["code"] == "TIMEOUT"
+
+
+def test_schema_wrapper_preserves_envelope_when_returning_native_image_content():
+    encoded = base64.b64encode(b"png").decode("ascii")
+    result = _serialize_tool_response(
+        NativeImageResponse(
+            response={"status": "success", "return_mode": "image"},
+            data_base64=encoded,
+            mime_type="image/png",
+        ),
+        elapsed_ms=1.25,
+    )
+
+    assert isinstance(result, CallToolResult)
+    assert isinstance(result.content[0], TextContent)
+    assert isinstance(result.content[1], ImageContent)
+    envelope = json.loads(result.content[0].text)
+    assert set(envelope) == REQUIRED_FIELDS
+    assert envelope["data"]["return_mode"] == "image"
+    assert envelope["timing"]["mcp_tool_ms"] == 1.25
+    assert result.structuredContent == {"result": result.content[0].text}

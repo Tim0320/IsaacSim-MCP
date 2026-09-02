@@ -25,7 +25,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 from typing import Any, Dict, Optional, Sequence
 
 from ..adapters.base import IsaacAdapterBase
@@ -34,6 +36,12 @@ _IRA_CORE_ID = "isaacsim.replicator.agent.core"
 _USD_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _MCP_HUMAN_KEY = "isaacsimMcpHuman"
 _MCP_HUMAN_SCHEMA = "1.0"
+_NAVMESH_NOTICE_FRAMES = 5
+_NAVMESH_SETTLE_FRAMES = 5
+_NAVMESH_CANCEL_SETTLE_FRAMES = 5
+_NAVMESH_CANCEL_TIMEOUT_SECONDS = 1.0
+_NAVMESH_DEFAULT_TIMEOUT_SECONDS = 120.0
+_NAVMESH_MAX_TIMEOUT_SECONDS = 240.0
 
 
 class _TimelineStateConflict(RuntimeError):
@@ -282,21 +290,102 @@ def _ensure_navmesh_volume(
     return str(volume_path), True
 
 
-async def _wait_for_navmesh(max_frames: int = 2000, force_rebake: bool = False) -> Dict[str, Any]:
-    """Bake/wait beyond IRA's 100-frame helper limit for real factory stages."""
+async def _cancel_navmesh_baking(interface: Any, app: Any) -> Optional[bool]:
+    """Request cancellation and confirm the native baking flag clears."""
+    try:
+        if not interface.is_navmesh_baking():
+            return None
+    except Exception:
+        return False
+
+    cancel = getattr(interface, "cancel_navmesh_baking", None)
+    if not callable(cancel):
+        return False
+    try:
+        # Navigation Core 110.1.4 declares a void return. Confirmation comes
+        # from is_navmesh_baking(), not the Python return value.
+        cancel()
+    except Exception:
+        return False
+
+    deadline = time.perf_counter() + _NAVMESH_CANCEL_TIMEOUT_SECONDS
+    for _ in range(_NAVMESH_CANCEL_SETTLE_FRAMES + 1):
+        try:
+            if not interface.is_navmesh_baking():
+                return True
+        except Exception:
+            return False
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            break
+        try:
+            await asyncio.wait_for(app.next_update_async(), timeout=remaining)
+        except asyncio.TimeoutError:
+            break
+    try:
+        return not bool(interface.is_navmesh_baking())
+    except Exception:
+        return False
+
+
+async def _wait_for_navmesh(
+    max_frames: int = 2000,
+    force_rebake: bool = False,
+    timeout_seconds: float = _NAVMESH_DEFAULT_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
+    """Bake with frame and wall-clock bounds, then wait for native publication."""
     import omni.anim.navigation.core as nav
     import omni.kit.app
 
+    started_at = time.perf_counter()
     interface = nav.acquire_interface()
+
+    def _result(
+        *,
+        ready: bool,
+        frames: int,
+        reason: str,
+        start_result: Optional[bool],
+        settle_frames: int = 0,
+        cancel_result: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "ready": ready,
+            "frames": frames,
+            "reason": reason,
+            "start_result": start_result,
+            "elapsed_seconds": time.perf_counter() - started_at,
+            "settle_frames": settle_frames,
+            "cancel_result": cancel_result,
+        }
+
     if interface.get_navmesh() is not None and not force_rebake:
-        return {"ready": True, "frames": 0, "reason": "already_ready", "start_result": None}
+        return _result(ready=True, frames=0, reason="already_ready", start_result=None)
     app = omni.kit.app.get_app()
+
+    async def _next_update() -> bool:
+        remaining = timeout_seconds - (time.perf_counter() - started_at)
+        if remaining <= 0:
+            return False
+        try:
+            await asyncio.wait_for(app.next_update_async(), timeout=remaining)
+        except asyncio.TimeoutError:
+            return False
+        return True
+
     # Navigation Core's own 110.1 tests allow five application updates after
     # authoring a NavMeshVolume before asking the native interface to bake.
     # Without this notice-processing window start_navmesh_baking() rejects a
     # newly authored volume even though USD read-back already sees it.
-    for _ in range(5):
-        await app.next_update_async()
+    for _ in range(_NAVMESH_NOTICE_FRAMES):
+        if not await _next_update():
+            return _result(
+                ready=False,
+                frames=0,
+                reason="timeout",
+                start_result=None,
+                cancel_result=await _cancel_navmesh_baking(interface, app),
+            )
     start_result = None
     if not interface.is_navmesh_baking():
         # Some Navigation Core 110.1 Python builds start the asynchronous bake
@@ -304,24 +393,59 @@ async def _wait_for_navmesh(max_frames: int = 2000, force_rebake: bool = False) 
         # explicit False is a rejection; readiness/baking is proven below.
         start_result = interface.start_navmesh_baking()
         if start_result is False:
-            return {"ready": False, "frames": 0, "reason": "start_rejected", "start_result": False}
+            return _result(ready=False, frames=0, reason="start_rejected", start_result=False)
     for frame in range(1, max_frames + 1):
-        await app.next_update_async()
-        if interface.get_navmesh() is not None:
-            return {"ready": True, "frames": frame, "reason": "ready", "start_result": start_result}
-        if not interface.is_navmesh_baking():
-            return {
-                "ready": False,
-                "frames": frame,
-                "reason": "completed_without_navmesh",
-                "start_result": start_result,
-            }
-    return {
-        "ready": False,
-        "frames": max_frames,
-        "reason": "max_frames_exceeded",
-        "start_result": start_result,
-    }
+        if not await _next_update():
+            return _result(
+                ready=False,
+                frames=frame - 1,
+                reason="timeout",
+                start_result=start_result,
+                cancel_result=await _cancel_navmesh_baking(interface, app),
+            )
+        current_navmesh = interface.get_navmesh()
+        baking = bool(interface.is_navmesh_baking())
+        # A force-rebake can retain the previous immutable NavMesh while the
+        # new native job is still running. Never accept that stale object until
+        # the current baking flag has cleared.
+        if baking:
+            continue
+        if current_navmesh is not None:
+            return _result(ready=True, frames=frame, reason="ready", start_result=start_result)
+        # Navigation Core may clear its baking flag one or more updates before
+        # the completed NavMesh is published by get_navmesh().
+        for settle_frame in range(1, _NAVMESH_SETTLE_FRAMES + 1):
+            if not await _next_update():
+                return _result(
+                    ready=False,
+                    frames=frame,
+                    reason="timeout",
+                    start_result=start_result,
+                    settle_frames=settle_frame - 1,
+                    cancel_result=await _cancel_navmesh_baking(interface, app),
+                )
+            if interface.get_navmesh() is not None:
+                return _result(
+                    ready=True,
+                    frames=frame,
+                    reason="ready",
+                    start_result=start_result,
+                    settle_frames=settle_frame,
+                )
+        return _result(
+            ready=False,
+            frames=frame,
+            reason="completed_without_navmesh",
+            start_result=start_result,
+            settle_frames=_NAVMESH_SETTLE_FRAMES,
+        )
+    return _result(
+        ready=False,
+        frames=max_frames,
+        reason="max_frames_exceeded",
+        start_result=start_result,
+        cancel_result=await _cancel_navmesh_baking(interface, app),
+    )
 
 
 async def _refresh_behavior_agents(stage: Any, character_paths: Sequence[str]) -> list[str]:
@@ -697,10 +821,25 @@ def get_navmesh_status(adapter: IsaacAdapterBase) -> Dict[str, Any]:
         return _error("NAVMESH_STATUS_FAILED", str(exc))
 
 
-async def bake_navmesh(adapter: IsaacAdapterBase, max_frames: int = 2000, preview: bool = True) -> Dict[str, Any]:
+async def bake_navmesh(
+    adapter: IsaacAdapterBase,
+    max_frames: int = 2000,
+    preview: bool = True,
+    timeout_seconds: float = _NAVMESH_DEFAULT_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
     try:
         if not isinstance(max_frames, int) or not 1 <= max_frames <= 10000:
             return _error("INVALID_HUMAN_REQUEST", "max_frames must be an integer from 1 to 10000")
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or not 1 <= float(timeout_seconds) <= _NAVMESH_MAX_TIMEOUT_SECONDS
+        ):
+            return _error(
+                "INVALID_HUMAN_REQUEST",
+                f"timeout_seconds must be a number from 1 to {_NAVMESH_MAX_TIMEOUT_SECONDS:g}",
+            )
+        timeout_seconds = float(timeout_seconds)
         stage = adapter.get_stage()
         if stage is None:
             return _error("NO_STAGE", "No USD stage is open")
@@ -716,9 +855,18 @@ async def bake_navmesh(adapter: IsaacAdapterBase, max_frames: int = 2000, previe
             return {
                 "status": "success",
                 "preview": True,
-                "plan": {"operation": "bake_navmesh", "max_frames": max_frames, "volume_paths": volumes},
+                "plan": {
+                    "operation": "bake_navmesh",
+                    "max_frames": max_frames,
+                    "timeout_seconds": timeout_seconds,
+                    "volume_paths": volumes,
+                },
             }
-        bake_result = await _wait_for_navmesh(max_frames=max_frames, force_rebake=True)
+        bake_result = await _wait_for_navmesh(
+            max_frames=max_frames,
+            force_rebake=True,
+            timeout_seconds=timeout_seconds,
+        )
         frames = bake_result["frames"]
         if not bake_result["ready"]:
             return _error(
@@ -730,6 +878,9 @@ async def bake_navmesh(adapter: IsaacAdapterBase, max_frames: int = 2000, previe
                     "volume_paths": volumes,
                     "reason": bake_result["reason"],
                     "start_result": bake_result["start_result"],
+                    "elapsed_seconds": bake_result["elapsed_seconds"],
+                    "settle_frames": bake_result["settle_frames"],
+                    "cancel_result": bake_result["cancel_result"],
                 },
             )
         return {
@@ -742,6 +893,9 @@ async def bake_navmesh(adapter: IsaacAdapterBase, max_frames: int = 2000, previe
                 "volume_paths": volumes,
                 "reason": bake_result["reason"],
                 "start_result": bake_result["start_result"],
+                "elapsed_seconds": bake_result["elapsed_seconds"],
+                "settle_frames": bake_result["settle_frames"],
+                "cancel_result": bake_result["cancel_result"],
             },
         }
     except Exception as exc:
@@ -896,18 +1050,24 @@ async def spawn(
         navmesh_result = await _wait_for_navmesh()
         navmesh_bake_frames = navmesh_result["frames"]
         if not navmesh_result["ready"]:
-            return {
-                "status": "error",
-                "message": (
+            return _error(
+                "HUMAN_PREREQUISITE_MISSING",
+                (
                     f"NavMesh baking did not produce a NavMesh after {navmesh_bake_frames} update frames. "
                     f"Runtime reason: {navmesh_result['reason']}. "
                     "Verify that the volume overlaps a walkable collision surface."
                 ),
-                "navmesh_volume_path": navmesh_volume_path,
-                "navmesh_bake_frames": navmesh_bake_frames,
-                "navmesh_reason": navmesh_result["reason"],
-                "navmesh_start_result": navmesh_result["start_result"],
-            }
+                blocked_by="bake_navmesh",
+                navmesh_volume_path=navmesh_volume_path,
+                navmesh_bake_frames=navmesh_bake_frames,
+                navmesh_reason=navmesh_result["reason"],
+                navmesh_start_result=navmesh_result["start_result"],
+                navmesh_diagnostics={
+                    "elapsed_seconds": navmesh_result["elapsed_seconds"],
+                    "settle_frames": navmesh_result["settle_frames"],
+                    "cancel_result": navmesh_result["cancel_result"],
+                },
+            )
 
         group_path = f"{root_prim_path.rstrip('/')}/{group_name}"
         before = {

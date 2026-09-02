@@ -113,9 +113,15 @@ a 100-frame job cancelled at a bounded safe point with all cleanup flags true.
 - Bake only with a real Navigation Core NavMeshVolume and stopped/paused
   timeline. Isaac Sim 6.0.1 needs five application updates after volume authoring
   before bake. A scaled Cube is not equivalent evidence.
-- Treat `max_frames` as a bound. A native bake may stop at frame 1 without a
-  mesh; preserve that early terminal state and report `start_rejected`,
-  `completed_without_navmesh`, or `max_frames_exceeded` explicitly.
+- Treat `max_frames` as the native bake-poll cap and `timeout_seconds` as the
+  complete operation's independent wall-clock cap. Notice and publication
+  settle updates are separate. After the native baking flag clears, wait through
+  the bounded publication-settle window before declaring the mesh absent.
+  Report `start_rejected`, `completed_without_navmesh`, `max_frames_exceeded`,
+  or `timeout` explicitly, and retain cancellation diagnostics.
+- If baking blocks `spawn_human`, report `blocked_by=bake_navmesh`. Subsequent
+  action, behavior, and delete checks are `blocked_by=spawn_human`, not separate
+  defects caused by their expected `HUMAN_NOT_FOUND` responses.
 
 Historical 2026-08-25 evidence used the 122-command registry, IRA `1.6.8`, and
 Behavior/Navigation Core `110.1.4`. It verified NavMesh ready, owned spawn,

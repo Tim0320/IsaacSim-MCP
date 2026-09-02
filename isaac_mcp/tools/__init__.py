@@ -33,8 +33,10 @@ import time
 from inspect import Parameter, Signature
 from typing import TYPE_CHECKING, Any, Callable, Optional, get_type_hints
 
+from mcp.types import CallToolResult, ImageContent, TextContent
+
 from isaac_mcp.command_context import command_id_var, idempotency_key_var
-from isaac_mcp.responses import normalize_response
+from isaac_mcp.responses import NativeImageResponse, normalize_response
 from isaac_mcp.runtime_status import IsaacRuntimeUnavailableError
 from isaac_mcp.tool_profiles import ADDED_CONSOLIDATED_TOOLS, REPLACED_LEGACY_TOOLS, resolve_tool_profile
 
@@ -158,9 +160,20 @@ def _runtime_aware_connection_provider(
     return provide
 
 
-def _serialize_tool_response(value: Any, elapsed_ms: float) -> str:
-    envelope = normalize_response(value, timing={"mcp_tool_ms": round(elapsed_ms, 3)})
-    return json.dumps(envelope, indent=2, sort_keys=True)
+def _serialize_tool_response(value: Any, elapsed_ms: float) -> str | CallToolResult:
+    native_image = value if isinstance(value, NativeImageResponse) else None
+    response = native_image.response if native_image is not None else value
+    envelope = normalize_response(response, timing={"mcp_tool_ms": round(elapsed_ms, 3)})
+    serialized = json.dumps(envelope, indent=2, sort_keys=True)
+    if native_image is None:
+        return serialized
+    return CallToolResult(
+        content=[
+            TextContent(type="text", text=serialized),
+            ImageContent(type="image", data=native_image.data_base64, mimeType=native_image.mime_type),
+        ],
+        structuredContent={"result": serialized},
+    )
 
 
 def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
@@ -176,7 +189,7 @@ def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
     if inspect.iscoroutinefunction(function):
 
         @functools.wraps(function)
-        async def async_wrapped(*args: Any, **kwargs: Any) -> str:
+        async def async_wrapped(*args: Any, **kwargs: Any) -> Any:
             started = time.perf_counter()
             tokens = enter_command_context(kwargs)
             try:
@@ -198,7 +211,7 @@ def _wrap_tool(function: Callable[..., Any]) -> Callable[..., Any]:
     else:
 
         @functools.wraps(function)
-        def sync_wrapped(*args: Any, **kwargs: Any) -> str:
+        def sync_wrapped(*args: Any, **kwargs: Any) -> Any:
             started = time.perf_counter()
             tokens = enter_command_context(kwargs)
             try:

@@ -22,6 +22,8 @@ Isaac Sim 6.0.1 的 typed camera output 由 `capture_camera_output` 提供；相
 - `artifact`：預設模式，寫入共用 managed store 的 `.npy` v1 artifact；可用 `output_path` 指定不受管理的 `.npy` 路徑。TTL、分塊下載、hash 與清理見 [`ARTIFACT_TRANSPORT.md`](../concepts/ARTIFACT_TRANSPORT.md)。
 - `inline`：回傳 base64 raw little-endian array bytes，不含 `.npy` header。預設上限 1 MiB，hard cap 4 MiB。
 
+`capture_camera_output(output_type="rgb", return_mode="image")` 會轉送 RGB capture 並回傳 MCP-native `ImageContent`；完整契約見 [`CAMERA_RGB.md`](CAMERA_RGB.md)。Depth、normals、segmentation 與 motion vectors 是 typed arrays，`return_mode="image"` 會回 `CAMERA_IMAGE_CONTENT_UNSUPPORTED`，避免把未定義的色彩映射冒充成可視影像。
+
 Metadata 包含 `output_type`、`annotator`、`dtype`、`shape`、`width`、`height`、`channels`、`units`、`coordinate_space`、`raw_size_bytes`、`raw_sha256`、frame/timestamp 與 `annotator_info`。
 
 ```text
@@ -32,7 +34,7 @@ capture_camera_output(
 )
 ```
 
-收到 `CAMERA_FRAME_NOT_READY` 時，保留同一 camera prim 並在下一個 render tick 後重試。V5 或缺少 annotator 的 runtime 回 `CAMERA_OUTPUT_UNSUPPORTED`。
+MCP schema 將 `return_mode` 公開為 `metadata | artifact | inline | image` enum。收到 `CAMERA_FRAME_NOT_READY` 時，MCP Server 會保留同一 camera prim、等待 500 ms，並在同一個 tool call 內自動重試一次。第二次仍未準備時才把錯誤回給 caller，不會無限重試。V5 或缺少 annotator 的 runtime 回 `CAMERA_OUTPUT_UNSUPPORTED`。
 
 ## Calibration
 

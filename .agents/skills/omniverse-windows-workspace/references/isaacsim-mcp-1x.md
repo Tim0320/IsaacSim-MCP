@@ -10,7 +10,7 @@ read-back.
 
 | Research label | Task document item | Capability | Named tools | Contract | Live verifier |
 | --- | --- | --- | --- | --- | --- |
-| 1.1 | Phase 1 item 1 | Camera RGB metadata, managed PNG artifact, bounded inline PNG | `create_camera`, `capture_image` | `docs/reference/CAMERA_RGB.md` | `scripts/verify_camera_rgb_live.py` |
+| 1.1 | Phase 1 item 1 | Camera RGB metadata, managed PNG artifact, bounded inline PNG, MCP-native image content | `create_camera`, `capture_image` | `docs/reference/CAMERA_RGB.md` | `scripts/verify_camera_rgb_live.py`; `scripts/verify_native_image_content_live.py` |
 | 1.2 | Phase 1 item 2 | Depth, distance, segmentation, normals, motion vectors, calibration | `capture_camera_output`, `get_camera_calibration` | `docs/reference/CAMERA_OUTPUTS.md` | `scripts/verify_camera_outputs_live.py` |
 | 1.3 | Phase 1 item 3 | Typed RTX LiDAR Cartesian point cloud and auxiliary fields | `get_lidar_point_cloud` | `docs/reference/LIDAR_POINT_CLOUD.md` | `scripts/verify_lidar_point_cloud_live.py` |
 | 1.4 | Phase 1 item 4 | Effective RTX LiDAR preset/generic configuration and USD read-back | `create_lidar`, `get_lidar_config` | `docs/reference/LIDAR_CONFIG.md` | `scripts/verify_lidar_config_live.py` |
@@ -27,11 +27,19 @@ renderer multi-GPU setting as a substitute.
 
 ### 1.1 Camera RGB
 
-- `capture_image` supports `metadata|artifact|inline`.
+- Extension `capture_image` supports `metadata|artifact|inline`; the public MCP wrapper adds opt-in `image` and returns schema 1.0 `TextContent` plus verified PNG `ImageContent`.
 - The managed default is an atomic PNG artifact with dimensions, dtype, frame,
   timestamp, pixel SHA-256, artifact SHA-256, and producer metadata.
 - Inline output has a 1 MiB default and a 4 MiB hard cap. Oversize output uses
   `INLINE_SIZE_LIMIT_EXCEEDED`.
+- Native image mode reuses the bounded inline PNG, verifies base64/size/SHA-256,
+  and removes duplicate base64 from text metadata. Client UI rendering and
+  vision forwarding remain separate live acceptance checks.
+- The public input schema exposes `return_mode` as the exact
+  `metadata|artifact|inline|image` enum. On `CAMERA_FRAME_NOT_READY`, the MCP
+  Server waits 500 ms and retries one read inside the same tool call. It does
+  not synchronously pump Kit, cache the transient observation under an
+  idempotency key, or retry more than once.
 - A valid hash or a black empty-stage PNG is insufficient live evidence. Use
   visible geometry and lighting, Play/warm-up, Stop, read-back, post-Stop Kit
   updates, process state, and native-dump/log evidence.

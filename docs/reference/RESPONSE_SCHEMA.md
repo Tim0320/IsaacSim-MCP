@@ -1,6 +1,6 @@
 # MCP response schema
 
-IsaacSim-MCP 的 source-registered named tools 統一回傳 JSON text，解碼後固定包含以下欄位：
+IsaacSim-MCP 的 source-registered named tools 統一提供 schema 1.0 JSON text，解碼後固定包含以下欄位。Camera `return_mode="image"` 會在相同 metadata 外再附加 MCP-native `ImageContent`；其他模式與 tools 維持純文字結果。
 
 ```json
 {
@@ -36,6 +36,17 @@ IsaacSim-MCP 的 source-registered named tools 統一回傳 JSON text，解碼�
 | `readback` | any/null | 寫入命令的驗證結果；尚未提供時為 `null`。 |
 
 全部 named tools 接受 optional keyword-only `command_id` 與 `idempotency_key`。extension 會在 `data.command` 回傳 command type、read/write、apply state、readback state 與 replay state。`readback_state=not_reported` 不能當成已驗證 postcondition。完整 replay 與 transaction 契約見 [`COMMAND_GOVERNANCE.md`](../concepts/COMMAND_GOVERNANCE.md)。
+
+## Native content
+
+`capture_image(return_mode="image")` 與 RGB `capture_camera_output(return_mode="image")` 回傳一個 `CallToolResult`：
+
+- 第一個 content block 是上述 schema 1.0 JSON `TextContent`。
+- 第二個 content block 是 `mimeType=image/png` 的 `ImageContent`。
+- `structuredContent.result` 保存相同 JSON text，因此既有 `{result: string}` output schema 不變。
+- PNG base64 只出現在 `ImageContent`，不會在文字 envelope 重複占用 context。
+
+Server 會先驗證 base64、declared size 與 SHA-256。驗證失敗回 `MCP_IMAGE_CONTENT_INVALID`，不傳送可疑 image block。Client 是否渲染或交給 vision model屬於 client capability，必須分開驗證。
 
 ## 狀態語意
 

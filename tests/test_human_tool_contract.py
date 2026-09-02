@@ -76,7 +76,23 @@ def test_read_and_delete_contracts_forward_exact_defaults():
             },
         ),
         ("humans.navmesh_status", {}),
-        ("humans.bake_navmesh", {"max_frames": 2000, "preview": True}),
+        (
+            "humans.bake_navmesh",
+            {"max_frames": 2000, "timeout_seconds": 120.0, "preview": True},
+        ),
+    ]
+
+
+def test_bake_navmesh_forwards_explicit_timeout():
+    tools, connection = _registered()
+
+    tools["bake_navmesh"](max_frames=400, timeout_seconds=30, preview=False)
+
+    assert connection.calls == [
+        (
+            "humans.bake_navmesh",
+            {"max_frames": 400, "timeout_seconds": 30, "preview": False},
+        )
     ]
 
 

@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP-native Camera image handoff
+
+- Added opt-in `return_mode=image` to `capture_image` and RGB `capture_camera_output` while preserving `artifact` as the default and existing stdio/HTTP behavior.
+- Native Camera results now contain schema 1.0 text metadata plus `image/png` `ImageContent`; base64, declared size and SHA-256 are verified before handoff and the text payload does not duplicate image bytes.
+- Non-RGB typed Camera outputs fail closed with `CAMERA_IMAGE_CONTENT_UNSUPPORTED`; client UI rendering and vision forwarding remain explicit remote acceptance checks.
+- Camera tool schemas now publish `return_mode` as `metadata|artifact|inline|image`; after a new Camera or resolution change, one tool call performs a bounded 500 ms render warm-up, retries one capture without caching the transient not-ready observation, and reports retry evidence in `data.camera_warmup`.
+
 ### Added — profile-aware consolidated MCP tools
 
 - Added an opt-in `consolidated` tool profile that maps 53 legacy wrappers into 25 canonical resource-oriented tools, reducing the public surface from 129 to 98 tools without changing Extension commands or response semantics.

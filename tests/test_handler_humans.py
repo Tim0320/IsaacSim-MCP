@@ -148,12 +148,22 @@ def test_navmesh_bake_validates_bound_before_touching_runtime():
     assert result["code"] == "INVALID_HUMAN_REQUEST"
 
 
-def _install_navmesh_runtime(monkeypatch, interface):
+@pytest.mark.parametrize("timeout_seconds", [0, 241, "120"])
+def test_navmesh_bake_validates_timeout_before_touching_runtime(timeout_seconds):
+    result = asyncio.run(bake_navmesh(MagicMock(), timeout_seconds=timeout_seconds, preview=False))
+
+    assert result["status"] == "error"
+    assert result["code"] == "INVALID_HUMAN_REQUEST"
+
+
+def _install_navmesh_runtime(monkeypatch, interface, update=None):
     updates = []
 
     class _App:
         async def next_update_async(self):
             updates.append("update")
+            if update is not None:
+                await update()
 
     nav = types.ModuleType("omni.anim.navigation.core")
     nav.acquire_interface = lambda: interface
@@ -186,11 +196,14 @@ def test_wait_for_navmesh_reports_explicit_start_rejection(monkeypatch):
 
     result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
 
-    assert result == {
+    assert result["elapsed_seconds"] >= 0
+    assert {key: value for key, value in result.items() if key != "elapsed_seconds"} == {
         "ready": False,
         "frames": 0,
         "reason": "start_rejected",
         "start_result": False,
+        "settle_frames": 0,
+        "cancel_result": None,
     }
     assert len(updates) == 5
 
@@ -204,32 +217,145 @@ def test_wait_for_navmesh_reports_native_completion_without_navmesh(monkeypatch)
 
     result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
 
-    assert result == {
+    assert result["elapsed_seconds"] >= 0
+    assert {key: value for key, value in result.items() if key != "elapsed_seconds"} == {
         "ready": False,
         "frames": 1,
         "reason": "completed_without_navmesh",
         "start_result": True,
+        "settle_frames": 5,
+        "cancel_result": None,
     }
-    assert len(updates) == 6
+    assert len(updates) == 11
+
+
+def test_wait_for_navmesh_settles_after_native_baking_flag_clears(monkeypatch):
+    interface = MagicMock()
+    navmesh = object()
+    interface.get_navmesh.side_effect = [None, None, None, navmesh]
+    interface.is_navmesh_baking.side_effect = [False, False]
+    interface.start_navmesh_baking.return_value = True
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
+
+    assert result["ready"] is True
+    assert result["reason"] == "ready"
+    assert result["frames"] == 1
+    assert result["settle_frames"] == 2
+    assert result["cancel_result"] is None
+    assert len(updates) == 8
+
+
+def test_wait_for_navmesh_does_not_accept_stale_mesh_while_force_rebake_runs(monkeypatch):
+    interface = MagicMock()
+    stale_navmesh = object()
+    fresh_navmesh = object()
+    interface.get_navmesh.side_effect = [stale_navmesh, stale_navmesh, fresh_navmesh]
+    interface.is_navmesh_baking.side_effect = [False, True, False]
+    interface.start_navmesh_baking.return_value = True
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
+
+    assert result["ready"] is True
+    assert result["reason"] == "ready"
+    assert result["frames"] == 2
+    assert result["settle_frames"] == 0
+    assert len(updates) == 7
 
 
 def test_wait_for_navmesh_reports_successful_frame_count(monkeypatch):
     interface = MagicMock()
     navmesh = object()
     interface.get_navmesh.side_effect = [None, None, None, navmesh]
-    interface.is_navmesh_baking.side_effect = [False, True, True]
+    interface.is_navmesh_baking.side_effect = [False, True, True, False]
     interface.start_navmesh_baking.return_value = None
     updates = _install_navmesh_runtime(monkeypatch, interface)
 
     result = asyncio.run(_wait_for_navmesh(max_frames=10, force_rebake=True))
 
-    assert result == {
+    assert result["elapsed_seconds"] >= 0
+    assert {key: value for key, value in result.items() if key != "elapsed_seconds"} == {
         "ready": True,
         "frames": 3,
         "reason": "ready",
         "start_result": None,
+        "settle_frames": 0,
+        "cancel_result": None,
     }
     assert len(updates) == 8
+
+
+def test_wait_for_navmesh_cancels_after_max_frames(monkeypatch):
+    interface = MagicMock()
+    interface.get_navmesh.return_value = None
+    interface.is_navmesh_baking.side_effect = [False, True, True, True, True, False]
+    interface.start_navmesh_baking.return_value = True
+    interface.cancel_navmesh_baking.return_value = None
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=2, force_rebake=True))
+
+    assert result["ready"] is False
+    assert result["reason"] == "max_frames_exceeded"
+    assert result["frames"] == 2
+    assert result["settle_frames"] == 0
+    assert result["elapsed_seconds"] >= 0
+    assert result["cancel_result"] is True
+    interface.cancel_navmesh_baking.assert_called_once_with()
+    assert len(updates) == 8
+
+
+def test_wait_for_navmesh_wall_clock_timeout_cancels(monkeypatch):
+    interface = MagicMock()
+    interface.get_navmesh.return_value = None
+    interface.is_navmesh_baking.side_effect = [False, True, False]
+    interface.cancel_navmesh_baking.return_value = None
+    update_count = 0
+
+    async def _blocked_update():
+        nonlocal update_count
+        update_count += 1
+        if update_count > 5:
+            await asyncio.sleep(1)
+
+    _install_navmesh_runtime(monkeypatch, interface, update=_blocked_update)
+
+    result = asyncio.run(
+        _wait_for_navmesh(max_frames=10, force_rebake=True, timeout_seconds=0.05)
+    )
+
+    assert result["ready"] is False
+    assert result["reason"] == "timeout"
+    assert result["frames"] == 0
+    assert result["settle_frames"] == 0
+    assert result["elapsed_seconds"] >= 0.04
+    assert result["cancel_result"] is True
+    interface.cancel_navmesh_baking.assert_called_once_with()
+
+
+def test_wait_for_navmesh_reports_unconfirmed_cancellation(monkeypatch):
+    interface = MagicMock()
+    interface.get_navmesh.return_value = None
+    baking_checks = 0
+
+    def _is_baking():
+        nonlocal baking_checks
+        baking_checks += 1
+        return baking_checks != 1
+
+    interface.is_navmesh_baking.side_effect = _is_baking
+    interface.start_navmesh_baking.return_value = True
+    interface.cancel_navmesh_baking.return_value = None
+    updates = _install_navmesh_runtime(monkeypatch, interface)
+
+    result = asyncio.run(_wait_for_navmesh(max_frames=1, force_rebake=True))
+
+    assert result["reason"] == "max_frames_exceeded"
+    assert result["cancel_result"] is False
+    interface.cancel_navmesh_baking.assert_called_once_with()
+    assert len(updates) == 12
 
 
 def test_bake_navmesh_exposes_native_failure_diagnostics(monkeypatch):
@@ -248,6 +374,9 @@ def test_bake_navmesh_exposes_native_failure_diagnostics(monkeypatch):
             "frames": 1,
             "reason": "completed_without_navmesh",
             "start_result": True,
+            "elapsed_seconds": 0.25,
+            "settle_frames": 5,
+            "cancel_result": None,
         }
 
     monkeypatch.setattr(humans, "_wait_for_navmesh", _failed_wait)
@@ -257,6 +386,9 @@ def test_bake_navmesh_exposes_native_failure_diagnostics(monkeypatch):
     assert result["code"] == "NAVMESH_BAKE_FAILED"
     assert result["readback"]["reason"] == "completed_without_navmesh"
     assert result["readback"]["start_result"] is True
+    assert result["readback"]["elapsed_seconds"] == 0.25
+    assert result["readback"]["settle_frames"] == 5
+    assert result["readback"]["cancel_result"] is None
 
 
 def test_spawn_exposes_navmesh_failure_diagnostics(monkeypatch):
@@ -284,6 +416,9 @@ def test_spawn_exposes_navmesh_failure_diagnostics(monkeypatch):
             "frames": 1,
             "reason": "completed_without_navmesh",
             "start_result": True,
+            "elapsed_seconds": 0.25,
+            "settle_frames": 5,
+            "cancel_result": None,
         }
 
     monkeypatch.setattr(humans, "_enable_ira_core", _enabled)
@@ -293,5 +428,9 @@ def test_spawn_exposes_navmesh_failure_diagnostics(monkeypatch):
     result = asyncio.run(spawn(adapter))
 
     assert result["status"] == "error"
+    assert result["code"] == "HUMAN_PREREQUISITE_MISSING"
+    assert result["blocked_by"] == "bake_navmesh"
     assert result["navmesh_reason"] == "completed_without_navmesh"
     assert result["navmesh_start_result"] is True
+    assert result["navmesh_diagnostics"]["elapsed_seconds"] == 0.25
+    assert result["navmesh_diagnostics"]["settle_frames"] == 5

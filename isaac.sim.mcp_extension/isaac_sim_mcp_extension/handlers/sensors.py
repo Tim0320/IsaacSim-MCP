@@ -562,6 +562,7 @@ def capture_image(
             )
             return {
                 "status": "error",
+                "code": "CAMERA_FRAME_NOT_READY",
                 "message": (
                     f"No frame available from {prim_path} yet. RTX sensor data is produced by "
                     "Replicator, which by default only captures while the timeline is playing "
